@@ -22,6 +22,7 @@ public sealed class SshSession : IDisposable
 
     private SshClient? _client;
     private ShellStream? _shell;
+    private ConnectionInfo? _info;
 
     public event Action<string>? Output;
     public event Action<string>? Info;
@@ -63,6 +64,7 @@ public sealed class SshSession : IDisposable
             foreach (var h in LegacyHostKeys) info.HostKeyAlgorithms.Remove(h);
         }
 
+        _info = info;
         _client = new SshClient(info);
         if (settings.KeepAliveSeconds > 0) _client.KeepAliveInterval = TimeSpan.FromSeconds(settings.KeepAliveSeconds);
 
@@ -94,6 +96,19 @@ public sealed class SshSession : IDisposable
         _shell.Closed += (_, _) => Closed?.Invoke(null);
 
         if (!string.IsNullOrWhiteSpace(settings.StartupCommand)) Send(settings.StartupCommand + "\n");
+    }
+
+    /// <summary>
+    /// Opens an SFTP channel on a second connection with the same login and algorithms, so file
+    /// transfers never stall the terminal. The host key was already verified by the shell.
+    /// </summary>
+    public async Task<SftpBrowser> OpenSftpAsync(CancellationToken ct = default)
+    {
+        if (_info is null || _client is not { IsConnected: true }) throw new InvalidOperationException("SSH session is not connected.");
+        var sftp = new SftpClient(_info) { OperationTimeout = TimeSpan.FromSeconds(30) };
+        sftp.HostKeyReceived += (_, e) => e.CanTrust = true;
+        await sftp.ConnectAsync(ct);
+        return new SftpBrowser(sftp);
     }
 
     public void Send(string data)

@@ -72,6 +72,8 @@ public sealed class RdpSettings
     public bool RedirectClipboard { get; set; } = true;
     public bool RedirectDrives { get; set; }
     public bool SmartSizing { get; set; } = true;
+    /// <summary>Copy text as soon as it is selected with the mouse (sends Ctrl+C to the remote after a drag).</summary>
+    public bool CopyOnSelect { get; set; } = true;
     /// <summary>Connect without prompting on certificate/identity warnings.</summary>
     public bool IgnoreCertificateErrors { get; set; } = true;
 }
@@ -84,6 +86,9 @@ public sealed class SshSettings
     public string? TerminalType { get; set; } = "xterm-256color";
     public int KeepAliveSeconds { get; set; } = 30;
     public string? StartupCommand { get; set; }
+    public bool CopyOnSelect { get; set; } = true;
+    /// <summary>Folder downloads go to; empty = the user's Downloads folder.</summary>
+    public string? DownloadFolder { get; set; }
 }
 
 public enum BrowserKind { Embedded = 0, Edge = 1, Chrome = 2, Firefox = 3, SystemDefault = 4 }
@@ -95,6 +100,7 @@ public sealed class WebSettings
     public bool IgnoreCertificateErrors { get; set; } = true;
     /// <summary>Try to fill the linked credential into the first login form.</summary>
     public bool AutoFill { get; set; } = true;
+    public bool CopyOnSelect { get; set; } = true;
 }
 
 public enum VncViewer { TightVnc, TigerVnc, RealVnc, UltraVnc }

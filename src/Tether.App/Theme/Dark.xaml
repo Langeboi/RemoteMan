@@ -123,6 +123,27 @@
         <Setter Property="MinHeight" Value="22" />
     </Style>
 
+    <Style TargetType="ToggleButton">
+        <Setter Property="Foreground" Value="{StaticResource Muted}" />
+        <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ToggleButton">
+                    <Border x:Name="b" Background="Transparent" Padding="2,6">
+                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="b" Property="Background" Value="{StaticResource Hover}" /></Trigger>
+                        <Trigger Property="IsChecked" Value="True">
+                            <Setter TargetName="b" Property="Background" Value="{StaticResource Select}" />
+                            <Setter Property="Foreground" Value="{StaticResource TextStrong}" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
     <!-- Inputs -->
     <Style TargetType="TextBox">
         <Setter Property="Background" Value="{StaticResource Work}" />

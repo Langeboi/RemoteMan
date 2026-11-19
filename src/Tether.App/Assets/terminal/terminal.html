@@ -33,11 +33,19 @@
   term.open(document.getElementById('t'));
   fit.fit();
 
-  // Copy on select, paste on right click, like PuTTY.
-  term.onSelectionChange(() => { const s = term.getSelection(); if (s) navigator.clipboard.writeText(s).catch(() => {}); });
-  document.addEventListener('contextmenu', async (e) => {
+  // Copy on select (mouse up after a drag or double-click), paste on right click, like PuTTY.
+  // The host owns the Windows clipboard, so this works without page clipboard permissions.
+  let copyOnSelect = true;
+  document.addEventListener('mouseup', () => {
+    if (copyOnSelect && term.hasSelection()) host.postMessage({ t: 'copy', d: term.getSelection() });
+  });
+  document.addEventListener('contextmenu', (e) => { e.preventDefault(); host.postMessage({ t: 'paste' }); });
+
+  // Drop files on the terminal to upload them over SFTP into the folder shown in the Files panel.
+  document.addEventListener('dragover', (e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; });
+  document.addEventListener('drop', (e) => {
     e.preventDefault();
-    try { const t = await navigator.clipboard.readText(); if (t) host.postMessage({ t: 'data', d: t }); } catch {}
+    if (e.dataTransfer.files.length) host.postMessageWithAdditionalObjects({ t: 'upload' }, e.dataTransfer.files);
   });
 
   term.onData(d => host.postMessage({ t: 'data', d }));
@@ -49,6 +57,7 @@
     if (m.t === 'out') term.write(m.d);
     else if (m.t === 'info') term.write('\x1b[38;2;156;162;169m' + m.d + '\x1b[0m\r\n');
     else if (m.t === 'focus') term.focus();
+    else if (m.t === 'config') copyOnSelect = m.copyOnSelect;
   });
 
   host.postMessage({ t: 'ready', cols: term.cols, rows: term.rows });

@@ -47,11 +47,35 @@ public partial class WebSessionView : UserControl
             await core.ExecuteScriptAsync(AutoFillScript.Build(vm.Credential.UserName, vm.Credential.Password));
         };
         core.NewWindowRequested += (_, a) => { a.Handled = true; core.Navigate(a.Uri); };
+
+        // Copy on select: the page reports selections, the host writes the Windows clipboard.
+        if (vm.Settings.CopyOnSelect)
+        {
+            await core.AddScriptToExecuteOnDocumentCreatedAsync(CopyOnSelectScript);
+            core.WebMessageReceived += (_, a) =>
+            {
+                try { if (a.TryGetWebMessageAsString() is { Length: > 0 } text) Clipboard.SetDataObject(text, true); }
+                catch (Exception) { /* non-string message or clipboard busy */ }
+            };
+        }
         vm.Disposed += (_, _) => Web.Dispose();
 
         Address.Text = vm.Url;
         core.Navigate(vm.Url);
     }
+
+    private const string CopyOnSelectScript = """
+        document.addEventListener('mouseup', () => {
+          setTimeout(() => {
+            const a = document.activeElement;
+            let t = '';
+            if (a && (a.tagName === 'TEXTAREA' || (a.tagName === 'INPUT' && a.type !== 'password')) && a.selectionStart !== a.selectionEnd)
+              t = a.value.substring(a.selectionStart, a.selectionEnd);
+            else t = String(window.getSelection() || '');
+            if (t.trim()) window.chrome.webview.postMessage(t);
+          }, 0);
+        }, true);
+        """;
 
     private void OnBack(object sender, RoutedEventArgs e) { if (Web.CanGoBack) Web.GoBack(); }
     private void OnReload(object sender, RoutedEventArgs e) => Web.Reload();

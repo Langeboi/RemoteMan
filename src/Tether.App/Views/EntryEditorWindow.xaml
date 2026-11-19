@@ -88,7 +88,8 @@
                     <StackPanel>
                         <CheckBox x:Name="RdpIgnoreCert" Content="Skip certificate warnings" />
                         <CheckBox x:Name="RdpSmart" Content="Fit desktop to tab (smart sizing)" />
-                        <CheckBox x:Name="RdpClipboard" Content="Redirect clipboard" />
+                        <CheckBox x:Name="RdpClipboard" Content="Redirect clipboard (text and files, both ways)" />
+                        <CheckBox x:Name="RdpCopySelect" Content="Copy text as soon as it is selected" />
                         <CheckBox x:Name="RdpDrives" Content="Redirect local drives" />
                         <CheckBox x:Name="RdpAdmin" Content="Admin (console) session" />
                         <DockPanel Margin="0,4,0,0">
@@ -102,6 +103,11 @@
                     <StackPanel>
                         <CheckBox x:Name="SshAutoAccept" Content="Accept host keys automatically (logged)" />
                         <CheckBox x:Name="SshLegacy" Content="Allow legacy algorithms (ssh-rsa, DH group1/14-sha1, CBC, 3DES)" />
+                        <CheckBox x:Name="SshCopySelect" Content="Copy text as soon as it is selected" />
+                        <DockPanel Margin="0,4,0,0">
+                            <TextBlock Text="Downloads to" Width="90" Style="{StaticResource Label}" />
+                            <TextBox x:Name="SshDownloads" ToolTip="Leave empty for your Downloads folder" />
+                        </DockPanel>
                         <DockPanel Margin="0,4,0,0">
                             <TextBlock Text="Run on login" Width="90" Style="{StaticResource Label}" />
                             <TextBox x:Name="SshStartup" FontFamily="{StaticResource MonoFont}" />
@@ -117,6 +123,7 @@
                         </DockPanel>
                         <CheckBox x:Name="WebIgnoreCert" Content="Ignore certificate errors" />
                         <CheckBox x:Name="WebAutoFill" Content="Fill in the login form automatically" />
+                        <CheckBox x:Name="WebCopySelect" Content="Copy text as soon as it is selected" />
                     </StackPanel>
                 </GroupBox>
 

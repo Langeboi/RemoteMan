@@ -26,6 +26,11 @@ WebView2 runtime ships with Windows 11 and current Windows 10.
   modern and legacy algorithms, password / keyboard-interactive / key auth (OpenSSH, PEM, PuTTY .ppk).
 - Web in embedded Chromium (WebView2) with certificate errors skipped and login auto-fill, or opened
   in Edge, Chrome or Firefox.
+- Copy on select in SSH, RDP and web tabs (no Ctrl+C needed); right click pastes in SSH.
+- RDP file transfer over the RDP clipboard: copy files on one side, paste on the other, or drop files on
+  the tab's side strip and press Ctrl+V in the remote folder.
+- SSH **Files** panel (Ctrl+Shift+F): SFTP over the same login, browse, upload/download files and whole
+  folders, drop files on the terminal or panel to upload.
 - VNC through an installed viewer (TigerVNC, TightVNC, RealVNC, UltraVNC).
 - Data sources: local SQLite (default), or shared PostgreSQL, SQL Server or MySQL/MariaDB with
   multi-server failover, live updates and presence (who is viewing, editing or connected).

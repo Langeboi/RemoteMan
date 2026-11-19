@@ -64,15 +64,16 @@ public partial class EntryEditorWindow : Window
 
         var r = entry.Rdp ?? new RdpSettings();
         RdpIgnoreCert.IsChecked = r.IgnoreCertificateErrors; RdpSmart.IsChecked = r.SmartSizing; RdpClipboard.IsChecked = r.RedirectClipboard;
-        RdpDrives.IsChecked = r.RedirectDrives; RdpAdmin.IsChecked = r.AdminSession; RdpGateway.Text = r.GatewayHost;
+        RdpDrives.IsChecked = r.RedirectDrives; RdpCopySelect.IsChecked = r.CopyOnSelect; RdpAdmin.IsChecked = r.AdminSession; RdpGateway.Text = r.GatewayHost;
 
         var s = entry.Ssh ?? new SshSettings();
         SshAutoAccept.IsChecked = s.AutoAcceptHostKey; SshLegacy.IsChecked = s.AllowLegacyAlgorithms; SshStartup.Text = s.StartupCommand;
+        SshCopySelect.IsChecked = s.CopyOnSelect; SshDownloads.Text = s.DownloadFolder;
 
         var w = entry.Web ?? new WebSettings();
         UrlBox.Text = w.Url;
         WebBrowser.ItemsSource = Enum.GetValues<BrowserKind>(); WebBrowser.SelectedItem = w.Browser;
-        WebIgnoreCert.IsChecked = w.IgnoreCertificateErrors; WebAutoFill.IsChecked = w.AutoFill;
+        WebIgnoreCert.IsChecked = w.IgnoreCertificateErrors; WebAutoFill.IsChecked = w.AutoFill; WebCopySelect.IsChecked = w.CopyOnSelect;
 
         var v = entry.Vnc ?? new VncSettings();
         VncViewerBox.ItemsSource = Enum.GetValues<VncViewer>(); VncViewerBox.SelectedItem = v.Viewer; VncViewOnly.IsChecked = v.ViewOnly;
@@ -129,6 +130,7 @@ public partial class EntryEditorWindow : Window
                 _e.Rdp.SmartSizing = RdpSmart.IsChecked == true;
                 _e.Rdp.RedirectClipboard = RdpClipboard.IsChecked == true;
                 _e.Rdp.RedirectDrives = RdpDrives.IsChecked == true;
+                _e.Rdp.CopyOnSelect = RdpCopySelect.IsChecked == true;
                 _e.Rdp.AdminSession = RdpAdmin.IsChecked == true;
                 _e.Rdp.GatewayHost = string.IsNullOrWhiteSpace(RdpGateway.Text) ? null : RdpGateway.Text.Trim();
                 _e.Rdp.UseRdGateway = _e.Rdp.GatewayHost is not null;
@@ -138,6 +140,8 @@ public partial class EntryEditorWindow : Window
                 _e.Ssh.AutoAcceptHostKey = SshAutoAccept.IsChecked == true;
                 _e.Ssh.AllowLegacyAlgorithms = SshLegacy.IsChecked == true;
                 _e.Ssh.StartupCommand = string.IsNullOrWhiteSpace(SshStartup.Text) ? null : SshStartup.Text;
+                _e.Ssh.CopyOnSelect = SshCopySelect.IsChecked == true;
+                _e.Ssh.DownloadFolder = string.IsNullOrWhiteSpace(SshDownloads.Text) ? null : SshDownloads.Text.Trim();
                 break;
             case EntryKind.Web:
                 _e.Web ??= new();
@@ -145,6 +149,7 @@ public partial class EntryEditorWindow : Window
                 _e.Web.Browser = (BrowserKind)(WebBrowser.SelectedItem ?? BrowserKind.Embedded);
                 _e.Web.IgnoreCertificateErrors = WebIgnoreCert.IsChecked == true;
                 _e.Web.AutoFill = WebAutoFill.IsChecked == true;
+                _e.Web.CopyOnSelect = WebCopySelect.IsChecked == true;
                 break;
             case EntryKind.Vnc:
                 _e.Vnc ??= new();
