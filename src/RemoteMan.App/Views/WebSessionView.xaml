@@ -1,0 +1,24 @@
+<UserControl x:Class="RemoteMan.App.Views.WebSessionView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:wv2="clr-namespace:Microsoft.Web.WebView2.Wpf;assembly=Microsoft.Web.WebView2.Wpf"
+             Background="{StaticResource Work}">
+    <DockPanel>
+        <Border DockPanel.Dock="Top" Height="26" Background="{StaticResource Panel2}" BorderBrush="{StaticResource Border}" BorderThickness="0,0,0,1">
+            <DockPanel Margin="4,0">
+                <Button Style="{StaticResource FlatButton}" Content="‹" ToolTip="Back" AutomationProperties.Name="Back" Click="OnBack" />
+                <Button Style="{StaticResource FlatButton}" Content="⟳" ToolTip="Reload" AutomationProperties.Name="Reload" Click="OnReload" />
+                <ComboBox DockPanel.Dock="Right" x:Name="OpenIn" Width="130" Margin="6,0,0,0" VerticalAlignment="Center" SelectionChanged="OnOpenIn"
+                          ToolTip="Open this page in another browser">
+                    <ComboBoxItem Content="Open in…" IsSelected="True" />
+                    <ComboBoxItem Content="Edge" Tag="Edge" />
+                    <ComboBoxItem Content="Chrome" Tag="Chrome" />
+                    <ComboBoxItem Content="Firefox" Tag="Firefox" />
+                    <ComboBoxItem Content="Default browser" Tag="SystemDefault" />
+                </ComboBox>
+                <TextBox x:Name="Address" FontFamily="{StaticResource MonoFont}" FontSize="11" VerticalAlignment="Center" KeyDown="OnAddressKey" />
+            </DockPanel>
+        </Border>
+        <wv2:WebView2 x:Name="Web" />
+    </DockPanel>
+</UserControl>

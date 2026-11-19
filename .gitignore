@@ -3,4 +3,4 @@ obj/
 publish/
 *.user
 .vs/
-src/Tether.App/Assets/terminal/vendor/
+src/RemoteMan.App/Assets/terminal/vendor/

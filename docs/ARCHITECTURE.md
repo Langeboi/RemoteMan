@@ -14,11 +14,11 @@
 ## Projects
 
 ```
-src/Tether.Core       model, EntryStore (in-memory mirror + sync), EndpointResolver, AES-GCM vault
-src/Tether.Data       SQL data sources (one shared implementation, four dialects), failover wrapper
-src/Tether.Protocols  SSH session, RDP control, external browsers, web auto-fill, VNC launcher
-src/Tether.App        WPF shell, theme, views, dialogs
-tests/Tether.Tests    sync, conflict, presence, fallback, crypto tests (run on any OS)
+src/RemoteMan.Core       model, EntryStore (in-memory mirror + sync), EndpointResolver, AES-GCM vault
+src/RemoteMan.Data       SQL data sources (one shared implementation, four dialects), failover wrapper
+src/RemoteMan.Protocols  SSH session, RDP control, external browsers, web auto-fill, VNC launcher
+src/RemoteMan.App        WPF shell, theme, views, dialogs
+tests/RemoteMan.Tests    sync, conflict, presence, fallback, crypto tests (run on any OS)
 ```
 
 ## Data and multi-user sync
@@ -26,7 +26,7 @@ tests/Tether.Tests    sync, conflict, presence, fallback, crypto tests (run on a
 One table holds every entry. Protocol settings are a JSON payload, so adding a field never needs a
 schema migration. Indexed columns: `id`, `parent_id`, `kind`, `name`, `revision`, `deleted`.
 
-- **Revisions.** Every write increments a one-row counter (`tether_meta`) inside the same transaction.
+- **Revisions.** Every write increments a one-row counter (`remoteman_meta`) inside the same transaction.
   The row lock is held until commit, so revisions become visible strictly in order and a client asking
   "what changed after revision N?" can never miss a change that committed late.
 - **Change detection.** PostgreSQL pushes: writes call `pg_notify` and every client's `LISTEN`
@@ -64,7 +64,7 @@ instead of being polled.
 Certificate and host key handling: RDP uses `AuthenticationLevel = 0` (connect without the warning),
 WebView2 answers `ServerCertificateErrorDetected` with *AlwaysAllow*, Chrome/Edge get
 `--ignore-certificate-errors` on an isolated profile, and SSH accepts unknown host keys while
-recording them in `%APPDATA%\Tether\known_hosts.json` (a changed key is shown as a warning). Each of
+recording them in `%APPDATA%\RemoteMan\known_hosts.json` (a changed key is shown as a warning). Each of
 these can be turned off per entry.
 
 ## Known gaps / next steps

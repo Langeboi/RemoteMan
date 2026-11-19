@@ -1,4 +1,4 @@
-# Tether
+# RemoteMan
 
 A fast, lean remote connection manager for Windows: RDP, SSH, web and VNC in one window,
 with a shared team database as an option. Built for labs, homelabs and schoolwork.
@@ -8,11 +8,11 @@ with a shared team database as an option. Built for labs, homelabs and schoolwor
 Requires Windows 10/11 and the .NET 8 SDK (`winget install Microsoft.DotNet.SDK.8`).
 
 ```powershell
-dotnet build Tether.sln -c Release
-dotnet run --project src/Tether.App
+dotnet build RemoteMan.sln -c Release
+dotnet run --project src/RemoteMan.App
 ```
 
-The first build downloads xterm.js (MIT) into `src/Tether.App/Assets/terminal/vendor`.
+The first build downloads xterm.js (MIT) into `src/RemoteMan.App/Assets/terminal/vendor`.
 WebView2 runtime ships with Windows 11 and current Windows 10.
 
 ## What works in this first cut
