@@ -1,0 +1,90 @@
+using System.Data.Common;
+using Npgsql;
+using Tether.Core.Storage;
+
+namespace Tether.Data;
+
+/// <summary>
+/// Recommended shared backend. Writes call pg_notify inside the transaction, which
+/// PostgreSQL delivers to every listening client the instant the transaction commits,
+/// so other users see changes in milliseconds with no polling load on the server.
+/// </summary>
+public sealed class PostgresDataSource : SqlDataSource
+{
+    private const string Channel = "tether";
+    private CancellationTokenSource? _listenCts;
+    private Task? _listenTask;
+
+    public PostgresDataSource(string connectionString, int pollMs = 5000) : base(connectionString, pollMs) { }
+
+    public override string DisplayName => $"PostgreSQL ({new NpgsqlConnectionStringBuilder(ConnectionString).Host})";
+    public override DataSourceKind Kind => DataSourceKind.PostgreSql;
+
+    protected override DbConnection CreateConnection() => new NpgsqlConnection(ConnectionString);
+
+    protected override IEnumerable<string> SchemaStatements =>
+    [
+        """
+        CREATE TABLE IF NOT EXISTS tether_entries (
+            id VARCHAR(36) PRIMARY KEY, parent_id VARCHAR(36) NULL, kind INT NOT NULL, name VARCHAR(400) NOT NULL,
+            payload TEXT NULL, revision BIGINT NOT NULL, updated_at BIGINT NOT NULL,
+            updated_by VARCHAR(200) NULL, deleted INT NOT NULL DEFAULT 0)
+        """,
+        "CREATE INDEX IF NOT EXISTS ix_tether_entries_revision ON tether_entries (revision)",
+        """
+        CREATE TABLE IF NOT EXISTS tether_presence (
+            user_name VARCHAR(200) NOT NULL, machine VARCHAR(200) NOT NULL, entry_id VARCHAR(36) NOT NULL,
+            state INT NOT NULL, last_seen BIGINT NOT NULL, PRIMARY KEY (user_name, machine))
+        """,
+        "CREATE TABLE IF NOT EXISTS tether_meta (id INT PRIMARY KEY, rev BIGINT NOT NULL)",
+        "INSERT INTO tether_meta (id, rev) VALUES (1, 0) ON CONFLICT (id) DO NOTHING",
+    ];
+
+    protected override string NextRevisionSql => "UPDATE tether_meta SET rev = rev + 1 WHERE id = 1 RETURNING rev";
+    protected override string? AfterEntryWriteSql => $"SELECT pg_notify('{Channel}', 'e:' || @rev::text)";
+    protected override string? AfterPresenceWriteSql => $"SELECT pg_notify('{Channel}', 'p')";
+
+    public override async Task StartChangeFeedAsync(CancellationToken ct = default)
+    {
+        // Slow safety-net poll in case a notification is missed during a reconnect.
+        await base.StartChangeFeedAsync(ct);
+        _listenCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        _listenTask = Task.Run(() => ListenLoopAsync(_listenCts.Token));
+    }
+
+    private async Task ListenLoopAsync(CancellationToken ct)
+    {
+        while (!ct.IsCancellationRequested)
+        {
+            try
+            {
+                var csb = new NpgsqlConnectionStringBuilder(ConnectionString) { KeepAlive = 15, Pooling = false };
+                await using var conn = new NpgsqlConnection(csb.ConnectionString);
+                await conn.OpenAsync(ct);
+                conn.Notification += (_, e) =>
+                {
+                    if (e.Payload.StartsWith("e:") && long.TryParse(e.Payload.AsSpan(2), out var rev))
+                        RaiseChanged(new ChangeSignal(ChangeSignalKind.Entries, rev));
+                    else if (e.Payload == "p")
+                        RaiseChanged(new ChangeSignal(ChangeSignalKind.Presence));
+                };
+                await using (var cmd = new NpgsqlCommand($"LISTEN {Channel}", conn)) await cmd.ExecuteNonQueryAsync(ct);
+                // Catch up on anything that happened while we were not listening.
+                RaiseChanged(new ChangeSignal(ChangeSignalKind.Entries));
+                while (!ct.IsCancellationRequested) await conn.WaitAsync(ct);
+            }
+            catch (OperationCanceledException) { return; }
+            catch (Exception)
+            {
+                try { await Task.Delay(2000, ct); } catch (OperationCanceledException) { return; }
+            }
+        }
+    }
+
+    public override async ValueTask DisposeAsync()
+    {
+        _listenCts?.Cancel();
+        if (_listenTask is not null) { try { await _listenTask; } catch { } }
+        await base.DisposeAsync();
+    }
+}

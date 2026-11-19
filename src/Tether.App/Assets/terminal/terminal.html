@@ -1,0 +1,58 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="vendor/xterm.css">
+<style>
+  html, body { margin: 0; height: 100%; background: #141517; overflow: hidden; }
+  #t { position: absolute; inset: 6px 4px 4px 8px; }
+  .xterm-viewport::-webkit-scrollbar { width: 8px; }
+  .xterm-viewport::-webkit-scrollbar-thumb { background: #34373C; }
+</style>
+</head>
+<body>
+<div id="t"></div>
+<script src="vendor/xterm.js"></script>
+<script src="vendor/addon-fit.js"></script>
+<script>
+  const host = window.chrome.webview;
+  const term = new Terminal({
+    fontFamily: "'Cascadia Mono', Consolas, monospace",
+    fontSize: 13,
+    cursorBlink: true,
+    scrollback: 10000,
+    allowProposedApi: true,
+    theme: {
+      background: '#141517', foreground: '#C9CDD3', cursor: '#C9CDD3', selectionBackground: '#33414F',
+      black: '#1B1D20', red: '#C46A6A', green: '#8FB08F', yellow: '#C2B48A', blue: '#8FA7C4', magenta: '#A991B5', cyan: '#86AFAF', white: '#C9CDD3',
+      brightBlack: '#6E737B', brightRed: '#D88484', brightGreen: '#A6C4A6', brightYellow: '#D6C89E', brightBlue: '#A9BED6', brightMagenta: '#BFA8CA', brightCyan: '#9FC4C4', brightWhite: '#EEF0F2'
+    }
+  });
+  const fit = new FitAddon.FitAddon();
+  term.loadAddon(fit);
+  term.open(document.getElementById('t'));
+  fit.fit();
+
+  // Copy on select, paste on right click, like PuTTY.
+  term.onSelectionChange(() => { const s = term.getSelection(); if (s) navigator.clipboard.writeText(s).catch(() => {}); });
+  document.addEventListener('contextmenu', async (e) => {
+    e.preventDefault();
+    try { const t = await navigator.clipboard.readText(); if (t) host.postMessage({ t: 'data', d: t }); } catch {}
+  });
+
+  term.onData(d => host.postMessage({ t: 'data', d }));
+  term.onResize(({ cols, rows }) => host.postMessage({ t: 'resize', cols, rows }));
+  new ResizeObserver(() => fit.fit()).observe(document.body);
+
+  host.addEventListener('message', e => {
+    const m = e.data;
+    if (m.t === 'out') term.write(m.d);
+    else if (m.t === 'info') term.write('\x1b[38;2;156;162;169m' + m.d + '\x1b[0m\r\n');
+    else if (m.t === 'focus') term.focus();
+  });
+
+  host.postMessage({ t: 'ready', cols: term.cols, rows: term.rows });
+  term.focus();
+</script>
+</body>
+</html>
