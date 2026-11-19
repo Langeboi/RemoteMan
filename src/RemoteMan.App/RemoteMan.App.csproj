@@ -12,6 +12,11 @@
     <PublishReadyToRun>true</PublishReadyToRun>
     <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
   </PropertyGroup>
+  <!-- WPF app that also hosts a WinForms control: keep WinForms out of the global usings. -->
+  <ItemGroup>
+    <Using Remove="System.Windows.Forms" />
+    <Using Remove="System.Drawing" />
+  </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\RemoteMan.Core\RemoteMan.Core.csproj" />
     <ProjectReference Include="..\RemoteMan.Data\RemoteMan.Data.csproj" />
