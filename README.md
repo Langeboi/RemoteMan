@@ -21,6 +21,12 @@ WebView2 runtime ships with Windows 11 and current Windows 10.
   (`ssh host`, `rdp://host:3390`, `https://…`).
 - Several hosts per entry: primary first, then fallbacks, each probed with a 2 s TCP check.
 - **Ctrl+click** a credential while a connection is selected to link it.
+- Login per entry or folder: none, inherited from the folder, a saved credential, your Windows login, or typed
+  into the entry. Credential types: user name + password (+ domain), SSH key (stored, generated, or a key file
+  on disk), client certificate (.pfx), secret / API key; "ask for the password when connecting" is optional.
+- Right-click menu: connect / connect with (mstsc, another credential, Windows login, admin session), edit,
+  duplicate, move to, favorites, copy user / password / both / host, link credential, open with (mstsc,
+  .rdp file, WinSCP, ping), properties and history, delete. Drag entries onto folders to move them.
 - Duplicate (Ctrl+D) opens the editor on the copy so you change what differs before saving.
 - Copy user name (Ctrl+Shift+U), password (Ctrl+Shift+P) or both (Ctrl+Shift+B: paste once for the user
   name, again for the password). Passwords stay out of clipboard history and are cleared after 30 s.

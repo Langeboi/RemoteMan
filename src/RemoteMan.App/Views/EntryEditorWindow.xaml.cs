@@ -20,12 +20,18 @@ public partial class EntryEditorWindow : Window
     private readonly Entry _e;
     private readonly ISecretProtector _protector;
     private readonly ObservableCollection<HostRow> _hosts = new();
-    private sealed record CredChoice(Guid? Id, string Name, bool Windows = false);
+    private readonly EntryStore _store;
+    private sealed record CredChoice(Guid Id, string Name);
+    private sealed record LoginChoice(LoginSource Source, string Name);
+    /// <summary>Set on OK when "Save as a reusable credential too" was ticked: the caller saves it first.</summary>
+    public Entry? NewCredential { get; private set; }
+    private string? _certBase64;
 
     public EntryEditorWindow(Entry entry, EntryStore store, ISecretProtector protector)
     {
         InitializeComponent();
         _e = entry;
+        _store = store;
         _protector = protector;
         var kind = entry.Kind;
         Heading.Text = (entry.Revision == 0 ? "New " : "Edit ") + kind.ToString().ToLowerInvariant() + (entry.Name.Length > 0 ? $": {entry.Name}" : "");
@@ -38,8 +44,8 @@ public partial class EntryEditorWindow : Window
         var connectable = entry.IsConnectable;
         Show(HostsGroup, connectable);
         Show(UrlLabel, kind == EntryKind.Web); Show(UrlBox, kind == EntryKind.Web);
-        Show(CredLabel, connectable); Show(CredBox, connectable);
-        Show(CredGroup, kind == EntryKind.Credential);
+        var hasLogin = connectable || kind == EntryKind.Folder;
+        Show(CredLabel, hasLogin); Show(LoginBox, hasLogin);
         Show(RdpGroup, kind == EntryKind.Rdp);
         Show(SshGroup, kind == EntryKind.Ssh);
         Show(WebGroup, kind == EntryKind.Web);
@@ -51,20 +57,37 @@ public partial class EntryEditorWindow : Window
         HostsList.ItemsSource = _hosts;
         Renumber();
 
-        var creds = new List<CredChoice> { new(null, "(none)") };
-        // Single sign-on: RDP (CredSSP default credentials) and web (Kerberos/NTLM, Entra ID).
-        if (kind is EntryKind.Rdp or EntryKind.Web) creds.Add(new(null, "(my Windows login)", true));
-        creds.AddRange(store.Entries.Where(x => x.Kind == EntryKind.Credential).OrderBy(x => x.Name).Select(x => new CredChoice(x.Id, x.Name)));
+        // Login source, like RDM: none, inherited from the folder, a saved credential, SSO, or typed in here.
+        var creds = store.Entries.Where(x => x.Kind == EntryKind.Credential).OrderBy(x => x.Name, StringComparer.OrdinalIgnoreCase)
+            .Select(x => new CredChoice(x.Id, x.Name)).ToList();
         CredBox.ItemsSource = creds;
-        CredBox.SelectedItem = entry.UseWindowsLogin && kind is EntryKind.Rdp or EntryKind.Web
-            ? creds.First(c => c.Windows)
-            : creds.FirstOrDefault(c => !c.Windows && c.Id == entry.CredentialId) ?? creds[0];
-
-        if (entry.Credential is { } c)
+        CredBox.SelectedItem = creds.FirstOrDefault(c => c.Id == entry.CredentialId) ?? creds.FirstOrDefault();
+        var parentLogin = entry.ParentId is { } pid && store.Get(pid) is { } parent ? Describe(store.ResolveLogin(parent)) : null;
+        var logins = new List<LoginChoice>
         {
-            UserBox.Text = c.UserName;
-            DomainBox.Text = c.Domain;
-        }
+            new(LoginSource.None, kind == EntryKind.Folder ? "None" : "None (ask when connecting)"),
+            new(LoginSource.Inherited, parentLogin is null ? "Inherited from folder" : $"Inherited from folder ({parentLogin})"),
+            new(LoginSource.Saved, "Saved credential"),
+        };
+        // Single sign-on: RDP (CredSSP default credentials) and web (Kerberos/NTLM, Entra ID); folders pass it on.
+        if (kind is EntryKind.Rdp or EntryKind.Web or EntryKind.Folder || entry.Login == LoginSource.WindowsLogin)
+            logins.Add(new(LoginSource.WindowsLogin, "My Windows login (SSO)"));
+        logins.Add(new(LoginSource.Embedded, "Typed in this entry"));
+        LoginBox.ItemsSource = logins;
+        LoginBox.SelectedItem = logins.FirstOrDefault(l => l.Source == entry.Login) ?? logins[0];
+
+        var c = entry.Credential ?? new CredentialData { Type = kind == EntryKind.Ssh ? CredentialType.SshKey : CredentialType.Password };
+        UserBox.Text = c.UserName;
+        DomainBox.Text = c.Domain;
+        KeyPathBox.Text = c.PrivateKeyPath;
+        KeyFromDisk.IsChecked = !string.IsNullOrWhiteSpace(c.PrivateKeyPath);
+        AskPasswordBox.IsChecked = c.AskPassword;
+        NotesBox.Text = c.Notes;
+        CertBox.Text = c.ProtectedCertificate is null ? "" : "(stored)";
+        (c.Type switch { CredentialType.SshKey => TypeKey, CredentialType.Certificate => TypeCert, CredentialType.Secret => TypeSecret, _ => TypePassword }).IsChecked = true;
+        Show(SaveAsCredential, kind != EntryKind.Credential);
+        OnKeyFromDisk(this, new RoutedEventArgs());
+        UpdateLoginUi();
 
         var r = entry.Rdp ?? new RdpSettings();
         RdpIgnoreCert.IsChecked = r.IgnoreCertificateErrors; RdpSmart.IsChecked = r.SmartSizing; RdpClipboard.IsChecked = r.RedirectClipboard;
@@ -91,6 +114,118 @@ public partial class EntryEditorWindow : Window
     private void Renumber()
     {
         for (var i = 0; i < _hosts.Count; i++) _hosts[i].Role = i == 0 ? "Primary" : $"Fallback {i}";
+    }
+
+    private static string? Describe((LoginSource Source, Entry? Holder) r) => r.Source switch
+    {
+        LoginSource.WindowsLogin => "Windows login",
+        LoginSource.Saved => r.Holder?.Name,
+        LoginSource.Embedded => r.Holder?.Credential?.UserName is { Length: > 0 } u ? u : "typed in",
+        _ => null,
+    };
+
+    private CredentialType SelectedType =>
+        TypeKey.IsChecked == true ? CredentialType.SshKey :
+        TypeCert.IsChecked == true ? CredentialType.Certificate :
+        TypeSecret.IsChecked == true ? CredentialType.Secret : CredentialType.Password;
+
+    private LoginSource SelectedLogin => (LoginBox.SelectedItem as LoginChoice)?.Source ?? LoginSource.None;
+
+    private void OnLoginChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e) => UpdateLoginUi();
+    private void OnCredTypeChanged(object sender, RoutedEventArgs e) => UpdateLoginUi();
+
+    private void UpdateLoginUi()
+    {
+        if (!IsInitialized || LoginBox is null) return;
+        var isCred = _e.Kind == EntryKind.Credential;
+        var login = SelectedLogin;
+        Show(CredBox, !isCred && login == LoginSource.Saved);
+        Show(CredGroup, isCred || login == LoginSource.Embedded);
+        LoginHint.Text = isCred ? "" : login switch
+        {
+            LoginSource.None => _e.Kind == EntryKind.Folder ? "" : "Windows or the server asks for the user name and password when you connect.",
+            LoginSource.Inherited => "Uses the folder's login. Change it once on the folder and every entry in it follows.",
+            LoginSource.Saved => CredBox.Items.Count == 0 ? "No saved credentials yet. Create one with New > Credential." : "Same as Ctrl+click on a credential in the tree.",
+            LoginSource.WindowsLogin => "Signs in as whoever runs RemoteMan. Nothing is stored.",
+            _ => "",
+        };
+        Show(LoginHint, LoginHint.Text.Length > 0);
+
+        var t = SelectedType;
+        Show(UserRow, t is CredentialType.Password or CredentialType.SshKey);
+        Show(DomainRow, t == CredentialType.Password);
+        Show(KeyRow, t == CredentialType.SshKey);
+        Show(PassphraseRow, t == CredentialType.SshKey);
+        Show(CertRow, t == CredentialType.Certificate);
+        Show(CertInfo, t == CredentialType.Certificate && CertInfo.Text.Length > 0);
+        Show(PasswordRow, t is CredentialType.Password or CredentialType.Certificate or CredentialType.Secret);
+        PasswordLabel.Text = t switch { CredentialType.Secret => "Secret", CredentialType.Certificate => "Password", _ => "Password" };
+        Show(AskPasswordBox, t == CredentialType.Password);
+        Show(NotesRow, t == CredentialType.Secret || isCred);
+    }
+
+    private void OnKeyFromDisk(object sender, RoutedEventArgs e)
+    {
+        if (KeyPathRow is null) return;
+        var disk = KeyFromDisk.IsChecked == true;
+        Show(KeyPathRow, disk);
+        KeyBox.IsEnabled = !disk;
+    }
+
+    private void OnBrowseKeyPath(object sender, RoutedEventArgs e)
+    {
+        var dlg = new Microsoft.Win32.OpenFileDialog { Title = "SSH private key", Filter = "Private keys|*.*",
+            InitialDirectory = System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".ssh") };
+        if (dlg.ShowDialog(this) == true) KeyPathBox.Text = dlg.FileName;
+    }
+
+    private void OnImportKey(object sender, RoutedEventArgs e)
+    {
+        var dlg = new Microsoft.Win32.OpenFileDialog { Title = "Import SSH private key", Filter = "Private keys|*.*" };
+        if (dlg.ShowDialog(this) != true) return;
+        KeyBox.Text = System.IO.File.ReadAllText(dlg.FileName);
+        KeyFromDisk.IsChecked = false;
+    }
+
+    private void OnGenerateKey(object sender, RoutedEventArgs e)
+    {
+        var (priv, pub) = RemoteMan.Protocols.Ssh.SshKeys.GenerateRsa($"{Environment.UserName}@remoteman");
+        KeyBox.Text = priv;
+        KeyFromDisk.IsChecked = false;
+        Clipboard.SetText(pub);
+        ChoiceDialog.Show(this, "New key created", "The public key is on the clipboard. Add it to ~/.ssh/authorized_keys on the server, then press OK here to save the entry.\n\n" + pub, ["OK"]);
+    }
+
+    private void OnCopyPublicKey(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            var key = KeyFromDisk.IsChecked == true ? System.IO.File.ReadAllText(Environment.ExpandEnvironmentVariables(KeyPathBox.Text))
+                : KeyBox.Text.Trim().Length > 0 ? KeyBox.Text
+                : _e.Credential?.ProtectedPrivateKey is { } stored ? _protector.Unprotect(stored) : null;
+            if (key is null) { ChoiceDialog.Show(this, "No key yet", "Paste, import or generate a key first.", ["OK"]); return; }
+            var pass = PassphraseBox.Password.Length > 0 ? PassphraseBox.Password
+                : _e.Credential?.ProtectedPassphrase is { } pp ? _protector.Unprotect(pp) : null;
+            Clipboard.SetText(RemoteMan.Protocols.Ssh.SshKeys.PublicKeyLine(key, pass, UserBox.Text.Trim().Length > 0 ? UserBox.Text.Trim() : "remoteman"));
+            Heading.Text = "Public key copied";
+        }
+        catch (Exception ex) { ChoiceDialog.Show(this, "Couldn't read the key", ex.Message, ["OK"]); }
+    }
+
+    private void OnBrowseCert(object sender, RoutedEventArgs e)
+    {
+        var dlg = new Microsoft.Win32.OpenFileDialog { Title = "Client certificate", Filter = "Certificates (*.pfx;*.p12)|*.pfx;*.p12|All files|*.*" };
+        if (dlg.ShowDialog(this) != true) return;
+        var bytes = System.IO.File.ReadAllBytes(dlg.FileName);
+        _certBase64 = Convert.ToBase64String(bytes);
+        CertBox.Text = System.IO.Path.GetFileName(dlg.FileName);
+        try
+        {
+            using var cert = new System.Security.Cryptography.X509Certificates.X509Certificate2(bytes, PasswordBox.Password.Length > 0 ? PasswordBox.Password : null);
+            CertInfo.Text = $"Issued to {cert.Subject}, expires {cert.NotAfter:yyyy-MM-dd}";
+        }
+        catch { CertInfo.Text = "Enter the certificate's password to check it."; }
+        UpdateLoginUi();
     }
 
     private void OnAddHost(object sender, RoutedEventArgs e)
@@ -124,9 +259,31 @@ public partial class EntryEditorWindow : Window
         {
             _e.Endpoints = _hosts.Where(h => !string.IsNullOrWhiteSpace(h.Host))
                 .Select(h => new HostEndpoint(h.Host.Trim(), int.TryParse(h.Port, out var p) ? p : 0)).ToList();
-            var choice = CredBox.SelectedItem as CredChoice;
-            _e.UseWindowsLogin = choice?.Windows == true;
-            _e.CredentialId = choice?.Windows == true ? null : choice?.Id;
+        }
+
+        if (_e.IsConnectable || _e.Kind == EntryKind.Folder)
+        {
+            _e.Login = SelectedLogin;
+            if (_e.Login == LoginSource.Saved)
+            {
+                if (CredBox.SelectedItem is not CredChoice cc) { CredBox.Focus(); return; }
+                _e.CredentialId = cc.Id;
+            }
+            else _e.CredentialId = null;
+            if (_e.Login == LoginSource.Embedded)
+            {
+                _e.Credential ??= new();
+                ReadCredential(_e.Credential);
+                if (SaveAsCredential.IsChecked == true)
+                {
+                    // Also keep it as its own credential entry, and link to that instead.
+                    NewCredential = new Entry { Kind = EntryKind.Credential, ParentId = _e.ParentId, Name = DisplayName(_e.Credential, _e.Name), Credential = _e.Credential };
+                    _e.Credential = null;
+                    _e.Login = LoginSource.Saved;
+                    _e.CredentialId = NewCredential.Id;
+                }
+            }
+            else _e.Credential = null;
         }
 
         switch (_e.Kind)
@@ -169,14 +326,41 @@ public partial class EntryEditorWindow : Window
                 break;
             case EntryKind.Credential:
                 _e.Credential ??= new();
-                _e.Credential.UserName = UserBox.Text.Trim();
-                _e.Credential.Domain = string.IsNullOrWhiteSpace(DomainBox.Text) ? null : DomainBox.Text.Trim();
-                // Secrets are only replaced when something new was typed.
-                if (PasswordBox.Password.Length > 0) _e.Credential.ProtectedPassword = _protector.Protect(PasswordBox.Password);
-                if (KeyBox.Text.Trim().Length > 0) _e.Credential.ProtectedPrivateKey = _protector.Protect(KeyBox.Text.Trim() + "\n");
-                if (PassphraseBox.Password.Length > 0) _e.Credential.ProtectedPassphrase = _protector.Protect(PassphraseBox.Password);
+                ReadCredential(_e.Credential);
                 break;
         }
         DialogResult = true;
+    }
+
+    private static string DisplayName(CredentialData c, string fallback) =>
+        c.UserName is { Length: > 0 } u ? (c.Domain is { Length: > 0 } d ? $"{d}\\{u}" : u) : fallback + " login";
+
+    /// <summary>Copies the form into <paramref name="c"/>. Secrets are only replaced when something new was entered.</summary>
+    private void ReadCredential(CredentialData c)
+    {
+        var t = SelectedType;
+        if (c.Type != t)
+        {
+            // Changing the type drops what belonged to the old one.
+            c.ProtectedPassword = null; c.ProtectedPrivateKey = null; c.ProtectedPassphrase = null; c.ProtectedCertificate = null; c.PrivateKeyPath = null;
+        }
+        c.Type = t;
+        c.UserName = t is CredentialType.Password or CredentialType.SshKey && UserBox.Text.Trim().Length > 0 ? UserBox.Text.Trim() : null;
+        c.Domain = t == CredentialType.Password && !string.IsNullOrWhiteSpace(DomainBox.Text) ? DomainBox.Text.Trim() : null;
+        c.Notes = string.IsNullOrWhiteSpace(NotesBox.Text) ? null : NotesBox.Text;
+        c.AskPassword = t == CredentialType.Password && AskPasswordBox.IsChecked == true;
+        if (c.AskPassword) c.ProtectedPassword = null;
+        else if (PasswordBox.Password.Length > 0) c.ProtectedPassword = _protector.Protect(PasswordBox.Password);
+        if (t == CredentialType.SshKey)
+        {
+            if (KeyFromDisk.IsChecked == true) { c.PrivateKeyPath = KeyPathBox.Text.Trim(); c.ProtectedPrivateKey = null; }
+            else
+            {
+                c.PrivateKeyPath = null;
+                if (KeyBox.Text.Trim().Length > 0) c.ProtectedPrivateKey = _protector.Protect(KeyBox.Text.Trim() + "\n");
+            }
+            if (PassphraseBox.Password.Length > 0) c.ProtectedPassphrase = _protector.Protect(PassphraseBox.Password);
+        }
+        if (t == CredentialType.Certificate && _certBase64 is not null) c.ProtectedCertificate = _protector.Protect(_certBase64);
     }
 }

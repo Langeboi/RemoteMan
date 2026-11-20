@@ -110,10 +110,37 @@ public sealed class BrowserNotInstalledException(BrowserKind kind) : Exception($
     public BrowserKind Browser { get; } = kind;
 }
 
-/// <summary>
-/// Installs a missing browser on request: winget (silent, per machine) when it's available,
-/// otherwise the vendor's download page opens.
-/// </summary>
+/// <summary>Installs a missing program on request: winget (silent) when it's available, otherwise the vendor's download page opens.</summary>
+public static class WingetInstaller
+{
+    public enum Result { Installed, DownloadPageOpened, Failed }
+
+    public static async Task<Result> InstallAsync(string wingetId, string downloadPage, Func<bool> isInstalled, CancellationToken ct = default)
+    {
+        try
+        {
+            var psi = new ProcessStartInfo("winget") { UseShellExecute = false, CreateNoWindow = true };
+            foreach (var a in new[] { "install", "--exact", "--id", wingetId, "--silent", "--accept-source-agreements", "--accept-package-agreements", "--disable-interactivity" })
+                psi.ArgumentList.Add(a);
+            using var p = Process.Start(psi);
+            if (p is not null)
+            {
+                await p.WaitForExitAsync(ct);
+                if (p.ExitCode == 0 && isInstalled()) return Result.Installed;
+            }
+        }
+        catch (System.ComponentModel.Win32Exception) { /* no winget on this machine */ }
+
+        try
+        {
+            Process.Start(new ProcessStartInfo(downloadPage) { UseShellExecute = true });
+            return Result.DownloadPageOpened;
+        }
+        catch (Exception) { return Result.Failed; }
+    }
+}
+
+/// <summary>Installs a missing browser on request (see <see cref="WingetInstaller"/>).</summary>
 public static class BrowserInstaller
 {
     public static string DisplayName(BrowserKind kind) => kind switch
@@ -137,25 +164,6 @@ public static class BrowserInstaller
     public static async Task<Result> InstallAsync(BrowserKind kind, CancellationToken ct = default)
     {
         var (id, page) = Source(kind);
-        try
-        {
-            var psi = new ProcessStartInfo("winget") { UseShellExecute = false, CreateNoWindow = true };
-            foreach (var a in new[] { "install", "--exact", "--id", id, "--silent", "--accept-source-agreements", "--accept-package-agreements", "--disable-interactivity" })
-                psi.ArgumentList.Add(a);
-            using var p = Process.Start(psi);
-            if (p is not null)
-            {
-                await p.WaitForExitAsync(ct);
-                if (p.ExitCode == 0 && ExternalBrowser.IsInstalled(kind)) return Result.Installed;
-            }
-        }
-        catch (System.ComponentModel.Win32Exception) { /* no winget on this machine */ }
-
-        try
-        {
-            Process.Start(new ProcessStartInfo(page) { UseShellExecute = true });
-            return Result.DownloadPageOpened;
-        }
-        catch (Exception) { return Result.Failed; }
+        return (Result)await WingetInstaller.InstallAsync(id, page, () => ExternalBrowser.IsInstalled(kind), ct);
     }
 }
