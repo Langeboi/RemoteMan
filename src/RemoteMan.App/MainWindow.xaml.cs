@@ -77,6 +77,15 @@ public partial class MainWindow : Window
         menu.Items.Add(Click("Restore from backup…", OnRestore));
         menu.Items.Add(Cmd("Zabbix settings…", _vm.ZabbixSettingsCommand));
         if (_vm.ZabbixActive) menu.Items.Add(Cmd("Import from Zabbix…", _vm.ImportFromZabbixCommand));
+        menu.Items.Add(new Separator());
+        var updates = RemoteMan.App.Updates.UpdateService.Instance;
+        menu.Items.Add(new MenuItem { Header = "Check for updates", Command = updates.CheckNowCommand });
+        var auto = new MenuItem { Header = "Check for updates automatically", IsCheckable = true, IsChecked = updates.AutoCheck };
+        auto.Click += (_, _) => updates.AutoCheck = auto.IsChecked;
+        menu.Items.Add(auto);
+        menu.Items.Add(new MenuItem { Header = "Release notes", Command = updates.OpenReleaseNotesCommand });
+        menu.Items.Add(new MenuItem { Header = $"RemoteMan {updates.CurrentVersion}", IsEnabled = false });
+        menu.Items.Add(new Separator());
         menu.Items.Add(Click("Exit", OnExit));
         menu.IsOpen = true;
     }

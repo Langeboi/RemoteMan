@@ -4,6 +4,7 @@
         xmlns:vm="clr-namespace:RemoteMan.App.ViewModels"
         xmlns:views="clr-namespace:RemoteMan.App.Views"
         xmlns:local="clr-namespace:RemoteMan.App"
+        xmlns:updates="clr-namespace:RemoteMan.App.Updates"
         Title="RemoteMan" Width="1440" Height="900" MinWidth="900" MinHeight="520"
         Style="{StaticResource RemoteManWindow}" WindowStartupLocation="CenterScreen">
 
@@ -237,6 +238,9 @@
                 </StackPanel>
             </Grid>
         </Border>
+
+        <!-- Update banner (hidden unless there is an update to show) -->
+        <updates:UpdateBanner DockPanel.Dock="Top" />
 
         <!-- Status bar: quick connect, messages, active session, the Q, users online, version -->
         <Border DockPanel.Dock="Bottom" Height="26" Background="{StaticResource Header}" BorderBrush="{StaticResource Border}" BorderThickness="0,1,0,0">
