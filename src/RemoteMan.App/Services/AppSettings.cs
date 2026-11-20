@@ -23,6 +23,9 @@ public sealed class AppSettings
     public List<DataSourceConfig> DataSources { get; set; } = new();
     public string? ActiveDataSource { get; set; }
     public int FallbackTimeoutMs { get; set; } = 2000;
+    /// <summary>Data sources that already got the built-in snippets, so deleted ones stay deleted.</summary>
+    public List<string> SnippetsSeeded { get; set; } = new();
+    public BackupSettings Backup { get; set; } = new();
 
     // Per-user UI state (not shared through the data source).
     public List<Guid> Favorites { get; set; } = new();
@@ -70,4 +73,15 @@ public sealed class ZabbixConfig
     public bool IsConfigured => Enabled && Url.Length > 0 && !string.IsNullOrEmpty(ProtectedToken);
 
     public ZabbixMatchOptions MatchOptions => new() { ByAddress = MatchByAddress, ByName = MatchByName, IgnoreBracketSuffix = IgnoreBracketSuffix };
+}
+
+/// <summary>Automatic daily backup of the active data source to an encrypted .rmx file.</summary>
+public sealed class BackupSettings
+{
+    public bool Enabled { get; set; }
+    /// <summary>Empty = %APPDATA%\RemoteMan\backups.</summary>
+    public string? Folder { get; set; }
+    public int Keep { get; set; } = 14;
+    public bool IncludeSecrets { get; set; } = true;
+    public DateTimeOffset? LastBackup { get; set; }
 }

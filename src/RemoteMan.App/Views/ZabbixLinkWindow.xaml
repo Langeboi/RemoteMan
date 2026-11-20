@@ -12,7 +12,7 @@
         </Border>
         <Border DockPanel.Dock="Bottom" Background="{StaticResource Header}" BorderBrush="{StaticResource Border}" BorderThickness="0,1,0,0" Padding="10,8">
             <DockPanel>
-                <TextBlock Style="{StaticResource Muted}" FontSize="11" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
+                <TextBlock Style="{StaticResource MutedText}" FontSize="11" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
                            Text="The link is saved on the entry, so everyone on this data source sees the same health." />
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
                     <Button x:Name="OkButton" Content="OK" MinWidth="76" IsDefault="True" Style="{StaticResource PrimaryButton}" Click="OnOk" />
@@ -26,7 +26,7 @@
                 <DockPanel>
                     <Button x:Name="UnlinkButton" DockPanel.Dock="Right" Content="Unlink" MinWidth="70" Click="OnUnlink" VerticalAlignment="Center" />
                     <StackPanel>
-                        <TextBlock Text="Linked Zabbix host" Style="{StaticResource Muted}" FontSize="11" />
+                        <TextBlock Text="Linked Zabbix host" Style="{StaticResource MutedText}" FontSize="11" />
                         <TextBlock x:Name="Current" FontWeight="SemiBold" Margin="0,2,0,0" TextTrimming="CharacterEllipsis" />
                     </StackPanel>
                 </DockPanel>
@@ -41,9 +41,9 @@
             </Grid>
             <Grid Grid.Row="2" Margin="22,10,22,4">
                 <Grid.ColumnDefinitions><ColumnDefinition Width="22" /><ColumnDefinition Width="*" /><ColumnDefinition Width="130" /><ColumnDefinition Width="130" /></Grid.ColumnDefinitions>
-                <TextBlock Grid.Column="1" Text="HOST" FontSize="10" FontWeight="SemiBold" Style="{StaticResource Muted}" />
-                <TextBlock Grid.Column="2" Text="INTERFACE" FontSize="10" FontWeight="SemiBold" Style="{StaticResource Muted}" />
-                <TextBlock Grid.Column="3" Text="GROUP" FontSize="10" FontWeight="SemiBold" Style="{StaticResource Muted}" />
+                <TextBlock Grid.Column="1" Text="HOST" FontSize="10" FontWeight="SemiBold" Style="{StaticResource MutedText}" />
+                <TextBlock Grid.Column="2" Text="INTERFACE" FontSize="10" FontWeight="SemiBold" Style="{StaticResource MutedText}" />
+                <TextBlock Grid.Column="3" Text="GROUP" FontSize="10" FontWeight="SemiBold" Style="{StaticResource MutedText}" />
             </Grid>
             <ListBox x:Name="Hosts" Grid.Row="3" Margin="12,0,12,12" Background="{StaticResource Panel2}" BorderBrush="{StaticResource Border}" BorderThickness="1"
                      Foreground="{StaticResource Text}" ScrollViewer.HorizontalScrollBarVisibility="Disabled" MouseDoubleClick="OnDoubleClick"
@@ -61,7 +61,7 @@
                                            Visibility="{Binding HasSuggestion, Converter={StaticResource BoolVisZ}}" />
                             </StackPanel>
                             <TextBlock Grid.Column="2" Text="{Binding Address}" FontFamily="{StaticResource MonoFont}" FontSize="11" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
-                            <TextBlock Grid.Column="3" Text="{Binding Group}" Style="{StaticResource Muted}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                            <TextBlock Grid.Column="3" Text="{Binding Group}" Style="{StaticResource MutedText}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
                         </Grid>
                     </DataTemplate>
                 </ListBox.ItemTemplate>

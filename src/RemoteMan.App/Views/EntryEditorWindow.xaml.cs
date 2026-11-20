@@ -23,6 +23,7 @@ public partial class EntryEditorWindow : Window
     private readonly ObservableCollection<HostRow> _hosts = new();
     private readonly EntryStore _store;
     private sealed record CredChoice(Guid Id, string Name);
+    private sealed record JumpChoice(Guid? Id, string Name);
     private sealed record LoginChoice(LoginSource Source, string Name);
     /// <summary>Set on OK when "Save as a reusable credential too" was ticked: the caller saves it first.</summary>
     public Entry? NewCredential { get; private set; }
@@ -107,6 +108,11 @@ public partial class EntryEditorWindow : Window
         var s = entry.Ssh ?? new SshSettings();
         SshAutoAccept.IsChecked = s.AutoAcceptHostKey; SshLegacy.IsChecked = s.AllowLegacyAlgorithms; SshStartup.Text = s.StartupCommand;
         SshCopySelect.IsChecked = s.CopyOnSelect; SshDownloads.Text = s.DownloadFolder;
+        var jumps = new List<JumpChoice> { new(null, "None (direct)") };
+        jumps.AddRange(store.Entries.Where(x => x.Kind == EntryKind.Ssh && x.Id != entry.Id).OrderBy(x => x.Name)
+            .Select(x => new JumpChoice(x.Id, $"{x.Name} ({x.Endpoints.FirstOrDefault()?.ToString() ?? "no host"})")));
+        JumpBox.ItemsSource = jumps;
+        JumpBox.SelectedItem = jumps.FirstOrDefault(j => j.Id == s.JumpHostId) ?? jumps[0];
 
         var w = entry.Web ?? new WebSettings();
         UrlBox.Text = w.Url;
@@ -148,6 +154,25 @@ public partial class EntryEditorWindow : Window
     {
         _zabbixHostId = null;
         ShowZabbix();
+    }
+
+    /// <summary>Shows the route, e.g. "this PC → bastion → pve-01", and warns about loops.</summary>
+    private void OnJumpChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
+    {
+        if (_store is null) return;
+        var names = new List<string>();
+        var seen = new HashSet<Guid> { _e.Id };
+        var next = (JumpBox.SelectedItem as JumpChoice)?.Id;
+        while (next is { } id)
+        {
+            if (!seen.Add(id)) { JumpPath.Text = "These jump hosts point at each other in a loop."; return; }
+            var hop = _store.Get(id);
+            if (hop is null) break;
+            names.Insert(0, hop.Name);
+            next = hop.Ssh?.JumpHostId;
+        }
+        var target = string.IsNullOrWhiteSpace(NameBox.Text) ? "this entry" : NameBox.Text.Trim();
+        JumpPath.Text = names.Count == 0 ? "" : $"this PC → {string.Join(" → ", names)} → {target}";
     }
 
     private static void Show(UIElement el, bool visible) => el.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
@@ -342,12 +367,14 @@ public partial class EntryEditorWindow : Window
                 _e.Rdp.UseRdGateway = _e.Rdp.GatewayHost is not null;
                 break;
             case EntryKind.Ssh:
+                if (JumpPath.Text.Contains("loop")) { JumpBox.Focus(); return; }
                 _e.Ssh ??= new();
                 _e.Ssh.AutoAcceptHostKey = SshAutoAccept.IsChecked == true;
                 _e.Ssh.AllowLegacyAlgorithms = SshLegacy.IsChecked == true;
                 _e.Ssh.StartupCommand = string.IsNullOrWhiteSpace(SshStartup.Text) ? null : SshStartup.Text;
                 _e.Ssh.CopyOnSelect = SshCopySelect.IsChecked == true;
                 _e.Ssh.DownloadFolder = string.IsNullOrWhiteSpace(SshDownloads.Text) ? null : SshDownloads.Text.Trim();
+                _e.Ssh.JumpHostId = (JumpBox.SelectedItem as JumpChoice)?.Id;
                 break;
             case EntryKind.Web:
                 _e.Web ??= new();

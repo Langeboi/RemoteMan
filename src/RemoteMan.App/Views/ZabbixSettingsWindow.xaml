@@ -4,11 +4,11 @@
         Title="Zabbix settings" Width="600" Height="600" MinWidth="480" MinHeight="460"
         Style="{StaticResource RemoteManWindow}" WindowStartupLocation="CenterOwner" ShowInTaskbar="False">
     <Window.Resources>
-        <Style TargetType="TextBlock" x:Key="Label" BasedOn="{StaticResource Muted}">
+        <Style TargetType="TextBlock" x:Key="Label" BasedOn="{StaticResource MutedText}">
             <Setter Property="VerticalAlignment" Value="Center" />
             <Setter Property="Margin" Value="0,4,10,4" />
         </Style>
-        <Style TargetType="TextBlock" x:Key="Hint" BasedOn="{StaticResource Muted}">
+        <Style TargetType="TextBlock" x:Key="Hint" BasedOn="{StaticResource MutedText}">
             <Setter Property="FontSize" Value="11" />
             <Setter Property="TextWrapping" Value="Wrap" />
             <Setter Property="Margin" Value="0,0,0,6" />
@@ -59,7 +59,7 @@
 
                 <DockPanel Margin="0,12,0,0">
                     <Button x:Name="TestButton" Content="Test connection" MinWidth="120" Click="OnTest" />
-                    <TextBlock x:Name="TestResult" Margin="10,0,0,0" FontSize="11" VerticalAlignment="Center" TextWrapping="Wrap" Style="{StaticResource Muted}" Text="Not tested yet" />
+                    <TextBlock x:Name="TestResult" Margin="10,0,0,0" FontSize="11" VerticalAlignment="Center" TextWrapping="Wrap" Style="{StaticResource MutedText}" Text="Not tested yet" />
                 </DockPanel>
             </StackPanel>
         </ScrollViewer>

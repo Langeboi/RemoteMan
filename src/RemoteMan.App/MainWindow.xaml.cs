@@ -72,6 +72,9 @@ public partial class MainWindow : Window
         menu.Items.Add(new MenuItem { Header = "Close tab", Command = _vm.CloseSessionCommand, CommandParameter = _vm.ActiveSession, InputGestureText = "Ctrl+W" });
         menu.Items.Add(new Separator());
         menu.Items.Add(Click("Data sources…", OnDataSources));
+        menu.Items.Add(Click("Import…", OnImport));
+        menu.Items.Add(Click("Export and backup…", OnExportBackup));
+        menu.Items.Add(Click("Restore from backup…", OnRestore));
         menu.Items.Add(Cmd("Zabbix settings…", _vm.ZabbixSettingsCommand));
         if (_vm.ZabbixActive) menu.Items.Add(Cmd("Import from Zabbix…", _vm.ImportFromZabbixCommand));
         menu.Items.Add(Click("Exit", OnExit));
@@ -277,6 +280,10 @@ public partial class MainWindow : Window
         if (dlg.ShowDialog() == true)
             MessageBox.Show(this, "Restart RemoteMan to switch data source.", "RemoteMan");
     }
+
+    private void OnImport(object sender, RoutedEventArgs e) => new ImportWindow(_vm) { Owner = this }.ShowDialog();
+    private void OnExportBackup(object sender, RoutedEventArgs e) => new BackupWindow(_vm) { Owner = this }.ShowDialog();
+    private void OnRestore(object sender, RoutedEventArgs e) => new BackupWindow(_vm, section: 2) { Owner = this }.ShowDialog();
 
     private void OnExit(object sender, RoutedEventArgs e) => Close();
 

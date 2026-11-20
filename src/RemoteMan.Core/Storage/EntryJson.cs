@@ -29,6 +29,7 @@ public static class EntryJson
         public WebSettings? Web { get; set; }
         public VncSettings? Vnc { get; set; }
         public CredentialData? Credential { get; set; }
+        public SnippetData? Snippet { get; set; }
     }
 
     public static string ToPayload(Entry e) => JsonSerializer.Serialize(new Payload
@@ -40,7 +41,7 @@ public static class EntryJson
         Login = e.Login == LoginSource.None ? null : e.Login,
         Favorite = e.Favorite ? true : null,
         ZabbixHostId = string.IsNullOrEmpty(e.ZabbixHostId) ? null : e.ZabbixHostId,
-        Rdp = e.Rdp, Ssh = e.Ssh, Web = e.Web, Vnc = e.Vnc, Credential = e.Credential,
+        Rdp = e.Rdp, Ssh = e.Ssh, Web = e.Web, Vnc = e.Vnc, Credential = e.Credential, Snippet = e.Snippet,
     }, Options);
 
     public static void ApplyPayload(Entry e, string? json)
@@ -56,6 +57,6 @@ public static class EntryJson
             : p.CredentialId is not null ? LoginSource.Saved : LoginSource.None);
         e.Favorite = p.Favorite == true;
         e.ZabbixHostId = p.ZabbixHostId;
-        e.Rdp = p.Rdp; e.Ssh = p.Ssh; e.Web = p.Web; e.Vnc = p.Vnc; e.Credential = p.Credential;
+        e.Rdp = p.Rdp; e.Ssh = p.Ssh; e.Web = p.Web; e.Vnc = p.Vnc; e.Credential = p.Credential; e.Snippet = p.Snippet;
     }
 }

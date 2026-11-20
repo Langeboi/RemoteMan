@@ -84,6 +84,8 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
             ShowOnlineState(source, store);
             RebuildTree();
             await StartZabbixAsync();
+            await SeedSnippetsAsync(cfg.Name);
+            _ = BackupLoopAsync();
         }
         catch (Exception ex)
         {
@@ -119,7 +121,9 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
         _nodes.Clear();
         Roots.Clear();
 
-        var all = _store.Entries.ToList();
+        // Snippets live in the SSH tab's Snippets panel, not in the tree.
+        var all = _store.Entries.Where(e => e.Kind != EntryKind.Snippet).ToList();
+        RefreshSnippets();
         var filter = SearchText.Trim();
         if (filter.Length == 0 && PanelMode != "nav")
         {
@@ -227,6 +231,7 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
             case EntryKind.Ssh:
                 Properties.Add(new PropertyRow("Host key", e.Ssh?.AutoAcceptHostKey != false ? "auto-accept, logged" : "strict"));
                 Properties.Add(new PropertyRow("Algos", e.Ssh?.AllowLegacyAlgorithms != false ? "modern, legacy fallback" : "modern only"));
+                if (e.Ssh?.JumpHostId is { } jid) Properties.Add(new PropertyRow("Via", _store.Get(jid)?.Name ?? "missing jump host"));
                 break;
             case EntryKind.Rdp:
                 Properties.Add(new PropertyRow("Certs", e.Rdp?.IgnoreCertificateErrors != false ? "skip warnings" : "prompt"));
@@ -340,6 +345,36 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
 
         Message = $"Connecting to {e.Name}…";
         var resolver = new EndpointResolver { Timeout = TimeSpan.FromMilliseconds(_settings.FallbackTimeoutMs) };
+
+        // Behind a jump host the target usually isn't reachable from here, so it isn't probed:
+        // the SSH session tries each host in order through the tunnel instead.
+        if (e.Kind == EntryKind.Ssh && e.Ssh?.JumpHostId is not null && _store is not null && _protector is not null)
+        {
+            if (BuildJumpChain(e) is not { } chain) return;
+            var firstHop = chain[0];
+            var probeHop = new Entry { Kind = EntryKind.Ssh, Endpoints = firstHop.Endpoints.ToList() };
+            var hopResult = await resolver.ResolveAsync(probeHop);
+            if (!hopResult.Success)
+            {
+                Message = $"Jump host {firstHop.Name}: no host answered ({string.Join("; ", hopResult.Attempts.Select(a => $"{a.Endpoint} {a.Error}"))})";
+                return;
+            }
+            // The first hop starts with the host that answered, then the rest as fallbacks.
+            chain[0] = firstHop with { Endpoints = firstHop.Endpoints.Where(x => x != hopResult.Endpoint).Prepend(hopResult.Endpoint!).ToList() };
+            var targets = probe.Endpoints.Where(x => !string.IsNullOrWhiteSpace(x.Host)).Select(x => x.Port > 0 ? x : x with { Port = 22 }).ToList();
+            if (targets.Count == 0) { Message = $"{e.Name} has no host"; return; }
+            var jumped = new SshSessionViewModel(e, targets[0], Secrets.Resolve(e, _store, _protector), false)
+            {
+                Endpoints = targets,
+                Jumps = chain,
+            };
+            Message = "";
+            jumped.CloseRequested += (_, _) => CloseSession(jumped);
+            Sessions.Add(jumped);
+            ActiveSession = jumped;
+            return;
+        }
+
         var result = await resolver.ResolveAsync(probe);
         if (!result.Success)
         {
@@ -405,6 +440,25 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
         s.CloseRequested += (_, _) => CloseSession(s);
         AddSession(s);
         RememberRecent(e);
+    }
+
+    /// <summary>The entry's jump hosts, outermost first. Null (with a message) on a loop or a missing entry.</summary>
+    private List<RemoteMan.Protocols.Ssh.SshHop>? BuildJumpChain(Entry target)
+    {
+        var hops = new List<RemoteMan.Protocols.Ssh.SshHop>();
+        var seen = new HashSet<Guid> { target.Id };
+        var next = target.Ssh?.JumpHostId;
+        while (next is { } id)
+        {
+            if (!seen.Add(id) || hops.Count >= 8) { Message = $"{target.Name}: jump hosts point at each other in a loop"; return null; }
+            if (_store!.Get(id) is not { Kind: EntryKind.Ssh } hop) { Message = $"{target.Name}: its jump host entry no longer exists"; return null; }
+            hops.Insert(0, new RemoteMan.Protocols.Ssh.SshHop(hop.Name,
+                hop.Endpoints.Where(x => !string.IsNullOrWhiteSpace(x.Host)).Select(x => x.Port > 0 ? x : x with { Port = 22 }).ToList(),
+                Secrets.Resolve(hop, _store, _protector!), hop.Ssh ?? new SshSettings()));
+            if (hops[0].Endpoints.Count == 0) { Message = $"Jump host {hop.Name} has no host"; return null; }
+            next = hop.Ssh?.JumpHostId;
+        }
+        return hops;
     }
 
     [RelayCommand]
@@ -647,6 +701,114 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
         var user = c.Domain is { Length: > 0 } d ? $"{d}\\{c.UserName}" : c.UserName ?? "";
         CredentialClipboard.CopyBoth(user, c.Password ?? "");
         Message = "Paste once for the user name, again for the password";
+    }
+
+    // ---------------- snippets ----------------
+
+    /// <summary>All snippets, sorted by group then name. The SSH tabs' Snippets panels show these.</summary>
+    public ObservableCollection<Entry> Snippets { get; } = new();
+    public event EventHandler? SnippetsChanged;
+
+    private void RefreshSnippets()
+    {
+        if (_store is null) return;
+        var list = _store.Entries.Where(e => e.Kind == EntryKind.Snippet)
+            .OrderBy(e => e.Snippet?.Group ?? "", StringComparer.OrdinalIgnoreCase).ThenBy(e => e.Name, StringComparer.OrdinalIgnoreCase).ToList();
+        Snippets.Clear();
+        foreach (var e in list) Snippets.Add(e);
+        SnippetsChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    public IEnumerable<SshSessionViewModel> SshSessions => Sessions.OfType<SshSessionViewModel>();
+
+    /// <summary>Sends a snippet to each session, with {host}, {user} and {name} filled in for that session.</summary>
+    public int SendSnippet(Entry snippet, IEnumerable<SshSessionViewModel> targets)
+    {
+        if (snippet.Snippet is not { } sn) return 0;
+        var n = 0;
+        foreach (var t in targets)
+        {
+            var text = sn.Expand(t.Endpoint.Host, t.Credential.UserName, t.Entry.Name).Replace("\r\n", "\n");
+            // Type only (the default): never end on a newline, so the last line waits for Enter.
+            text = sn.PressEnter ? text.TrimEnd('\n') + "\n" : text.TrimEnd('\n');
+            // Terminals expect CR for Enter.
+            if (t.Send(text.Replace('\n', '\r'))) n++;
+        }
+        return n;
+    }
+
+    public async Task<bool> SaveSnippetAsync(Entry snippet)
+    {
+        if (_store is null) return false;
+        try { await _store.SaveAsync(snippet); return true; }
+        catch (Exception ex) { Message = ex is DataSourceOfflineException ? "Offline: snippets can't be changed until the database is back" : ex.Message; return false; }
+    }
+
+    public async Task DeleteSnippetAsync(Entry snippet)
+    {
+        if (_store is null) return;
+        try { await _store.DeleteAsync(snippet.Id); }
+        catch (Exception ex) { Message = ex.Message; }
+    }
+
+    /// <summary>Adds built-in snippets that aren't there yet (matched by group and name). Returns how many were added.</summary>
+    public async Task<int> AddBuiltInSnippetsAsync()
+    {
+        if (_store is null || !_store.IsOnline) return 0;
+        var have = _store.Entries.Where(e => e.Kind == EntryKind.Snippet)
+            .Select(e => $"{e.Snippet?.Group}|{e.Name}".ToLowerInvariant()).ToHashSet();
+        var added = 0;
+        foreach (var d in BuiltInSnippets.All)
+        {
+            if (have.Contains($"{d.Group}|{d.Name}".ToLowerInvariant())) continue;
+            try { await _store.SaveAsync(BuiltInSnippets.ToEntry(d)); added++; }
+            catch (Exception ex) { Message = ex.Message; break; }
+        }
+        return added;
+    }
+
+    /// <summary>First run on a data source: add the starter library once (deleting them later sticks).</summary>
+    private async Task SeedSnippetsAsync(string sourceName)
+    {
+        if (_store is null || !_store.IsOnline || _settings.SnippetsSeeded.Contains(sourceName)) return;
+        if (!_store.Entries.Any(e => e.Kind == EntryKind.Snippet)) await AddBuiltInSnippetsAsync();
+        _settings.SnippetsSeeded.Add(sourceName);
+        _settings.Save();
+    }
+
+    // ---------------- import, export, backup ----------------
+
+    public AppSettings Settings => _settings;
+
+    /// <summary>Automatic backup: checks at start, then hourly, and backs up once a day.</summary>
+    private async Task BackupLoopAsync()
+    {
+        using var timer = new PeriodicTimer(TimeSpan.FromHours(1));
+        do
+        {
+            if (_store is null || !BackupService.IsDue(_settings.Backup)) continue;
+            if (BackupService.LoadPassword() is not { } pw) { Message = "Automatic backup is on but has no password: set one in File > Export and backup"; continue; }
+            try
+            {
+                var file = await BackupService.RunAsync(_settings, _store, _protector, pw);
+                Message = $"Backed up to {System.IO.Path.GetFileName(file)}";
+            }
+            catch (Exception ex) { Message = $"Automatic backup failed: {ex.Message}"; }
+        }
+        while (await timer.WaitForNextTickAsync());
+    }
+
+    /// <summary>Saves planned entries one by one; returns how many were saved.</summary>
+    public async Task<int> SaveImportedAsync(IReadOnlyList<Entry> entries, IProgress<int>? progress = null)
+    {
+        if (_store is null) return 0;
+        var n = 0;
+        foreach (var e in entries)
+        {
+            await _store.SaveAsync(e);
+            progress?.Report(++n);
+        }
+        return n;
     }
 
     public async ValueTask DisposeAsync()

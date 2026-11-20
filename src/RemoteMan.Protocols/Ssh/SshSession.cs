@@ -5,6 +5,9 @@ using RemoteMan.Core.Model;
 
 namespace RemoteMan.Protocols.Ssh;
 
+/// <summary>One jump host (ProxyJump) on the way to the target: its hosts in fallback order and its own login.</summary>
+public sealed record SshHop(string Name, IReadOnlyList<HostEndpoint> Endpoints, ResolvedCredential Credential, SshSettings Settings);
+
 /// <summary>
 /// One interactive SSH shell. SSH.NET covers old and new servers out of the box:
 /// key exchange from mlkem768x25519 / sntrup761 (post-quantum) and curve25519 / ECDH down to
@@ -23,12 +26,108 @@ public sealed class SshSession : IDisposable
     private SshClient? _client;
     private ShellStream? _shell;
     private ConnectionInfo? _info;
+    private readonly List<SshClient> _jumps = new();
+    private readonly List<ForwardedPortLocal> _tunnels = new();
 
     public event Action<string>? Output;
     public event Action<string>? Info;
     public event Action<Exception?>? Closed;
 
     public string? NegotiatedSummary { get; private set; }
+
+    public Task ConnectAsync(HostEndpoint endpoint, ResolvedCredential cred, SshSettings settings, KnownHosts knownHosts,
+        uint cols, uint rows, CancellationToken ct = default) =>
+        ConnectAsync([endpoint], [], cred, settings, knownHosts, cols, rows, ct);
+
+    /// <summary>
+    /// Connects to the first target endpoint that answers. With jump hosts, each hop is reached
+    /// through a local forward on the hop before it (ProxyJump), and every hop has its own login,
+    /// host key check and fallback hosts.
+    /// </summary>
+    public async Task ConnectAsync(IReadOnlyList<HostEndpoint> endpoints, IReadOnlyList<SshHop> jumps, ResolvedCredential cred, SshSettings settings,
+        KnownHosts knownHosts, uint cols, uint rows, CancellationToken ct = default)
+    {
+        SshClient? via = null;
+        foreach (var hop in jumps)
+        {
+            Info?.Invoke($"Jump host {hop.Name}…");
+            var (jc, jep, _) = await ConnectHopAsync(via, hop.Endpoints, hop.Credential, hop.Settings, knownHosts, ct);
+            _jumps.Add(jc);
+            Info?.Invoke($"Via {hop.Name} ({jep}).");
+            via = jc;
+        }
+
+        var (client, ep, info) = await ConnectHopAsync(via, endpoints, cred, settings, knownHosts, ct);
+        _client = client;
+        _info = info;
+        ConnectedEndpoint = ep;
+        _client.ErrorOccurred += (_, e) => Closed?.Invoke(e.Exception);
+        NegotiatedSummary = $"{_client.ConnectionInfo.CurrentKeyExchangeAlgorithm} / {_client.ConnectionInfo.CurrentServerEncryption} / {_client.ConnectionInfo.CurrentHostKeyAlgorithm}";
+
+        _shell = _client.CreateShellStream(settings.TerminalType ?? "xterm-256color", cols, rows, 0, 0, 64 * 1024);
+        _shell.DataReceived += (_, e) => Output?.Invoke(Encoding.UTF8.GetString(e.Data));
+        _shell.Closed += (_, _) => Closed?.Invoke(null);
+
+        if (!string.IsNullOrWhiteSpace(settings.StartupCommand)) Send(settings.StartupCommand + "\n");
+    }
+
+    /// <summary>The endpoint the shell actually reached (the real host, also when tunnelled).</summary>
+    public HostEndpoint? ConnectedEndpoint { get; private set; }
+
+    private async Task<(SshClient Client, HostEndpoint Endpoint, ConnectionInfo Info)> ConnectHopAsync(SshClient? via,
+        IReadOnlyList<HostEndpoint> endpoints, ResolvedCredential cred, SshSettings settings, KnownHosts knownHosts, CancellationToken ct)
+    {
+        Exception? last = null;
+        foreach (var raw in endpoints.Where(e => !string.IsNullOrWhiteSpace(e.Host)))
+        {
+            var ep = raw.Port > 0 ? raw : raw with { Port = 22 };
+            var dial = ep;
+            ForwardedPortLocal? fwd = null;
+            if (via is not null)
+            {
+                // Listen on a free loopback port and carry it over the previous hop (direct-tcpip).
+                fwd = new ForwardedPortLocal("127.0.0.1", 0, ep.Host, (uint)ep.Port);
+                via.AddForwardedPort(fwd);
+                fwd.Start();
+                dial = new HostEndpoint("127.0.0.1", (int)fwd.BoundPort);
+            }
+            var info = BuildConnectionInfo(dial, cred, settings);
+            var client = new SshClient(info);
+            if (settings.KeepAliveSeconds > 0) client.KeepAliveInterval = TimeSpan.FromSeconds(settings.KeepAliveSeconds);
+            // Host keys are checked against the real host name, not the loopback forward.
+            client.HostKeyReceived += (_, e) =>
+            {
+                switch (knownHosts.Check(ep.Host, ep.Port, e.HostKeyName, e.FingerPrintSHA256))
+                {
+                    case HostKeyVerdict.New:
+                        Info?.Invoke($"Host key {e.HostKeyName} SHA256:{e.FingerPrintSHA256} for {ep} accepted automatically (first use, saved).");
+                        e.CanTrust = settings.AutoAcceptHostKey;
+                        break;
+                    case HostKeyVerdict.Changed:
+                        Info?.Invoke($"WARNING: host key for {ep} changed, now {e.HostKeyName} SHA256:{e.FingerPrintSHA256}.");
+                        e.CanTrust = settings.AutoAcceptHostKey;
+                        break;
+                    default:
+                        e.CanTrust = true;
+                        break;
+                }
+            };
+            try
+            {
+                await client.ConnectAsync(ct);
+                if (fwd is not null) _tunnels.Add(fwd);
+                return (client, ep, info);
+            }
+            catch (Exception ex) when (!ct.IsCancellationRequested)
+            {
+                last = ex;
+                client.Dispose();
+                if (fwd is not null) { fwd.Stop(); via!.RemoveForwardedPort(fwd); fwd.Dispose(); }
+                if (endpoints.Count > 1) Info?.Invoke($"{ep}: {ex.Message}");
+            }
+        }
+        throw new SshConnectionException(last is null ? "No host to connect to." : $"No host answered: {last.Message}");
+    }
 
     /// <summary>Login methods and algorithm offer for an entry; shared by the shell, SFTP and port tunnels.</summary>
     public static ConnectionInfo BuildConnectionInfo(HostEndpoint endpoint, ResolvedCredential cred, SshSettings settings)
@@ -63,46 +162,7 @@ public sealed class SshSession : IDisposable
             foreach (var m in LegacyMacs) info.HmacAlgorithms.Remove(m);
             foreach (var h in LegacyHostKeys) info.HostKeyAlgorithms.Remove(h);
         }
-
         return info;
-    }
-
-    public async Task ConnectAsync(HostEndpoint endpoint, ResolvedCredential cred, SshSettings settings, KnownHosts knownHosts,
-        uint cols, uint rows, CancellationToken ct = default)
-    {
-        var info = BuildConnectionInfo(endpoint, cred, settings);
-        _info = info;
-        _client = new SshClient(info);
-        if (settings.KeepAliveSeconds > 0) _client.KeepAliveInterval = TimeSpan.FromSeconds(settings.KeepAliveSeconds);
-
-        _client.HostKeyReceived += (_, e) =>
-        {
-            var verdict = knownHosts.Check(endpoint.Host, endpoint.Port, e.HostKeyName, e.FingerPrintSHA256);
-            switch (verdict)
-            {
-                case HostKeyVerdict.New:
-                    Info?.Invoke($"Host key {e.HostKeyName} SHA256:{e.FingerPrintSHA256} accepted automatically (first use, saved).");
-                    e.CanTrust = settings.AutoAcceptHostKey;
-                    break;
-                case HostKeyVerdict.Changed:
-                    Info?.Invoke($"WARNING: host key for {endpoint} changed, now {e.HostKeyName} SHA256:{e.FingerPrintSHA256}.");
-                    e.CanTrust = settings.AutoAcceptHostKey;
-                    break;
-                default:
-                    e.CanTrust = true;
-                    break;
-            }
-        };
-        _client.ErrorOccurred += (_, e) => Closed?.Invoke(e.Exception);
-
-        await _client.ConnectAsync(ct);
-        NegotiatedSummary = $"{_client.ConnectionInfo.CurrentKeyExchangeAlgorithm} / {_client.ConnectionInfo.CurrentServerEncryption} / {_client.ConnectionInfo.CurrentHostKeyAlgorithm}";
-
-        _shell = _client.CreateShellStream(settings.TerminalType ?? "xterm-256color", cols, rows, 0, 0, 64 * 1024);
-        _shell.DataReceived += (_, e) => Output?.Invoke(Encoding.UTF8.GetString(e.Data));
-        _shell.Closed += (_, _) => Closed?.Invoke(null);
-
-        if (!string.IsNullOrWhiteSpace(settings.StartupCommand)) Send(settings.StartupCommand + "\n");
     }
 
     /// <summary>
@@ -132,5 +192,14 @@ public sealed class SshSession : IDisposable
         _shell?.Dispose();
         if (_client is { IsConnected: true }) _client.Disconnect();
         _client?.Dispose();
+        // Tear down jump hosts last hop first.
+        foreach (var t in _tunnels) { try { t.Stop(); } catch (ObjectDisposedException) { } t.Dispose(); }
+        for (var i = _jumps.Count - 1; i >= 0; i--)
+        {
+            if (_jumps[i].IsConnected) _jumps[i].Disconnect();
+            _jumps[i].Dispose();
+        }
+        _tunnels.Clear();
+        _jumps.Clear();
     }
 }

@@ -243,7 +243,7 @@
             <DockPanel>
                 <Border DockPanel.Dock="Left" BorderBrush="{StaticResource Border}" BorderThickness="0,0,1,0" Padding="10,0">
                     <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                        <TextBlock Text="Connect" Style="{StaticResource Muted}" FontSize="11" VerticalAlignment="Center" Margin="0,0,6,0" />
+                        <TextBlock Text="Connect" Style="{StaticResource MutedText}" FontSize="11" VerticalAlignment="Center" Margin="0,0,6,0" />
                         <Grid Width="150">
                             <TextBox x:Name="QuickHostBox" Text="{Binding QuickHost, UpdateSourceTrigger=PropertyChanged}" MinHeight="18" Height="18" Padding="4,0"
                                      FontFamily="{StaticResource MonoFont}" FontSize="11" AutomationProperties.Name="Quick connect host or IP" KeyDown="OnQuickHostKeyDown" />
@@ -261,8 +261,8 @@
                     </StackPanel>
                 </Border>
 
-                <TextBlock DockPanel.Dock="Right" Text="{Binding AppVersion}" Style="{StaticResource Muted}" FontSize="11" VerticalAlignment="Center" Margin="10,0" />
-                <TextBlock DockPanel.Dock="Right" Text="{Binding OnlineText}" Style="{StaticResource Muted}" FontSize="11" VerticalAlignment="Center" Margin="10,0,0,0" />
+                <TextBlock DockPanel.Dock="Right" Text="{Binding AppVersion}" Style="{StaticResource MutedText}" FontSize="11" VerticalAlignment="Center" Margin="10,0" />
+                <TextBlock DockPanel.Dock="Right" Text="{Binding OnlineText}" Style="{StaticResource MutedText}" FontSize="11" VerticalAlignment="Center" Margin="10,0,0,0" />
 
                 <!-- Zabbix: a small "Z" like the Q. Green when connected, red when unreachable, grey while connecting. Click for details. -->
                 <Grid DockPanel.Dock="Right" Visibility="{Binding ZabbixActive, Converter={StaticResource BoolVis}}">
@@ -291,7 +291,7 @@
                                     <Path Style="{StaticResource HealthGlyph}" Tag="{Binding ZabbixStatusTag}" Margin="0,0,6,0" VerticalAlignment="Top" />
                                     <TextBlock Text="{Binding ZabbixStatusText}" TextWrapping="Wrap" />
                                 </DockPanel>
-                                <TextBlock Text="{Binding ZabbixRouteText}" Style="{StaticResource Muted}" FontSize="11" TextWrapping="Wrap" Margin="0,6,0,0" />
+                                <TextBlock Text="{Binding ZabbixRouteText}" Style="{StaticResource MutedText}" FontSize="11" TextWrapping="Wrap" Margin="0,6,0,0" />
                                 <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
                                     <Button Content="Settings…" Command="{Binding ZabbixSettingsCommand}" Click="OnZPopupButton" />
                                     <Button Content="Import hosts…" Margin="6,0,0,0" Command="{Binding ImportFromZabbixCommand}" Click="OnZPopupButton" />
@@ -324,15 +324,15 @@
                             <StackPanel>
                                 <TextBlock Text="Shared database" FontWeight="SemiBold" Margin="0,0,0,6" />
                                 <TextBlock Text="{Binding DataSourceText}" TextWrapping="Wrap" />
-                                <TextBlock Text="{Binding OnlineText}" Style="{StaticResource Muted}" FontSize="11" Margin="0,6,0,0" />
+                                <TextBlock Text="{Binding OnlineText}" Style="{StaticResource MutedText}" FontSize="11" Margin="0,6,0,0" />
                                 <TextBlock Text="When the database is unreachable, RemoteMan works from its local cache and retries every 15 seconds."
-                                           Style="{StaticResource Muted}" FontSize="11" TextWrapping="Wrap" Margin="0,6,0,0" />
+                                           Style="{StaticResource MutedText}" FontSize="11" TextWrapping="Wrap" Margin="0,6,0,0" />
                             </StackPanel>
                         </Border>
                     </Popup>
                 </Grid>
 
-                <TextBlock DockPanel.Dock="Right" Text="{Binding ActiveSession.StatusText}" FontFamily="{StaticResource MonoFont}" Style="{StaticResource Muted}" FontSize="11" VerticalAlignment="Center" Margin="10,0" />
+                <TextBlock DockPanel.Dock="Right" Text="{Binding ActiveSession.StatusText}" FontFamily="{StaticResource MonoFont}" Style="{StaticResource MutedText}" FontSize="11" VerticalAlignment="Center" Margin="10,0" />
                 <TextBlock Text="{Binding Message}" Foreground="{StaticResource Presence}" FontSize="11" Margin="10,0" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
             </DockPanel>
         </Border>
@@ -430,7 +430,7 @@
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate>
                                     <DockPanel Margin="0,2">
-                                        <TextBlock Width="66" Text="{Binding Key}" Style="{StaticResource Muted}" FontSize="11" />
+                                        <TextBlock Width="66" Text="{Binding Key}" Style="{StaticResource MutedText}" FontSize="11" />
                                         <TextBlock x:Name="v" Text="{Binding Value}" FontSize="11" TextTrimming="CharacterEllipsis" ToolTip="{Binding Value}" />
                                     </DockPanel>
                                     <DataTemplate.Triggers>
@@ -454,7 +454,7 @@
                                 <TextBlock Text="{Binding SelectedZabbixSummary}" FontSize="11" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
                             </DockPanel>
                             <DockPanel Margin="0,4,0,0" Visibility="{Binding SelectedZabbixLinked, Converter={StaticResource BoolVis}}">
-                                <TextBlock Width="66" Text="Matched" Style="{StaticResource Muted}" FontSize="11" />
+                                <TextBlock Width="66" Text="Matched" Style="{StaticResource MutedText}" FontSize="11" />
                                 <TextBlock Text="{Binding SelectedZabbixMatch}" FontSize="11" TextTrimming="CharacterEllipsis" ToolTip="{Binding SelectedZabbixMatch}" />
                             </DockPanel>
                             <ItemsControl ItemsSource="{Binding SelectedProblems}" Focusable="False" Margin="0,4,0,0">
@@ -467,7 +467,7 @@
                                                 </Path>
                                                 <StackPanel>
                                                     <TextBlock Text="{Binding Name}" FontSize="11" TextWrapping="Wrap" />
-                                                    <TextBlock Text="{Binding Meta}" FontSize="10" Style="{StaticResource Muted}" Margin="0,1,0,0" TextTrimming="CharacterEllipsis" />
+                                                    <TextBlock Text="{Binding Meta}" FontSize="10" Style="{StaticResource MutedText}" Margin="0,1,0,0" TextTrimming="CharacterEllipsis" />
                                                 </StackPanel>
                                             </DockPanel>
                                         </Border>
@@ -476,7 +476,7 @@
                             </ItemsControl>
                             <DockPanel Margin="0,2,0,0" Visibility="{Binding SelectedZabbixUnlinked, Converter={StaticResource BoolVis}}">
                                 <TextBlock DockPanel.Dock="Right" FontSize="11"><Hyperlink Command="{Binding LinkToZabbixCommand}" Foreground="#7FD3C4">Link to Zabbix host</Hyperlink></TextBlock>
-                                <TextBlock Text="No Zabbix host matches this entry." Style="{StaticResource Muted}" FontSize="11" TextTrimming="CharacterEllipsis" />
+                                <TextBlock Text="No Zabbix host matches this entry." Style="{StaticResource MutedText}" FontSize="11" TextTrimming="CharacterEllipsis" />
                             </DockPanel>
                         </StackPanel>
                     </StackPanel>
