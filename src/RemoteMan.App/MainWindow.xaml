@@ -16,6 +16,32 @@
     <Window.Resources>
         <BooleanToVisibilityConverter x:Key="BoolVis" />
         <local:NullToCollapsedConverter x:Key="NullVis" />
+        <local:EmptyToCollapsedConverter x:Key="EmptyVis" />
+        <local:InverseBoolToVisConverter x:Key="NotVis" />
+        <!-- Online / Activity switch in the Team list: two joined segments -->
+        <Style TargetType="RadioButton" x:Key="TeamTab">
+            <Setter Property="Foreground" Value="{StaticResource Muted}" />
+            <Setter Property="FontSize" Value="11" />
+            <Setter Property="Margin" Value="0,0,-1,0" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="RadioButton">
+                        <Border x:Name="b" CornerRadius="{StaticResource Radius}" Background="{StaticResource Panel}" BorderBrush="{StaticResource Border}" BorderThickness="1" Padding="9,2">
+                            <ContentPresenter VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="b" Property="Background" Value="{StaticResource Hover}" /></Trigger>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="b" Property="Background" Value="{StaticResource Select}" />
+                                <Setter TargetName="b" Property="BorderBrush" Value="{StaticResource Accent}" />
+                                <Setter Property="Foreground" Value="{StaticResource TextStrong}" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
 
         <!-- Session views, chosen by type and kept alive while hidden -->
         <DataTemplate DataType="{x:Type vm:SshSessionViewModel}"><views:SshSessionView /></DataTemplate>
@@ -33,12 +59,38 @@
                 <!-- Protocol icon with a tiny presence badge on its corner when someone is on the entry -->
                 <Grid x:Name="tag" Margin="0,0,7,0" VerticalAlignment="Center">
                     <Path Style="{StaticResource KindIcon}" Tag="{Binding KindTag}" />
+                    <!-- Filled: connected or editing. Outline: just looking. -->
                     <Border Width="9" Height="9" CornerRadius="4.5" Margin="0,0,-3,-3" HorizontalAlignment="Right" VerticalAlignment="Bottom"
-                            Background="{Binding Badge.Color}" BorderBrush="{StaticResource Panel}" BorderThickness="1" ToolTip="{Binding Badge.ToolTip}"
-                            Visibility="{Binding Badge, Converter={StaticResource NullVis}}">
-                        <TextBlock Text="{Binding Badge.Initials}" FontSize="5.5" FontWeight="Bold" Foreground="{StaticResource Bg}" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                            ToolTip="{Binding Badge.ToolTip}" Visibility="{Binding Badge, Converter={StaticResource NullVis}}">
+                        <Border.Style>
+                            <Style TargetType="Border">
+                                <Setter Property="Background" Value="{Binding Badge.Color}" />
+                                <Setter Property="BorderBrush" Value="{StaticResource Panel}" />
+                                <Setter Property="BorderThickness" Value="1" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding Badge.Hollow}" Value="True">
+                                        <Setter Property="Background" Value="{StaticResource Panel}" />
+                                        <Setter Property="BorderBrush" Value="{Binding Badge.Color}" />
+                                        <Setter Property="BorderThickness" Value="1.5" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Border.Style>
+                        <TextBlock Text="{Binding Badge.Initials}" FontSize="5.5" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center">
+                            <TextBlock.Style>
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="Foreground" Value="{StaticResource Bg}" />
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding Badge.Hollow}" Value="True"><Setter Property="Visibility" Value="Collapsed" /></DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                        </TextBlock>
                     </Border>
                 </Grid>
+                <!-- Reserved: a lock, amber for someone else's reservation, accent for yours -->
+                <Path x:Name="lock" DockPanel.Dock="Right" Style="{StaticResource KindIcon}" Tag="lock" Width="14" Height="16" Margin="6,0,0,0"
+                      ToolTip="{Binding ReservedTip}" Visibility="{Binding ReservedTip, Converter={StaticResource NullVis}}" />
                 <!-- Zabbix: health glyph on entries, count of problem hosts on folders -->
                 <Path DockPanel.Dock="Right" Style="{StaticResource HealthGlyph}" Tag="{Binding Health}" Margin="6,0,0,0" ToolTip="{Binding HealthTip}" />
                 <Border x:Name="pcount" DockPanel.Dock="Right" MinWidth="16" Height="16" CornerRadius="8" Padding="4,0" Margin="6,0,0,0" Background="{StaticResource Warn}"
@@ -61,6 +113,9 @@
                 </DataTrigger>
                 <DataTrigger Binding="{Binding IsExpanded}" Value="False">
                     <Setter TargetName="chevron" Property="Data" Value="M0,0 L4,4 L0,8" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding ReservedByMe}" Value="True">
+                    <Setter TargetName="lock" Property="Stroke" Value="{StaticResource Accent}" />
                 </DataTrigger>
                 <DataTrigger Binding="{Binding ProblemCountHigh}" Value="True">
                     <Setter TargetName="pcount" Property="Background" Value="{StaticResource Bad}" />
@@ -215,18 +270,119 @@
                     </DockPanel>
                 </Border>
 
-                <!-- Who's online (shared data sources only). The AI assistant button goes right of this. -->
-                <ItemsControl Grid.Column="3" ItemsSource="{Binding OnlineUsers}" Focusable="False" VerticalAlignment="Center" Margin="0,0,8,0">
-                    <ItemsControl.ItemsPanel><ItemsPanelTemplate><StackPanel Orientation="Horizontal" /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
-                    <ItemsControl.ItemTemplate>
-                        <DataTemplate>
-                            <Border Width="24" Height="24" CornerRadius="12" Background="{Binding Color}" BorderBrush="{StaticResource Header}" BorderThickness="2"
-                                    Margin="-5,0,0,0" ToolTip="{Binding ToolTip}" WindowChrome.IsHitTestVisibleInChrome="True">
-                                <TextBlock Text="{Binding Initials}" FontSize="9" FontWeight="SemiBold" Foreground="{StaticResource Bg}" HorizontalAlignment="Center" VerticalAlignment="Center" />
-                            </Border>
-                        </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                </ItemsControl>
+                <!-- Who's online (shared data sources only): click for the Team list. The AI assistant button goes right of this. -->
+                <Grid Grid.Column="3" VerticalAlignment="Center" Margin="0,0,8,0" Visibility="{Binding IsSharedSource, Converter={StaticResource BoolVis}}">
+                    <ToggleButton x:Name="TeamButton" Style="{StaticResource BarToggle}" Height="28" Padding="10,0,6,0" WindowChrome.IsHitTestVisibleInChrome="True"
+                                  ToolTip="Who's online and what they're connected to" AutomationProperties.Name="Team">
+                        <StackPanel Orientation="Horizontal">
+                            <ItemsControl ItemsSource="{Binding OnlineUsers}" Focusable="False" VerticalAlignment="Center" IsHitTestVisible="False">
+                                <ItemsControl.ItemsPanel><ItemsPanelTemplate><StackPanel Orientation="Horizontal" /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Border Width="24" Height="24" CornerRadius="12" Background="{Binding Color}" BorderBrush="{StaticResource Header}" BorderThickness="2"
+                                                Margin="-5,0,0,0" ToolTip="{Binding ToolTip}">
+                                            <TextBlock Text="{Binding Initials}" FontSize="9" FontWeight="SemiBold" Foreground="{StaticResource Bg}" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                            <TextBlock Text="{Binding OnlineCount}" Style="{StaticResource MutedText}" FontSize="11" VerticalAlignment="Center" Margin="6,0,0,0" />
+                        </StackPanel>
+                    </ToggleButton>
+                    <Popup AllowsTransparency="True" IsOpen="{Binding IsChecked, ElementName=TeamButton}" StaysOpen="False" Placement="Bottom" PlacementTarget="{Binding ElementName=TeamButton}"
+                           HorizontalOffset="-200" VerticalOffset="4" Closed="OnTeamPopupClosed" Opened="OnTeamPopupOpened">
+                        <Border Width="340" Background="#1D2125" BorderBrush="#353B42" BorderThickness="1" CornerRadius="{StaticResource Radius}">
+                            <DockPanel>
+                                <Border DockPanel.Dock="Top" BorderBrush="#353B42" BorderThickness="0,0,0,1" Padding="10,8">
+                                    <DockPanel>
+                                        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                                            <RadioButton x:Name="TeamOnlineTab" Content="Online" GroupName="teamtab" Style="{StaticResource TeamTab}" IsChecked="True" Checked="OnTeamTab" />
+                                            <RadioButton x:Name="TeamActivityTab" Content="Activity" GroupName="teamtab" Style="{StaticResource TeamTab}" Checked="OnTeamTab" />
+                                        </StackPanel>
+                                        <TextBlock Text="Team" FontWeight="SemiBold" VerticalAlignment="Center" />
+                                    </DockPanel>
+                                </Border>
+                                <TextBlock DockPanel.Dock="Bottom" Margin="10,6,10,8" FontSize="11" Foreground="{StaticResource Faint}" TextWrapping="Wrap"
+                                           Text="Click a connection to find the entry. Filled faces in the tree mean connected; an outline means looking."
+                                           Visibility="{Binding TeamShowsActivity, Converter={StaticResource NotVis}}" />
+                                <ScrollViewer MaxHeight="420" VerticalScrollBarVisibility="Auto">
+                                    <StackPanel>
+                                        <!-- Online: each person, their open connections, what they're looking at, their reservations -->
+                                        <StackPanel Visibility="{Binding TeamShowsActivity, Converter={StaticResource NotVis}}">
+                                            <TextBlock Text="{Binding TeamEmptyText}" Style="{StaticResource MutedText}" Margin="10,10" TextWrapping="Wrap"
+                                                       Visibility="{Binding TeamEmptyText, Converter={StaticResource EmptyVis}}" />
+                                            <ItemsControl ItemsSource="{Binding TeamMembers}" Focusable="False">
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate>
+                                                        <Border BorderBrush="{StaticResource BorderSoft}" BorderThickness="0,0,0,1" Padding="10,7">
+                                                            <DockPanel>
+                                                                <Border DockPanel.Dock="Left" Width="22" Height="22" CornerRadius="11" Background="{Binding Color}" VerticalAlignment="Top" Margin="0,0,8,0">
+                                                                    <TextBlock Text="{Binding Initials}" FontSize="9" FontWeight="SemiBold" Foreground="{StaticResource Bg}" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                                                </Border>
+                                                                <StackPanel>
+                                                                    <TextBlock>
+                                                                        <Run Text="{Binding ShortUser, Mode=OneWay}" Foreground="{StaticResource TextStrong}" />
+                                                                        <Run Text="{Binding Machine, Mode=OneWay}" Foreground="{StaticResource Faint}" FontSize="11" />
+                                                                    </TextBlock>
+                                                                    <ItemsControl ItemsSource="{Binding Lines}" Focusable="False" Margin="-4,2,0,0">
+                                                                        <ItemsControl.ItemTemplate>
+                                                                            <DataTemplate>
+                                                                                <Button Style="{StaticResource FlatButton}" HorizontalContentAlignment="Stretch" Padding="4,1" MinHeight="22" Click="OnTeamLine"
+                                                                                        Command="{Binding DataContext.JumpToEntryCommand, RelativeSource={RelativeSource AncestorType=ItemsControl, AncestorLevel=2}}" CommandParameter="{Binding EntryId}">
+                                                                                    <DockPanel>
+                                                                                        <TextBlock DockPanel.Dock="Right" Text="{Binding Right}" FontSize="11" Foreground="{StaticResource Faint}" Margin="8,0,0,0" VerticalAlignment="Center" />
+                                                                                        <Path DockPanel.Dock="Left" Style="{StaticResource KindIcon}" Tag="{Binding Glyph}" Width="14" Margin="0,0,6,0"
+                                                                                              Visibility="{Binding Glyph, Converter={StaticResource NullVis}}" />
+                                                                                        <TextBlock x:Name="t" Text="{Binding Text}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" Foreground="{StaticResource Text}" />
+                                                                                    </DockPanel>
+                                                                                </Button>
+                                                                                <DataTemplate.Triggers>
+                                                                                    <DataTrigger Binding="{Binding Dim}" Value="True"><Setter TargetName="t" Property="Foreground" Value="{StaticResource Faint}" /></DataTrigger>
+                                                                                </DataTemplate.Triggers>
+                                                                            </DataTemplate>
+                                                                        </ItemsControl.ItemTemplate>
+                                                                    </ItemsControl>
+                                                                </StackPanel>
+                                                            </DockPanel>
+                                                        </Border>
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
+                                        </StackPanel>
+                                        <!-- Activity: the latest changes by anyone; deleted entries can be restored here -->
+                                        <StackPanel Visibility="{Binding TeamShowsActivity, Converter={StaticResource BoolVis}}">
+                                            <TextBlock Text="{Binding ActivityEmptyText}" Style="{StaticResource MutedText}" Margin="10,10" TextWrapping="Wrap"
+                                                       Visibility="{Binding ActivityEmptyText, Converter={StaticResource EmptyVis}}" />
+                                            <ItemsControl ItemsSource="{Binding Activity}" Focusable="False">
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate>
+                                                        <Border BorderBrush="{StaticResource BorderSoft}" BorderThickness="0,0,0,1" Padding="10,6">
+                                                            <DockPanel>
+                                                                <Border DockPanel.Dock="Left" Width="18" Height="18" CornerRadius="9" Background="{Binding Color}" VerticalAlignment="Top" Margin="0,1,8,0">
+                                                                    <TextBlock Text="{Binding Initials}" FontSize="8" FontWeight="SemiBold" Foreground="{StaticResource Bg}" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                                                </Border>
+                                                                <Button DockPanel.Dock="Right" Content="Restore" Height="22" Padding="9,0" FontSize="11" Margin="8,0,0,0" VerticalAlignment="Center"
+                                                                        Command="{Binding DataContext.RestoreActivityCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}" CommandParameter="{Binding}"
+                                                                        Visibility="{Binding CanRestore, Converter={StaticResource BoolVis}}" ToolTip="Bring it back as it was before it was deleted" />
+                                                                <StackPanel>
+                                                                    <TextBlock TextWrapping="Wrap">
+                                                                        <Run Text="{Binding ShortUser, Mode=OneWay}" Foreground="{StaticResource TextStrong}" />
+                                                                        <Run Text="{Binding Verb, Mode=OneWay}" Foreground="{StaticResource Muted}" />
+                                                                    </TextBlock>
+                                                                    <TextBlock Text="{Binding When}" FontSize="11" Foreground="{StaticResource Faint}" />
+                                                                </StackPanel>
+                                                            </DockPanel>
+                                                        </Border>
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
+                                        </StackPanel>
+                                    </StackPanel>
+                                </ScrollViewer>
+                            </DockPanel>
+                        </Border>
+                    </Popup>
+                </Grid>
 
                 <StackPanel Grid.Column="4" Orientation="Horizontal">
                     <!-- AI assistant: provider name + green dot once signed in (on standby); opens the chat box -->

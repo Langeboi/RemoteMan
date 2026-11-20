@@ -51,6 +51,9 @@
                 <Button Content="OK" MinWidth="76" IsDefault="True" Style="{StaticResource PrimaryButton}" Click="OnOk" />
                 <Button Content="Cancel" MinWidth="76" Margin="6,0,0,0" IsCancel="True" />
             </StackPanel>
+            <TextBlock x:Name="HistoryLink" DockPanel.Dock="Right" FontSize="11" VerticalAlignment="Center" Margin="0,0,12,0" Visibility="Collapsed">
+                <Hyperlink Click="OnHistory" Foreground="#7FD3C4" ToolTip="Every saved version of this entry, with restore">History</Hyperlink>
+            </TextBlock>
             <TextBlock x:Name="History" Style="{StaticResource MutedText}" FontSize="11" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Margin="0,0,12,0" />
             </DockPanel>
         </Border>
@@ -160,6 +163,29 @@
                             <TextBox x:Name="NotesBox" Height="50" AcceptsReturn="True" TextWrapping="Wrap" VerticalContentAlignment="Top" />
                         </DockPanel>
                         <CheckBox x:Name="SaveAsCredential" Content="Save as a reusable credential too" Margin="90,6,0,0" />
+                    </StackPanel>
+                </GroupBox>
+
+                <!-- Your own login for a shared entry: on this PC only, never in the database -->
+                <GroupBox x:Name="MyLoginGroup" Header="My login (only on this PC)" Visibility="Collapsed">
+                    <StackPanel>
+                        <CheckBox x:Name="MyLoginOn" Content="Connect with my own login instead" Margin="90,2,0,4" Checked="OnMyLoginToggled" Unchecked="OnMyLoginToggled" />
+                        <StackPanel x:Name="MyLoginFields">
+                            <DockPanel Margin="0,2">
+                                <TextBlock Text="User name" Width="90" Style="{StaticResource Label}" />
+                                <TextBox x:Name="MyUserBox" />
+                            </DockPanel>
+                            <DockPanel Margin="0,2">
+                                <TextBlock Text="Domain" Width="90" Style="{StaticResource Label}" />
+                                <TextBox x:Name="MyDomainBox" ToolTip="Used for RDP. Leave empty for local accounts, SSH and web." />
+                            </DockPanel>
+                            <DockPanel Margin="0,2">
+                                <TextBlock Text="Password" Width="90" Style="{StaticResource Label}" />
+                                <PasswordBox x:Name="MyPasswordBox" ToolTip="Leave empty to keep the stored one, or to be asked when connecting" />
+                            </DockPanel>
+                        </StackPanel>
+                        <TextBlock Style="{StaticResource MutedText}" FontSize="11" Margin="90,4,0,0" TextWrapping="Wrap"
+                                   Text="Everyone else keeps using the login above. Yours is encrypted for your Windows account and never goes to the database." />
                     </StackPanel>
                 </GroupBox>
 

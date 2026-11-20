@@ -45,6 +45,8 @@ public static class EntryMenu
         ["vnc"] = G("M1.5,8.5 V1.5 H9.5 V4 M4,4 H12.5 V11 H4 Z M6.5,12.5 H10"),
         ["key"] = G("M6,7 A2.5,2.5 0 1 1 1,7 A2.5,2.5 0 1 1 6,7 Z M6,7 H12.5 M10.5,7 V9.5 M12.5,7 V9"),
         ["folder"] = G("M1,4 H5 L6,5 H13 V12 H1 Z"),
+        ["lock"] = G("M3,6.5 H11 V12.5 H3 Z M5,6.5 V4.5 A2,2 0 0 1 9,4.5 V6.5"),
+        ["history"] = G("M2,7 A5,5 0 1 0 3.5,3.5 M1.5,1.5 V4 H4 M7,4.5 V7 L9,8.5"),
     };
 
     private static Geometry G(string data) { var g = Geometry.Parse(data); g.Freeze(); return g; }
@@ -117,6 +119,16 @@ public static class EntryMenu
         }
         menu.Items.Add(move);
         if (!isFolder) menu.Items.Add(Item(vm.IsFavorite(e) ? "Remove from favorites" : "Add to favorites", "star", () => vm.ToggleFavoriteCommand.Execute(null)));
+        // Shared databases: ask others to keep off it for a while.
+        if (vm.CanReserve && (e.IsConnectable || isFolder))
+        {
+            if (e.Reservation is { } r && r.IsActive(DateTimeOffset.UtcNow))
+            {
+                if (vm.IsReservedByMe(e)) menu.Items.Add(Item("Release reservation", "lock", () => _ = vm.ReleaseAsync(e)));
+                else menu.Items.Add(Item($"Reserved by {TeamText.Short(r.By)} until {TeamText.Clock(r.Until)}", "lock", enabled: false));
+            }
+            else menu.Items.Add(Item("Reserve…", "lock", () => _ = vm.ReserveAsync(e)));
+        }
 
         // --- copy login details ---
         if (e.IsConnectable || isCred)
@@ -174,6 +186,7 @@ public static class EntryMenu
         // --- details and delete ---
         // Properties opens the editor, like Edit; created/modified history is shown at its bottom.
         menu.Items.Add(Item("Properties", "info", () => vm.EditCommand.Execute(null), "Alt+Enter"));
+        if (vm.Store?.SupportsHistory == true) menu.Items.Add(Item("History…", "history", () => vm.ShowHistoryCommand.Execute(null)));
         menu.Items.Add(new Separator());
         var del = Item("Delete", "delete", () => vm.DeleteCommand.Execute(null), "Del");
         del.SetResourceReference(Control.ForegroundProperty, "Bad");

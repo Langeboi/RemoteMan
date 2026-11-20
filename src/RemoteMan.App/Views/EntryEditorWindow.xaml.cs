@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using System.Windows;
 using System.Windows.Controls;
 using CommunityToolkit.Mvvm.ComponentModel;
+using RemoteMan.App.Services;
 using RemoteMan.Core.Integrations.Zabbix;
 using RemoteMan.Core.Model;
 using RemoteMan.Core.Security;
@@ -129,6 +130,17 @@ public partial class EntryEditorWindow : Window
         CertBox.Text = c.ProtectedCertificate is null ? "" : "(stored)";
         (c.Type switch { CredentialType.SshKey => TypeKey, CredentialType.Certificate => TypeCert, CredentialType.Secret => TypeSecret, _ => TypePassword }).IsChecked = true;
         Show(SaveAsCredential, kind != EntryKind.Credential);
+
+        // Shared databases: your own login for this entry, kept on this PC.
+        Show(MyLoginGroup, connectable && store.Source.Kind != DataSourceKind.Sqlite);
+        if (MyLogins.Get(entry.Id) is { } mine)
+        {
+            MyLoginOn.IsChecked = mine.Enabled;
+            MyUserBox.Text = mine.UserName;
+            MyDomainBox.Text = mine.Domain;
+        }
+        OnMyLoginToggled(this, new RoutedEventArgs());
+        Show(HistoryLink, entry.Revision > 0 && store.SupportsHistory && OpenHistory is not null);
         OnKeyFromDisk(this, new RoutedEventArgs());
         UpdateLoginUi();
 
@@ -410,6 +422,29 @@ public partial class EntryEditorWindow : Window
         WebAutoFill.IsChecked = true;
     }
 
+    /// <summary>Opens the change history (set by the main window). The editor stays open behind it.</summary>
+    public static Action<Window, Entry>? OpenHistory { get; set; }
+
+    private void OnHistory(object sender, RoutedEventArgs e) => OpenHistory?.Invoke(this, _e);
+
+    private void OnMyLoginToggled(object sender, RoutedEventArgs e) => MyLoginFields.IsEnabled = MyLoginOn.IsChecked == true;
+
+    /// <summary>Your own login is local: written straight to this PC, not part of the entry that is saved.</summary>
+    private void SaveMyLogin()
+    {
+        if (MyLoginGroup.Visibility != Visibility.Visible) return;
+        var existing = MyLogins.Get(_e.Id);
+        if (MyLoginOn.IsChecked != true && existing is null) return;
+        if (MyLoginOn.IsChecked != true && string.IsNullOrWhiteSpace(MyUserBox.Text)) { MyLogins.Set(_e.Id, null); return; }
+        MyLogins.Set(_e.Id, new MyLogin
+        {
+            Enabled = MyLoginOn.IsChecked == true,
+            UserName = string.IsNullOrWhiteSpace(MyUserBox.Text) ? null : MyUserBox.Text.Trim(),
+            Domain = string.IsNullOrWhiteSpace(MyDomainBox.Text) ? null : MyDomainBox.Text.Trim(),
+            ProtectedPassword = MyPasswordBox.Password.Length > 0 ? MyLogins.Protect(MyPasswordBox.Password) : existing?.ProtectedPassword,
+        });
+    }
+
     private void OnOk(object sender, RoutedEventArgs e)
     {
         if (string.IsNullOrWhiteSpace(NameBox.Text))
@@ -530,6 +565,8 @@ public partial class EntryEditorWindow : Window
                 _e.Ssh ??= new();
                 break;
         }
+        try { SaveMyLogin(); }
+        catch (Exception ex) { ChoiceDialog.Error(this, "Couldn't save your login", ex.Message); return; }
         DialogResult = true;
     }
 

@@ -67,6 +67,7 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
             if (source is RedundantDataSource r)
                 r.FailedOver += (_, now) => OnUi(() => { DataSourceText = r.DisplayName; Message = $"Data source failed over to {now.DisplayName}"; });
             _protector = Secrets.For(cfg);
+            MyLogins.Use(cfg.Name);
             // Local files: your Windows account. Shared databases: the login the server reports (set on open).
             var user = Environment.UserDomainName is { Length: > 0 } dom && dom != Environment.MachineName
                 ? $"{dom}\\{Environment.UserName}" : Environment.UserName;
@@ -82,6 +83,7 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
                 Message = up ? "Back online" : "Database unreachable: working offline, retrying every 15 seconds";
             });
             await store.OpenAsync();
+            HookTeam();
             ShowOnlineState(source, store);
             RebuildTree();
             await StartZabbixAsync();
@@ -179,15 +181,32 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
     private void ApplyPresence()
     {
         if (_store is null) return;
+        var now = DateTimeOffset.UtcNow;
         foreach (var n in _nodes.Values)
         {
             n.People.Clear();
-            foreach (var p in _store.PresenceFor(n.Id))
-                n.People.Add(new PresenceChip(p.Initials, $"{p.User} ({p.Machine}) is {p.State.ToString().ToLowerInvariant()}", PresenceChip.ColorFor(p.User)));
+            // Connected (or editing) people first: their face is the one on the badge, filled; just looking is an outline.
+            foreach (var p in _store.PresenceFor(n.Id).OrderBy(p => p.State == PresenceState.Viewing ? 1 : 0))
+            {
+                var what = p.State switch
+                {
+                    PresenceState.Connected => "connected" + (p.ConnectedSince is { } s ? $" for {TeamText.Duration(now - s)}" : ""),
+                    PresenceState.Editing => "editing",
+                    _ => "looking at it",
+                };
+                n.People.Add(new PresenceChip(p.Initials, $"{p.User} ({p.Machine}): {what}", PresenceChip.ColorFor(p.User), Hollow: p.State == PresenceState.Viewing));
+            }
             n.Badge = n.People.Count == 0 ? null
                 : n.People[0] with { Initials = n.People[0].Initials[..1], ToolTip = string.Join("\n", n.People.Select(c => c.ToolTip)) };
+            if (n.Entry.Reservation is { } r && r.IsActive(now))
+            {
+                n.ReservedByMe = string.Equals(r.By, _store.User, StringComparison.OrdinalIgnoreCase);
+                n.ReservedTip = $"Reserved by {(n.ReservedByMe ? "you" : r.By)} until {TeamText.Clock(r.Until)}" + (r.Note is { Length: > 0 } note ? $"\n\"{note}\"" : "");
+            }
+            else n.ReservedTip = null;
         }
         RefreshOnlineUsers();
+        RefreshTeam();
         var users = _store.Presence.Where(p => p.IsAlive(DateTimeOffset.UtcNow)).Select(p => p.User).Append(_store.User).Distinct().Count();
         OnlineText = _store.Source.SupportsPresence && _store.Source.Kind != DataSourceKind.Sqlite ? $"{users} user{(users == 1 ? "" : "s")} online" : "";
         RefreshProperties();
@@ -242,8 +261,11 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
                 Properties.Add(new PropertyRow("Browser", (e.Web?.Browser ?? BrowserKind.Embedded).ToString().ToLowerInvariant()));
                 break;
         }
-        var people = _store.PresenceFor(e.Id).Select(p => $"{p.User} ({p.State.ToString().ToLowerInvariant()})").ToList();
+        var people = _store.PresenceFor(e.Id).Select(p => $"{p.User} ({(p.State == PresenceState.Viewing ? "looking" : p.State.ToString().ToLowerInvariant())})").ToList();
         if (people.Count > 0) Properties.Add(new PropertyRow("Users", string.Join(", ", people), "presence"));
+        if (e.Reservation is { } res && res.IsActive(DateTimeOffset.UtcNow))
+            Properties.Add(new PropertyRow("Reserved", $"{res.By} until {TeamText.Clock(res.Until)}" + (res.Note is { Length: > 0 } rn ? $": {rn}" : ""), "presence"));
+        if (MyLogins.Active(e.Id) is { } mine) Properties.Add(new PropertyRow("My login", (mine.Domain is { Length: > 0 } md ? md + "\\" : "") + mine.UserName));
         if (e.CreatedBy is not null) Properties.Add(new PropertyRow("Created", $"{e.CreatedAt?.ToLocalTime():g} by {e.CreatedBy}"));
         if (e.UpdatedBy is not null && e.Revision > 0 && e.UpdatedAt != e.CreatedAt)
             Properties.Add(new PropertyRow("Modified", $"{e.UpdatedAt.ToLocalTime():g} by {e.UpdatedBy}"));
@@ -339,6 +361,7 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
 
     private async Task ConnectEntryAsync(Entry e)
     {
+        if (!ConfirmTeamBeforeConnect(e)) return;
         var probe = EntryStore.Clone(e);
         if (probe.Kind == EntryKind.Web && probe.Endpoints.Count == 0 && WebSettings.NormalizeUrl(probe.Web?.Url) is { Length: > 0 } url)
             probe.Endpoints.Add(EndpointResolver.Parse(url) is var ep && ep.Port == 0
@@ -563,21 +586,35 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
     {
         if (_store is null || _protector is null || EditDialog is null) return;
         if (!_store.IsOnline) { Message = "Offline: entries can be opened but not changed until the database is back"; return; }
+        // What the editor starts from: if someone saves meanwhile, the two edits are merged field by field.
+        var @base = EntryStore.Clone(e);
         await _store.SetMyPresenceAsync(e.Id, PresenceState.Editing);
         var toSave = EditDialog(e, _store, _protector);
-        await _store.SetMyPresenceAsync(Selected?.Id, PresenceState.Viewing);
+        await _store.SetMyPresenceAsync(Selected?.Id, Sessions.Count > 0 && ActiveSession?.Entry.Id == Selected?.Id ? PresenceState.Connected : PresenceState.Viewing);
         if (toSave is null || toSave.Count == 0) return;
+        Entry? editAgain = null;
         try
         {
-            Entry saved = null!;
-            foreach (var item in toSave) saved = await _store.SaveAsync(item);
-            if (_nodes.TryGetValue(saved.Id, out var n)) { n.IsSelected = true; Selected = n; }
+            Entry? saved = null;
+            foreach (var item in toSave)
+            {
+                try { saved = await _store.SaveAsync(item); }
+                catch (ConcurrencyException) when (item.Id == e.Id)
+                {
+                    var (merged, again) = await SaveMergedAsync(@base, item);
+                    if (merged is null) { editAgain = again; break; }
+                    saved = merged;
+                }
+            }
+            if (saved is not null && _nodes.TryGetValue(saved.Id, out var n)) { n.IsSelected = true; Selected = n; }
         }
         catch (ConcurrencyException ex)
         {
             Message = $"{ex.Message} Your edit was not saved; reopen the entry to see their change.";
         }
         catch (Exception ex) { Message = ex.Message; }
+        // "Back to editing" from the merge: reopen on the combined version, which is based on their save.
+        if (editAgain is not null) await EditAndSaveAsync(editAgain);
     }
 
     [RelayCommand(CanExecute = nameof(HasSelection))]
@@ -600,6 +637,7 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
         copy.Id = Guid.NewGuid();
         copy.Revision = 0;
         copy.UpdatedBy = null;
+        copy.Reservation = null;
         copy.Name += " (copy)";
         return EditAndSaveAsync(copy);
     }
@@ -652,7 +690,7 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
         c.Id = Guid.NewGuid();
         c.Revision = 0;
         c.ParentId = parent;
-        c.UpdatedBy = null; c.CreatedAt = null; c.CreatedBy = null;
+        c.UpdatedBy = null; c.CreatedAt = null; c.CreatedBy = null; c.Reservation = null;
         if (top && _store!.Entries.Any(x => x.ParentId == parent && x.Name.Equals(c.Name, StringComparison.OrdinalIgnoreCase))) c.Name += " (copy)";
         await _store!.SaveAsync(c);
         var count = 1;

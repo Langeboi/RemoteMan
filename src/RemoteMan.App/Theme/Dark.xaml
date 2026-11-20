@@ -120,6 +120,7 @@
             <Trigger Property="Tag" Value="PS"><Setter Property="Data" Value="{StaticResource Icon.PS}" /><Setter Property="ToolTip" Value="PowerShell remoting" /></Trigger>
             <Trigger Property="Tag" Value="WBX"><Setter Property="Data" Value="{StaticResource Icon.WBX}" /><Setter Property="ToolTip" Value="WinBox" /></Trigger>
             <Trigger Property="Tag" Value="KEY"><Setter Property="Data" Value="{StaticResource Icon.KEY}" /><Setter Property="ToolTip" Value="Credential" /><Setter Property="Stroke" Value="{StaticResource KeyIcon}" /></Trigger>
+            <Trigger Property="Tag" Value="lock"><Setter Property="Data" Value="M4,7.5 H12 V14 H4 Z M5.5,7.5 V5 A2.5,2.5 0 0 1 10.5,5 V7.5" /><Setter Property="ToolTip" Value="Reserved" /><Setter Property="Stroke" Value="{StaticResource Warn}" /></Trigger>
         </Style.Triggers>
     </Style>
 

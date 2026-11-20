@@ -22,6 +22,8 @@ public abstract partial class SessionViewModel : ObservableObject, IDisposable
     public ResolvedCredential Credential { get; }
     public bool UsedFallback { get; }
     public string KindTag => EntryNode.KindTagFor(Entry.Kind);
+    /// <summary>When the tab was opened; others see "connected for 1 h 12 m".</summary>
+    public DateTimeOffset OpenedAt { get; } = DateTimeOffset.UtcNow;
 
     [ObservableProperty] private string _title;
     /// <summary>True while this tab is the visible one in its pane (both panes can show one in split view).</summary>
