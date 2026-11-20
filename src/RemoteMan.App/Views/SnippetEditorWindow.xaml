@@ -19,15 +19,15 @@
         <Grid Margin="12,10" Background="{StaticResource Panel}">
             <Grid.ColumnDefinitions><ColumnDefinition Width="80" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
             <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="*" /><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
-            <TextBlock Text="Name" Style="{StaticResource Muted}" VerticalAlignment="Center" />
+            <TextBlock Text="Name" Style="{StaticResource MutedText}" VerticalAlignment="Center" />
             <TextBox x:Name="NameBox" Grid.Column="1" Margin="0,2" />
-            <TextBlock Grid.Row="1" Text="Group" Style="{StaticResource Muted}" VerticalAlignment="Center" />
+            <TextBlock Grid.Row="1" Text="Group" Style="{StaticResource MutedText}" VerticalAlignment="Center" />
             <ComboBox x:Name="GroupBox" Grid.Row="1" Grid.Column="1" Margin="0,2" IsEditable="True" />
-            <TextBlock Grid.Row="2" Text="Command" Style="{StaticResource Muted}" Margin="0,5,0,0" />
+            <TextBlock Grid.Row="2" Text="Command" Style="{StaticResource MutedText}" Margin="0,5,0,0" />
             <TextBox x:Name="CommandBox" Grid.Row="2" Grid.Column="1" Margin="0,2" AcceptsReturn="True" AcceptsTab="True" TextWrapping="NoWrap"
                      VerticalContentAlignment="Top" FontFamily="{StaticResource MonoFont}" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto" />
             <CheckBox x:Name="EnterBox" Grid.Row="3" Grid.Column="1" Content="Press Enter after the text" />
-            <TextBlock Grid.Row="4" Grid.Column="1" Style="{StaticResource Muted}" FontSize="11" TextWrapping="Wrap" Margin="0,2,0,0"
+            <TextBlock Grid.Row="4" Grid.Column="1" Style="{StaticResource MutedText}" FontSize="11" TextWrapping="Wrap" Margin="0,2,0,0"
                        Text="Several lines are typed one after another. {host}, {user} and {name} are replaced with each session's host, login and entry name." />
         </Grid>
     </DockPanel>

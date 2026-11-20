@@ -63,7 +63,7 @@
     <Style TargetType="TextBlock">
         <Setter Property="Foreground" Value="{StaticResource Text}" />
     </Style>
-    <Style TargetType="TextBlock" x:Key="Muted">
+    <Style TargetType="TextBlock" x:Key="MutedText">
         <Setter Property="Foreground" Value="{StaticResource Muted}" />
     </Style>
     <Style TargetType="TextBlock" x:Key="PaneTitle">

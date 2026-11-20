@@ -10,7 +10,7 @@
             <Setter Property="Padding" Value="6" />
             <Setter Property="Margin" Value="0,0,0,10" />
         </Style>
-        <Style TargetType="TextBlock" x:Key="Label" BasedOn="{StaticResource Muted}">
+        <Style TargetType="TextBlock" x:Key="Label" BasedOn="{StaticResource MutedText}">
             <Setter Property="VerticalAlignment" Value="Center" />
             <Setter Property="Margin" Value="0,3,8,3" />
         </Style>
@@ -80,7 +80,7 @@
                             <PasswordBox x:Name="ExportPw1" Grid.Column="1" Margin="0,2" />
                             <TextBlock Grid.Row="1" Text="Repeat" Style="{StaticResource Label}" />
                             <PasswordBox x:Name="ExportPw2" Grid.Row="1" Grid.Column="1" Margin="0,2" />
-                            <TextBlock Grid.Row="2" Grid.Column="1" Style="{StaticResource Muted}" FontSize="11" TextWrapping="Wrap" Margin="0,4,0,0"
+                            <TextBlock Grid.Row="2" Grid.Column="1" Style="{StaticResource MutedText}" FontSize="11" TextWrapping="Wrap" Margin="0,4,0,0"
                                        Text="AES-256-GCM with a key from the password (PBKDF2-SHA256, 600,000 rounds). Opens on any PC with the password, into any data source. A lost password means a lost file." />
                         </Grid>
                     </GroupBox>
@@ -110,19 +110,19 @@
                             </StackPanel>
                             <TextBlock Grid.Row="2" Text="Password" Style="{StaticResource Label}" />
                             <DockPanel Grid.Row="2" Grid.Column="1" Margin="0,2">
-                                <TextBlock x:Name="AutoPwState" DockPanel.Dock="Right" Style="{StaticResource Muted}" FontSize="11" VerticalAlignment="Center" Margin="6,0,0,0" />
+                                <TextBlock x:Name="AutoPwState" DockPanel.Dock="Right" Style="{StaticResource MutedText}" FontSize="11" VerticalAlignment="Center" Margin="6,0,0,0" />
                                 <PasswordBox x:Name="AutoPw" ToolTip="Leave empty to keep the saved password" />
                             </DockPanel>
                             <CheckBox x:Name="AutoSecrets" Grid.Row="3" Grid.Column="1" Content="Include passwords and keys" />
-                            <TextBlock x:Name="AutoLast" Grid.Row="4" Grid.Column="1" Style="{StaticResource Muted}" FontSize="11" Margin="0,4,0,0" />
+                            <TextBlock x:Name="AutoLast" Grid.Row="4" Grid.Column="1" Style="{StaticResource MutedText}" FontSize="11" Margin="0,4,0,0" />
                         </Grid>
                     </GroupBox>
                     <Border BorderBrush="{StaticResource Border}" BorderThickness="1" Background="{StaticResource Bg}">
                         <DockPanel>
                             <Grid DockPanel.Dock="Top" Height="22" Margin="6,0">
                                 <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="70" /><ColumnDefinition Width="76" /></Grid.ColumnDefinitions>
-                                <TextBlock Text="Backup" Style="{StaticResource Muted}" FontSize="11" VerticalAlignment="Center" />
-                                <TextBlock Grid.Column="1" Text="Size" Style="{StaticResource Muted}" FontSize="11" VerticalAlignment="Center" />
+                                <TextBlock Text="Backup" Style="{StaticResource MutedText}" FontSize="11" VerticalAlignment="Center" />
+                                <TextBlock Grid.Column="1" Text="Size" Style="{StaticResource MutedText}" FontSize="11" VerticalAlignment="Center" />
                             </Grid>
                             <ItemsControl x:Name="BackupList" MaxHeight="150">
                                 <ItemsControl.Template>
@@ -135,7 +135,7 @@
                                             <TextBlock VerticalAlignment="Center" FontFamily="{StaticResource MonoFont}" FontSize="11" TextTrimming="CharacterEllipsis">
                                                 <Run Text="{Binding WhenText, Mode=OneWay}" /><Run Text="  " /><Run Text="{Binding Source, Mode=OneWay}" Foreground="{StaticResource Muted}" />
                                             </TextBlock>
-                                            <TextBlock Grid.Column="1" Text="{Binding SizeText}" Style="{StaticResource Muted}" VerticalAlignment="Center" />
+                                            <TextBlock Grid.Column="1" Text="{Binding SizeText}" Style="{StaticResource MutedText}" VerticalAlignment="Center" />
                                             <Button Grid.Column="2" Content="Restore…" FontSize="11" MinHeight="20" Click="OnRestoreBackup" />
                                         </Grid>
                                     </DataTemplate>
@@ -165,7 +165,7 @@
                                          Content="Merge: overwrite entries that still exist, bring deleted ones back" />
                         </StackPanel>
                     </GroupBox>
-                    <TextBlock x:Name="RestoreInfo" Style="{StaticResource Muted}" FontSize="11" TextWrapping="Wrap" />
+                    <TextBlock x:Name="RestoreInfo" Style="{StaticResource MutedText}" FontSize="11" TextWrapping="Wrap" />
                 </StackPanel>
             </Grid>
         </ScrollViewer>

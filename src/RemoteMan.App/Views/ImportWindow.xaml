@@ -36,7 +36,7 @@
                     <Button x:Name="ImportButton" Content="Import" MinWidth="76" IsDefault="True" Style="{StaticResource PrimaryButton}" Click="OnImport" IsEnabled="False" />
                     <Button x:Name="CloseButton" Content="Cancel" MinWidth="76" Margin="6,0,0,0" IsCancel="True" />
                 </StackPanel>
-                <TextBlock x:Name="Summary" Style="{StaticResource Muted}" FontSize="11" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                <TextBlock x:Name="Summary" Style="{StaticResource MutedText}" FontSize="11" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
             </DockPanel>
         </Border>
 
@@ -45,25 +45,25 @@
                 <RadioButton x:Name="SrcRdm" GroupName="src" Style="{StaticResource SourceCard}" Checked="OnSourceChanged" IsChecked="True">
                     <StackPanel>
                         <TextBlock Text="Devolutions RDM" FontWeight="SemiBold" Foreground="{StaticResource TextStrong}" />
-                        <TextBlock Text=".rdm or .json export" Style="{StaticResource Muted}" FontSize="11" />
+                        <TextBlock Text=".rdm or .json export" Style="{StaticResource MutedText}" FontSize="11" />
                     </StackPanel>
                 </RadioButton>
                 <RadioButton x:Name="SrcRdp" GroupName="src" Style="{StaticResource SourceCard}" Checked="OnSourceChanged">
                     <StackPanel>
                         <TextBlock Text=".rdp files" FontWeight="SemiBold" Foreground="{StaticResource TextStrong}" />
-                        <TextBlock Text="one or many" Style="{StaticResource Muted}" FontSize="11" />
+                        <TextBlock Text="one or many" Style="{StaticResource MutedText}" FontSize="11" />
                     </StackPanel>
                 </RadioButton>
                 <RadioButton x:Name="SrcPutty" GroupName="src" Style="{StaticResource SourceCard}" Checked="OnSourceChanged">
                     <StackPanel>
                         <TextBlock Text="PuTTY" FontWeight="SemiBold" Foreground="{StaticResource TextStrong}" />
-                        <TextBlock Text="saved sessions on this PC, or a .reg file" Style="{StaticResource Muted}" FontSize="11" TextTrimming="CharacterEllipsis" />
+                        <TextBlock Text="saved sessions on this PC, or a .reg file" Style="{StaticResource MutedText}" FontSize="11" TextTrimming="CharacterEllipsis" />
                     </StackPanel>
                 </RadioButton>
             </UniformGrid>
 
             <DockPanel DockPanel.Dock="Top" Margin="0,0,0,8">
-                <TextBlock x:Name="FileLabel" Text="File" Width="56" Style="{StaticResource Muted}" VerticalAlignment="Center" />
+                <TextBlock x:Name="FileLabel" Text="File" Width="56" Style="{StaticResource MutedText}" VerticalAlignment="Center" />
                 <Button x:Name="BrowseButton" DockPanel.Dock="Right" Content="Browse…" Margin="6,0,0,0" Click="OnBrowse" />
                 <TextBox x:Name="FileBox" IsReadOnly="True" FontFamily="{StaticResource MonoFont}" FontSize="11" />
             </DockPanel>
@@ -71,10 +71,10 @@
             <Grid DockPanel.Dock="Bottom" Margin="0,8,0,0">
                 <Grid.ColumnDefinitions><ColumnDefinition Width="90" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
                 <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
-                <TextBlock Text="Into folder" Style="{StaticResource Muted}" VerticalAlignment="Center" />
+                <TextBlock Text="Into folder" Style="{StaticResource MutedText}" VerticalAlignment="Center" />
                 <ComboBox x:Name="TargetBox" Grid.Column="1" DisplayMemberPath="Name" Margin="0,2" />
                 <CheckBox x:Name="SkipDupes" Grid.Row="1" Grid.Column="1" IsChecked="True" Content="Skip entries that already exist (same name and host in the same folder)" />
-                <TextBlock x:Name="Notes" Grid.Row="2" Grid.ColumnSpan="2" Style="{StaticResource Muted}" FontSize="11" TextWrapping="Wrap" Margin="0,4,0,0" MaxHeight="64" />
+                <TextBlock x:Name="Notes" Grid.Row="2" Grid.ColumnSpan="2" Style="{StaticResource MutedText}" FontSize="11" TextWrapping="Wrap" Margin="0,4,0,0" MaxHeight="64" />
             </Grid>
 
             <Border BorderBrush="{StaticResource Border}" BorderThickness="1" Background="{StaticResource Bg}">
@@ -84,10 +84,10 @@
                             <ColumnDefinition Width="22" /><ColumnDefinition Width="38" /><ColumnDefinition Width="*" /><ColumnDefinition Width="170" /><ColumnDefinition Width="110" />
                         </Grid.ColumnDefinitions>
                         <CheckBox x:Name="AllBox" IsChecked="True" Click="OnToggleAll" VerticalAlignment="Center" Margin="0" AutomationProperties.Name="Include all" />
-                        <TextBlock Grid.Column="1" Text="Type" Style="{StaticResource Muted}" FontSize="11" VerticalAlignment="Center" />
-                        <TextBlock Grid.Column="2" Text="Name" Style="{StaticResource Muted}" FontSize="11" VerticalAlignment="Center" />
-                        <TextBlock Grid.Column="3" Text="Host" Style="{StaticResource Muted}" FontSize="11" VerticalAlignment="Center" />
-                        <TextBlock Grid.Column="4" Text="Login" Style="{StaticResource Muted}" FontSize="11" VerticalAlignment="Center" />
+                        <TextBlock Grid.Column="1" Text="Type" Style="{StaticResource MutedText}" FontSize="11" VerticalAlignment="Center" />
+                        <TextBlock Grid.Column="2" Text="Name" Style="{StaticResource MutedText}" FontSize="11" VerticalAlignment="Center" />
+                        <TextBlock Grid.Column="3" Text="Host" Style="{StaticResource MutedText}" FontSize="11" VerticalAlignment="Center" />
+                        <TextBlock Grid.Column="4" Text="Login" Style="{StaticResource MutedText}" FontSize="11" VerticalAlignment="Center" />
                     </Grid>
                     <ListBox x:Name="Preview" Background="Transparent" BorderThickness="0" ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                              VirtualizingPanel.IsVirtualizing="True" BorderBrush="{StaticResource Border}">
@@ -120,7 +120,7 @@
                                     </Border>
                                     <TextBlock Grid.Column="2" Text="{Binding Name}" Margin="{Binding Indent}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
                                     <TextBlock Grid.Column="3" Text="{Binding Host}" FontFamily="{StaticResource MonoFont}" FontSize="11" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
-                                    <TextBlock Grid.Column="4" Text="{Binding Login}" Style="{StaticResource Muted}" FontSize="11" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                                    <TextBlock Grid.Column="4" Text="{Binding Login}" Style="{StaticResource MutedText}" FontSize="11" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
                                 </Grid>
                             </DataTemplate>
                         </ListBox.ItemTemplate>

@@ -4,7 +4,7 @@
         Title="Edit entry" Width="640" Height="600" MinWidth="520" MinHeight="420"
         Style="{StaticResource RemoteManWindow}" WindowStartupLocation="CenterOwner" ShowInTaskbar="False">
     <Window.Resources>
-        <Style TargetType="TextBlock" x:Key="Label" BasedOn="{StaticResource Muted}">
+        <Style TargetType="TextBlock" x:Key="Label" BasedOn="{StaticResource MutedText}">
             <Setter Property="VerticalAlignment" Value="Center" />
             <Setter Property="Margin" Value="0,3,8,3" />
         </Style>
@@ -106,7 +106,7 @@
                             <ComboBox x:Name="JumpBox" DisplayMemberPath="Name" SelectionChanged="OnJumpChanged"
                                       ToolTip="Connect through another SSH entry (ProxyJump). It logs in with its own credential and fallback hosts." />
                         </DockPanel>
-                        <TextBlock x:Name="JumpPath" Style="{StaticResource Muted}" FontFamily="{StaticResource MonoFont}" FontSize="11" Margin="90,0,0,4" TextWrapping="Wrap" />
+                        <TextBlock x:Name="JumpPath" Style="{StaticResource MutedText}" FontFamily="{StaticResource MonoFont}" FontSize="11" Margin="90,0,0,4" TextWrapping="Wrap" />
                         <CheckBox x:Name="SshAutoAccept" Content="Accept host keys automatically (logged)" />
                         <CheckBox x:Name="SshLegacy" Content="Allow legacy algorithms (ssh-rsa, DH group1/14-sha1, CBC, 3DES)" />
                         <CheckBox x:Name="SshCopySelect" Content="Copy text as soon as it is selected" />
@@ -130,7 +130,7 @@
                         <CheckBox x:Name="WebIgnoreCert" Content="Ignore certificate errors" />
                         <CheckBox x:Name="WebAutoFill" Content="Fill in the login form automatically" />
                         <CheckBox x:Name="WebAutoSubmit" Content="Then press the login button" Margin="18,3,0,3" />
-                        <TextBlock Text="Form fields (optional CSS selectors, leave empty to detect automatically)" Style="{StaticResource Muted}" FontSize="11" Margin="0,6,0,2" />
+                        <TextBlock Text="Form fields (optional CSS selectors, leave empty to detect automatically)" Style="{StaticResource MutedText}" FontSize="11" Margin="0,6,0,2" />
                         <DockPanel Margin="0,2">
                             <TextBlock Text="User field" Width="90" Style="{StaticResource Label}" />
                             <TextBox x:Name="WebUserSel" FontFamily="{StaticResource MonoFont}" FontSize="11" ToolTip="e.g. #username or input[name=login]" />
