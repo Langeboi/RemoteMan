@@ -19,11 +19,11 @@ public class TransferTests
             Kind = EntryKind.Credential, Name = "root", ParentId = folder.Id,
             Credential = new CredentialData { UserName = "root", ProtectedPassword = Vault.Protect("s3cret!"), ProtectedPrivateKey = Vault.Protect("-----BEGIN KEY-----") },
         };
-        var bastion = new Entry { Kind = EntryKind.Ssh, Name = "bastion", ParentId = folder.Id, Endpoints = { new("10.0.0.5", 22) }, Ssh = new(), CredentialId = cred.Id };
+        var bastion = new Entry { Kind = EntryKind.Ssh, Name = "bastion", ParentId = folder.Id, Endpoints = { new("10.0.0.5", 22) }, Ssh = new(), CredentialId = cred.Id, Login = LoginSource.Saved };
         var pve = new Entry
         {
             Kind = EntryKind.Ssh, Name = "pve-01", ParentId = folder.Id, Endpoints = { new("10.0.10.11", 22), new("pve-01.lab", 22) },
-            Ssh = new SshSettings { JumpHostId = bastion.Id }, CredentialId = cred.Id,
+            Ssh = new SshSettings { JumpHostId = bastion.Id }, CredentialId = cred.Id, Login = LoginSource.Saved,
         };
         var snippet = BuiltInSnippets.ToEntry(BuiltInSnippets.All[0]);
         return [folder, cred, bastion, pve, snippet];
@@ -48,6 +48,21 @@ public class TransferTests
         Assert.Equal("alice", back.CreatedBy);
         Assert.True(back.IncludesSecrets);
         Assert.Equal("s3cret!", back.Entries.Single(e => e.Kind == EntryKind.Credential).Password);
+    }
+
+    [Fact]
+    public void CertificatesAndEmbeddedLoginsSurviveExportAndRestore()
+    {
+        var pfx = Convert.ToBase64String([1, 2, 3, 4]);
+        var cert = new Entry { Kind = EntryKind.Credential, Name = "client cert", Credential = new CredentialData { ProtectedCertificate = Vault.Protect(pfx), ProtectedPassword = Vault.Protect("pfx-pass") } };
+        var web = new Entry { Kind = EntryKind.Web, Name = "router", Login = LoginSource.Embedded, Credential = new CredentialData { UserName = "admin", ProtectedPassword = Vault.Protect("hunter2") } };
+        var target = new AesGcmSecretProtector("elsewhere");
+        var plan = ImportPlanner.Plan(ImportPlanner.FromBundle(ExportFile.CreateBundle([cert, web], Vault, new ExportOptions())).Items, [], target, ImportMode.AddCopies);
+
+        Assert.Equal(pfx, target.Unprotect(plan.Single(e => e.Name == "client cert").Credential!.ProtectedCertificate!));
+        var w = plan.Single(e => e.Name == "router");
+        Assert.Equal(LoginSource.Embedded, w.Login);
+        Assert.Equal("hunter2", target.Unprotect(w.Credential!.ProtectedPassword!));
     }
 
     [Fact]
@@ -79,6 +94,7 @@ public class TransferTests
         var bastion = plan.Single(e => e.Name == "bastion");
         var pve = plan.Single(e => e.Name == "pve-01");
         Assert.Equal(cred.Id, pve.CredentialId);
+        Assert.Equal(LoginSource.Saved, pve.Login);
         Assert.Equal(bastion.Id, pve.Ssh!.JumpHostId);
         Assert.Equal(folder.Id, pve.ParentId);
         Assert.Equal("s3cret!", target.Unprotect(cred.Credential!.ProtectedPassword!));
@@ -116,6 +132,7 @@ public class TransferTests
         Assert.Equal("LAB", creds[0].Entry.Credential!.Domain);
         Assert.Equal("Administrator", creds[0].Entry.Credential!.UserName);
         Assert.Equal(creds[0].Entry.Id, dc.CredentialId);
+        Assert.Equal(LoginSource.Saved, dc.Login);
         Assert.Equal(3389, r.Items.Single(i => i.Entry.Name == "ws-02").Entry.Endpoints[0].Port);
         Assert.Contains(r.Warnings, w => w.Contains("saved password"));
     }
@@ -142,6 +159,7 @@ public class TransferTests
         Assert.Equal("pi", cred.Entry.Credential!.UserName);
         Assert.StartsWith("PuTTY-User-Key-File", cred.PrivateKey);
         Assert.Equal(cred.Entry.Id, pi.CredentialId);
+        Assert.Equal(LoginSource.Saved, pi.Login);
         Assert.Contains(r.Warnings, w => w.Contains("telnet"));
     }
 

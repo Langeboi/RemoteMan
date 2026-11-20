@@ -14,6 +14,29 @@
             <Setter Property="Padding" Value="6" />
             <Setter Property="Margin" Value="0,10,0,0" />
         </Style>
+        <!-- Segmented choice: radio buttons drawn as joined square buttons -->
+        <Style TargetType="RadioButton" x:Key="Segment">
+            <Setter Property="Foreground" Value="{StaticResource Muted}" />
+            <Setter Property="Margin" Value="0,0,-1,4" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="RadioButton">
+                        <Border x:Name="b" Background="{StaticResource Panel}" BorderBrush="{StaticResource Border}" BorderThickness="1" Padding="10,4">
+                            <ContentPresenter VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="b" Property="Background" Value="{StaticResource Hover}" /></Trigger>
+                            <Trigger Property="IsKeyboardFocused" Value="True"><Setter TargetName="b" Property="BorderBrush" Value="{StaticResource Accent}" /></Trigger>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="b" Property="Background" Value="{StaticResource Select}" />
+                                <Setter TargetName="b" Property="BorderBrush" Value="{StaticResource Accent}" />
+                                <Setter Property="Foreground" Value="{StaticResource TextStrong}" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
     </Window.Resources>
     <DockPanel>
         <Border DockPanel.Dock="Top" Height="28" Background="{StaticResource Header}" BorderBrush="{StaticResource Border}" BorderThickness="0,0,0,1">
@@ -33,15 +56,17 @@
             <StackPanel Margin="12,10">
                 <Grid>
                     <Grid.ColumnDefinitions><ColumnDefinition Width="90" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
-                    <Grid.RowDefinitions><RowDefinition /><RowDefinition /><RowDefinition /><RowDefinition /></Grid.RowDefinitions>
+                    <Grid.RowDefinitions><RowDefinition /><RowDefinition /><RowDefinition /><RowDefinition /><RowDefinition /><RowDefinition /></Grid.RowDefinitions>
                     <TextBlock Text="Name" Style="{StaticResource Label}" />
                     <TextBox x:Name="NameBox" Grid.Column="1" Margin="0,2" />
                     <TextBlock Grid.Row="1" Text="Tags" Style="{StaticResource Label}" />
                     <TextBox x:Name="TagsBox" Grid.Row="1" Grid.Column="1" Margin="0,2" />
                     <TextBlock x:Name="UrlLabel" Grid.Row="2" Text="URL" Style="{StaticResource Label}" />
                     <TextBox x:Name="UrlBox" Grid.Row="2" Grid.Column="1" Margin="0,2" FontFamily="{StaticResource MonoFont}" />
-                    <TextBlock x:Name="CredLabel" Grid.Row="3" Text="Credential" Style="{StaticResource Label}" />
-                    <ComboBox x:Name="CredBox" Grid.Row="3" Grid.Column="1" Margin="0,2" DisplayMemberPath="Name" />
+                    <TextBlock x:Name="CredLabel" Grid.Row="3" Text="Login" Style="{StaticResource Label}" />
+                    <ComboBox x:Name="LoginBox" Grid.Row="3" Grid.Column="1" Margin="0,2" DisplayMemberPath="Name" SelectionChanged="OnLoginChanged" />
+                    <ComboBox x:Name="CredBox" Grid.Row="4" Grid.Column="1" Margin="0,2" DisplayMemberPath="Name" />
+                    <TextBlock x:Name="LoginHint" Grid.Row="5" Grid.Column="1" Style="{StaticResource MutedText}" FontSize="11" Margin="0,2" TextWrapping="Wrap" />
                 </Grid>
 
                 <!-- Hosts with fallback order -->
@@ -64,24 +89,66 @@
                     </StackPanel>
                 </GroupBox>
 
-                <!-- Credential entry fields -->
+                <!-- Login: a credential entry's own secret, or a login typed into this entry -->
                 <GroupBox x:Name="CredGroup" Header="Login">
-                    <Grid>
-                        <Grid.ColumnDefinitions><ColumnDefinition Width="90" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
-                        <Grid.RowDefinitions><RowDefinition /><RowDefinition /><RowDefinition /><RowDefinition Height="Auto" /><RowDefinition /></Grid.RowDefinitions>
-                        <TextBlock Text="User name" Style="{StaticResource Label}" />
-                        <TextBox x:Name="UserBox" Grid.Column="1" Margin="0,2" />
-                        <TextBlock Grid.Row="1" Text="Domain" Style="{StaticResource Label}" />
-                        <TextBox x:Name="DomainBox" Grid.Row="1" Grid.Column="1" Margin="0,2" />
-                        <TextBlock Grid.Row="2" Text="Password" Style="{StaticResource Label}" />
-                        <PasswordBox x:Name="PasswordBox" Grid.Row="2" Grid.Column="1" Margin="0,2" ToolTip="Leave empty to keep the stored password" />
-                        <TextBlock Grid.Row="3" Text="Private key" Style="{StaticResource Label}" VerticalAlignment="Top" />
-                        <TextBox x:Name="KeyBox" Grid.Row="3" Grid.Column="1" Margin="0,2" Height="80" AcceptsReturn="True" TextWrapping="NoWrap"
-                                 VerticalContentAlignment="Top" FontFamily="{StaticResource MonoFont}" FontSize="10"
-                                 ToolTip="Paste an OpenSSH, PEM or PuTTY (.ppk) key. Leave empty to keep the stored key." />
-                        <TextBlock Grid.Row="4" Text="Passphrase" Style="{StaticResource Label}" />
-                        <PasswordBox x:Name="PassphraseBox" Grid.Row="4" Grid.Column="1" Margin="0,2" />
-                    </Grid>
+                    <StackPanel>
+                        <DockPanel Margin="0,0,0,6">
+                            <TextBlock Text="Type" Width="90" Style="{StaticResource Label}" />
+                            <WrapPanel>
+                                <RadioButton x:Name="TypePassword" GroupName="ct" Content="Username and password" Style="{StaticResource Segment}" Checked="OnCredTypeChanged" />
+                                <RadioButton x:Name="TypeKey" GroupName="ct" Content="SSH key" Style="{StaticResource Segment}" Checked="OnCredTypeChanged" />
+                                <RadioButton x:Name="TypeCert" GroupName="ct" Content="Certificate file" Style="{StaticResource Segment}" Checked="OnCredTypeChanged" />
+                                <RadioButton x:Name="TypeSecret" GroupName="ct" Content="Secret or API key" Style="{StaticResource Segment}" Checked="OnCredTypeChanged" />
+                            </WrapPanel>
+                        </DockPanel>
+                        <DockPanel x:Name="UserRow" Margin="0,2">
+                            <TextBlock Text="User name" Width="90" Style="{StaticResource Label}" />
+                            <TextBox x:Name="UserBox" />
+                        </DockPanel>
+                        <DockPanel x:Name="DomainRow" Margin="0,2">
+                            <TextBlock Text="Domain" Width="90" Style="{StaticResource Label}" />
+                            <TextBox x:Name="DomainBox" ToolTip="Used for RDP. Leave empty for local accounts, SSH and web." />
+                        </DockPanel>
+                        <DockPanel x:Name="KeyRow" Margin="0,2">
+                            <TextBlock Text="Private key" Width="90" Style="{StaticResource Label}" VerticalAlignment="Top" />
+                            <StackPanel>
+                                <TextBox x:Name="KeyBox" Height="80" AcceptsReturn="True" TextWrapping="NoWrap" VerticalContentAlignment="Top"
+                                         FontFamily="{StaticResource MonoFont}" FontSize="10"
+                                         ToolTip="Paste an OpenSSH, PEM or PuTTY (.ppk) key. Leave empty to keep the stored key." />
+                                <WrapPanel Margin="0,4,0,0">
+                                    <Button Content="Import key file…" Click="OnImportKey" Margin="0,0,6,0" />
+                                    <Button Content="Generate new key…" Click="OnGenerateKey" Margin="0,0,6,0" />
+                                    <Button Content="Copy public key" Click="OnCopyPublicKey" />
+                                </WrapPanel>
+                                <CheckBox x:Name="KeyFromDisk" Content="Use a key file on this PC instead (only the path is stored)" Margin="0,6,0,0" Checked="OnKeyFromDisk" Unchecked="OnKeyFromDisk" />
+                                <DockPanel x:Name="KeyPathRow" Margin="0,2">
+                                    <Button DockPanel.Dock="Right" Content="Browse…" Margin="6,0,0,0" Click="OnBrowseKeyPath" />
+                                    <TextBox x:Name="KeyPathBox" FontFamily="{StaticResource MonoFont}" FontSize="11" />
+                                </DockPanel>
+                            </StackPanel>
+                        </DockPanel>
+                        <DockPanel x:Name="CertRow" Margin="0,2">
+                            <TextBlock Text="Certificate" Width="90" Style="{StaticResource Label}" />
+                            <Button DockPanel.Dock="Right" Content="Browse…" Margin="6,0,0,0" Click="OnBrowseCert" />
+                            <TextBox x:Name="CertBox" IsReadOnly="True" FontFamily="{StaticResource MonoFont}" FontSize="11"
+                                     ToolTip=".pfx or .p12, stored encrypted. For web portals and gateways that ask for a client certificate." />
+                        </DockPanel>
+                        <DockPanel x:Name="PasswordRow" Margin="0,2">
+                            <TextBlock x:Name="PasswordLabel" Text="Password" Width="90" Style="{StaticResource Label}" />
+                            <PasswordBox x:Name="PasswordBox" ToolTip="Leave empty to keep the stored one" />
+                        </DockPanel>
+                        <DockPanel x:Name="PassphraseRow" Margin="0,2">
+                            <TextBlock Text="Passphrase" Width="90" Style="{StaticResource Label}" />
+                            <PasswordBox x:Name="PassphraseBox" />
+                        </DockPanel>
+                        <TextBlock x:Name="CertInfo" Style="{StaticResource MutedText}" FontSize="11" Margin="90,2,0,2" TextWrapping="Wrap" />
+                        <CheckBox x:Name="AskPasswordBox" Content="Ask for the password when connecting instead of storing it" Margin="90,4,0,0" />
+                        <DockPanel x:Name="NotesRow" Margin="0,2">
+                            <TextBlock Text="Notes" Width="90" Style="{StaticResource Label}" VerticalAlignment="Top" />
+                            <TextBox x:Name="NotesBox" Height="50" AcceptsReturn="True" TextWrapping="Wrap" VerticalContentAlignment="Top" />
+                        </DockPanel>
+                        <CheckBox x:Name="SaveAsCredential" Content="Save as a reusable credential too" Margin="90,6,0,0" />
+                    </StackPanel>
                 </GroupBox>
 
                 <GroupBox x:Name="RdpGroup" Header="RDP options">

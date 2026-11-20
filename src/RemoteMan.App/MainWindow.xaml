@@ -177,20 +177,11 @@
                           Background="Transparent" BorderThickness="0" Padding="0,2"
                           VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling"
                           SelectedItemChanged="OnTreeSelectionChanged" PreviewMouseLeftButtonDown="OnTreeMouseDown"
-                          MouseDoubleClick="OnTreeDoubleClick" KeyDown="OnTreeKeyDown">
-                    <TreeView.ContextMenu>
-                        <ContextMenu>
-                            <MenuItem Header="Connect" Command="{Binding ConnectCommand}" />
-                            <MenuItem Header="Edit" Command="{Binding EditCommand}" />
-                            <MenuItem Header="Duplicate…" InputGestureText="Ctrl+D" Command="{Binding DuplicateCommand}" />
-                            <Separator />
-                            <MenuItem Header="Copy user name" InputGestureText="Ctrl+Shift+U" Command="{Binding CopyUserNameCommand}" />
-                            <MenuItem Header="Copy password" InputGestureText="Ctrl+Shift+P" Command="{Binding CopyPasswordCommand}" />
-                            <MenuItem Header="Copy both (paste twice)" InputGestureText="Ctrl+Shift+B" Command="{Binding CopyBothCommand}" />
-                            <Separator />
-                            <MenuItem Header="Delete" Command="{Binding DeleteCommand}" />
-                        </ContextMenu>
-                    </TreeView.ContextMenu>
+                          PreviewMouseMove="OnTreeMouseMove" AllowDrop="True" DragOver="OnTreeDragOver" DragLeave="OnTreeDragLeave" Drop="OnTreeDrop"
+                          MouseDoubleClick="OnTreeDoubleClick" KeyDown="OnTreeKeyDown"
+                          PreviewMouseRightButtonDown="OnTreeRightButtonDown" ContextMenuOpening="OnTreeContextMenuOpening">
+                    <!-- Filled per entry when it opens (Views/EntryMenu.cs) -->
+                    <TreeView.ContextMenu><ContextMenu /></TreeView.ContextMenu>
                 </TreeView>
                 <GridSplitter Grid.Row="2" HorizontalAlignment="Stretch" Height="1" />
 

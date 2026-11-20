@@ -140,7 +140,7 @@ public static class RdmImporter
                         Credential = new CredentialData { UserName = user, Domain = First(scopes, "Domain") },
                     };
                     result.Items.Add(new ImportItem(cred) { Password = pw });
-                    e.CredentialId = cred.Id;
+                    e.CredentialId = cred.Id; e.Login = LoginSource.Saved;
                 }
                 if (!string.IsNullOrWhiteSpace(keyPath)) result.Warnings.Add($"{e.Name}: uses key file {keyPath}; add it to the login after import");
             }
@@ -149,7 +149,7 @@ public static class RdmImporter
 
         foreach (var (entry, credId) in credLinks)
         {
-            if (byRdmId.TryGetValue(credId, out var cred) && cred.Kind == EntryKind.Credential) entry.CredentialId = cred.Id;
+            if (byRdmId.TryGetValue(credId, out var cred) && cred.Kind == EntryKind.Credential) { entry.CredentialId = cred.Id; entry.Login = LoginSource.Saved; }
             else result.Warnings.Add($"{entry.Name}: linked RDM credential was not in the export");
         }
         if (safeSkipped > 0)

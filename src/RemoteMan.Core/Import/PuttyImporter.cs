@@ -78,7 +78,7 @@ public static partial class PuttyImporter
                     creds[credKey] = cred;
                     result.Items.Add(new ImportItem(cred) { PrivateKey = keyText });
                 }
-                e.CredentialId = cred.Id;
+                e.CredentialId = cred.Id; e.Login = LoginSource.Saved;
             }
             result.Items.Add(new ImportItem(e));
         }

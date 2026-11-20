@@ -88,7 +88,7 @@ public static class RdpFileImporter
                     creds[key] = cred;
                     result.Items.Add(new ImportItem(cred));
                 }
-                e.CredentialId = cred.Id;
+                e.CredentialId = cred.Id; e.Login = LoginSource.Saved;
                 if (s.Keys.Any(k => k.StartsWith("password", StringComparison.OrdinalIgnoreCase)))
                     result.Warnings.Add($"{fileName}: the saved password is locked to the PC that saved it and was not imported");
             }

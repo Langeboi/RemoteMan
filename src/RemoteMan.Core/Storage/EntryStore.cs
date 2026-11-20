@@ -237,8 +237,37 @@ public sealed class EntryStore : IAsyncDisposable
         if (cred.Kind != EntryKind.Credential) throw new InvalidOperationException($"{cred.Name} is not a credential.");
         var copy = Clone(conn);
         copy.CredentialId = cred.Id;
-        copy.UseWindowsLogin = false;
+        copy.Login = LoginSource.Saved;
         return await SaveAsync(copy, ct);
+    }
+
+    /// <summary>
+    /// The entry that holds the login for <paramref name="entry"/>: follows "inherited" up the
+    /// folders and "saved" to the credential entry. Returns the source kind that applies and the
+    /// entry holding the data (null for none / Windows login).
+    /// </summary>
+    public (LoginSource Source, Entry? Holder) ResolveLogin(Entry entry)
+    {
+        if (entry.Kind == EntryKind.Credential) return (LoginSource.Embedded, entry);
+        var e = entry;
+        for (var hops = 0; hops < 64; hops++)
+        {
+            switch (e.Login)
+            {
+                case LoginSource.Inherited:
+                    if (e.ParentId is { } p && Get(p) is { } parent) { e = parent; continue; }
+                    return (LoginSource.None, null);
+                case LoginSource.Saved:
+                    return e.CredentialId is { } id && Get(id) is { Kind: EntryKind.Credential } c ? (LoginSource.Saved, c) : (LoginSource.None, null);
+                case LoginSource.Embedded:
+                    return e.Credential is null ? (LoginSource.None, null) : (LoginSource.Embedded, e);
+                case LoginSource.WindowsLogin:
+                    return (LoginSource.WindowsLogin, null);
+                default:
+                    return (LoginSource.None, null);
+            }
+        }
+        return (LoginSource.None, null);
     }
 
     public IEnumerable<Presence> PresenceFor(Guid entryId)

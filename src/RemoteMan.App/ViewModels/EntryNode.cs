@@ -22,6 +22,7 @@ public sealed partial class EntryNode : ObservableObject
     [ObservableProperty] private bool _isExpanded = true;
     [ObservableProperty] private bool _isSelected;
     [ObservableProperty] private bool _isLinkTarget;
+    [ObservableProperty] private bool _isDropTarget;
 
     public int Depth { get; }
     public Thickness Indent => new(8 + Depth * 14, 0, 8, 0);

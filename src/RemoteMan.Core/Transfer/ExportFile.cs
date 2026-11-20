@@ -20,6 +20,8 @@ public sealed class ExportedEntry
     public string? Password { get; set; }
     public string? PrivateKey { get; set; }
     public string? Passphrase { get; set; }
+    /// <summary>Base64 .pfx bytes of a certificate credential.</summary>
+    public string? Certificate { get; set; }
 }
 
 /// <summary>The decrypted content of an .rmx file.</summary>
@@ -94,8 +96,9 @@ public static class ExportFile
                     x.Password = TryUnprotect(protector!, c.ProtectedPassword);
                     x.PrivateKey = TryUnprotect(protector!, c.ProtectedPrivateKey);
                     x.Passphrase = TryUnprotect(protector!, c.ProtectedPassphrase);
+                    x.Certificate = TryUnprotect(protector!, c.ProtectedCertificate);
                 }
-                c.ProtectedPassword = c.ProtectedPrivateKey = c.ProtectedPassphrase = null;
+                c.ProtectedPassword = c.ProtectedPrivateKey = c.ProtectedPassphrase = c.ProtectedCertificate = null;
             }
             x.Payload = EntryJson.ToPayload(copy);
             bundle.Entries.Add(x);

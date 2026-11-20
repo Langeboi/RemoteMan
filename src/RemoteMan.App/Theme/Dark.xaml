@@ -216,6 +216,11 @@
                         <Trigger Property="IsExpanded" Value="False"><Setter TargetName="kids" Property="Visibility" Value="Collapsed" /></Trigger>
                         <Trigger SourceName="row" Property="IsMouseOver" Value="True"><Setter TargetName="row" Property="Background" Value="{StaticResource Hover}" /></Trigger>
                         <DataTrigger Binding="{Binding IsLinkTarget}" Value="True"><Setter TargetName="row" Property="Background" Value="#2D2B25" /></DataTrigger>
+                        <DataTrigger Binding="{Binding IsDropTarget}" Value="True">
+                            <Setter TargetName="row" Property="Background" Value="{StaticResource Select}" />
+                            <Setter TargetName="row" Property="BorderBrush" Value="{StaticResource Accent}" />
+                            <Setter TargetName="row" Property="BorderThickness" Value="1" />
+                        </DataTrigger>
                         <Trigger Property="IsSelected" Value="True">
                             <Setter TargetName="row" Property="Background" Value="{StaticResource Select}" />
                             <Setter Property="Foreground" Value="{StaticResource TextStrong}" />
