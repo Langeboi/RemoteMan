@@ -264,17 +264,42 @@
                 <TextBlock DockPanel.Dock="Right" Text="{Binding AppVersion}" Style="{StaticResource Muted}" FontSize="11" VerticalAlignment="Center" Margin="10,0" />
                 <TextBlock DockPanel.Dock="Right" Text="{Binding OnlineText}" Style="{StaticResource Muted}" FontSize="11" VerticalAlignment="Center" Margin="10,0,0,0" />
 
-                <!-- Zabbix: worst state across hosts, problem count, last update. Click for settings. -->
-                <Button DockPanel.Dock="Right" Style="{StaticResource FlatButton}" Height="24" Padding="6,0" Margin="6,0,0,0"
-                        Command="{Binding ZabbixSettingsCommand}" ToolTip="{Binding ZabbixStatusText}" AutomationProperties.Name="{Binding ZabbixStatusText}"
-                        Visibility="{Binding ZabbixActive, Converter={StaticResource BoolVis}}">
-                    <StackPanel Orientation="Horizontal">
-                        <Path Style="{StaticResource HealthGlyph}" Tag="{Binding ZabbixStatusTag}" Margin="0,0,5,0">
-                            <Path.LayoutTransform><ScaleTransform ScaleX="0.8" ScaleY="0.8" /></Path.LayoutTransform>
-                        </Path>
-                        <TextBlock Text="{Binding ZabbixStatusText}" FontSize="11" Foreground="{StaticResource Muted}" VerticalAlignment="Center" MaxWidth="360" TextTrimming="CharacterEllipsis" />
-                    </StackPanel>
-                </Button>
+                <!-- Zabbix: a small "Z" like the Q. Green when connected, red when unreachable, grey while connecting. Click for details. -->
+                <Grid DockPanel.Dock="Right" Visibility="{Binding ZabbixActive, Converter={StaticResource BoolVis}}">
+                    <ToggleButton x:Name="ZButton" Style="{StaticResource BarToggle}" Width="30" Height="24" ToolTip="{Binding ZabbixStatusText}" AutomationProperties.Name="{Binding ZabbixStatusText}">
+                        <Grid Width="16" Height="16">
+                            <Ellipse>
+                                <Ellipse.Style>
+                                    <Style TargetType="Ellipse">
+                                        <Setter Property="Fill" Value="{StaticResource Faint}" />
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding ZabbixConnState}" Value="ok"><Setter Property="Fill" Value="{StaticResource Ok}" /></DataTrigger>
+                                            <DataTrigger Binding="{Binding ZabbixConnState}" Value="bad"><Setter Property="Fill" Value="{StaticResource Bad}" /></DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Ellipse.Style>
+                            </Ellipse>
+                            <TextBlock Text="Z" FontSize="10" FontWeight="Bold" Foreground="{StaticResource Bg}" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Grid>
+                    </ToggleButton>
+                    <Popup IsOpen="{Binding IsChecked, ElementName=ZButton}" StaysOpen="False" Placement="Top" PlacementTarget="{Binding ElementName=ZButton}"
+                           HorizontalOffset="-240" VerticalOffset="-4" Closed="OnZPopupClosed">
+                        <Border Width="300" Background="#1D2125" BorderBrush="#353B42" BorderThickness="1" CornerRadius="6" Padding="12">
+                            <StackPanel>
+                                <TextBlock Text="Zabbix" FontWeight="SemiBold" Margin="0,0,0,6" />
+                                <DockPanel>
+                                    <Path Style="{StaticResource HealthGlyph}" Tag="{Binding ZabbixStatusTag}" Margin="0,0,6,0" VerticalAlignment="Top" />
+                                    <TextBlock Text="{Binding ZabbixStatusText}" TextWrapping="Wrap" />
+                                </DockPanel>
+                                <TextBlock Text="{Binding ZabbixRouteText}" Style="{StaticResource Muted}" FontSize="11" TextWrapping="Wrap" Margin="0,6,0,0" />
+                                <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
+                                    <Button Content="Settings…" Command="{Binding ZabbixSettingsCommand}" Click="OnZPopupButton" />
+                                    <Button Content="Import hosts…" Margin="6,0,0,0" Command="{Binding ImportFromZabbixCommand}" Click="OnZPopupButton" />
+                                </StackPanel>
+                            </StackPanel>
+                        </Border>
+                    </Popup>
+                </Grid>
 
                 <!-- Shared data source: a small "Q", green when connected, red when offline. Hidden for local. Click for details. -->
                 <Grid DockPanel.Dock="Right" Visibility="{Binding IsSharedSource, Converter={StaticResource BoolVis}}">

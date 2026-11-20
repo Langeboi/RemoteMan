@@ -36,6 +36,9 @@ public sealed partial class MainViewModel
     [ObservableProperty] private string _zabbixStatusText = "";
     /// <summary>Glyph in the status bar: warn, high, unreach when Zabbix can't be reached, or none when all is well.</summary>
     [ObservableProperty] private string? _zabbixStatusTag;
+    /// <summary>The Z in the status bar: ok (connected), bad (unreachable) or wait (connecting).</summary>
+    [ObservableProperty] private string _zabbixConnState = "wait";
+    [ObservableProperty] private string _zabbixRouteText = "";
 
     [ObservableProperty] private bool _selectedZabbixVisible;
     [ObservableProperty] private bool _selectedZabbixLinked;
@@ -68,9 +71,10 @@ public sealed partial class MainViewModel
             MinimumSeverity = cfg.MinimumSeverity,
             MatchOptions = cfg.MatchOptions,
         };
-        monitor.Updated += (_, _) => OnUi(ApplyZabbix);
+        monitor.Updated += (_, _) => OnUi(() => { ZabbixConnState = "ok"; ApplyZabbix(); });
         monitor.Failed += (_, err) => OnUi(() =>
         {
+            ZabbixConnState = "bad";
             ZabbixStatusTag = "unreach";
             ZabbixStatusText = ZabbixSnapshot is { } last ? $"Zabbix: {err} (showing data from {last.FetchedAt.ToLocalTime():HH:mm})" : $"Zabbix: {err}";
         });
@@ -78,6 +82,11 @@ public sealed partial class MainViewModel
         ZabbixActive = true;
         ZabbixStatusTag = null;
         ZabbixStatusText = "Zabbix: connecting…";
+        ZabbixConnState = "wait";
+        var host = cfg.Url;
+        try { host = ZabbixClient.ApiEndpoint(cfg.Url).Host; } catch (ZabbixApiException) { }
+        var jump = cfg.JumpHostEntryId is { } jid ? _store?.Get(jid)?.Name : null;
+        ZabbixRouteText = jump is null ? $"{host}, refreshed every {monitor.Interval.TotalSeconds:0} s" : $"{host} through jump host {jump}, refreshed every {monitor.Interval.TotalSeconds:0} s";
         monitor.Start();
     }
 

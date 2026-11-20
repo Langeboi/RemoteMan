@@ -121,6 +121,8 @@ public partial class MainWindow : Window
     }
 
     private void OnQPopupClosed(object? sender, EventArgs e) => QButton.IsChecked = false;
+    private void OnZPopupClosed(object? sender, EventArgs e) => ZButton.IsChecked = false;
+    private void OnZPopupButton(object sender, RoutedEventArgs e) => ZButton.IsChecked = false;
 
     private void OnWindowKeyDown(object sender, KeyEventArgs e)
     {
