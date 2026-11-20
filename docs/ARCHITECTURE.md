@@ -67,6 +67,25 @@ WebView2 answers `ServerCertificateErrorDetected` with *AlwaysAllow*, Chrome/Edg
 recording them in `%APPDATA%\RemoteMan\known_hosts.json` (a changed key is shown as a warning). Each of
 these can be turned off per entry.
 
+## AI assistant
+
+- `RemoteMan.Core/Ai`: one `IAiChatClient` per provider family, all streaming. Claude goes through the
+  official Anthropic SDK (with server-side refusal fallback on); OpenAI, Mistral, Ollama and custom
+  endpoints share a Chat Completions client; Gemini uses `streamGenerateContent`. Connecting lists the
+  account's models first, which proves the key before anything is saved.
+- Keys are DPAPI-encrypted per Windows user in `%APPDATA%\RemoteMan\ai-<provider>.key`. They are never
+  written to a data source, so on a shared database every user brings their own key.
+- Session context: SSH tabs keep a plain-text tail of the terminal (`TerminalTail`, escape codes
+  stripped). When the context toggle is on, the last 50 lines go in front of the user's message, wrapped
+  as untrusted data; the system prompt stays constant so providers can cache it. Nothing is sent until
+  the user presses Send.
+- Paste to terminal types the command without Enter; multi-line text is sent as a bracketed paste.
+- The chat box is a small owned window, not an overlay, because WPF cannot draw over the RDP control or
+  WebView2. It is not a layered window, so the account sign-in WebView2 renders inside it. Windows 11
+  rounds its corners when the provider's theme is rounded.
+- Account sign-in uses a separate WebView2 profile (`%LOCALAPPDATA%\RemoteMan\AiWeb`); signing out
+  deletes that provider's cookies.
+
 ## Known gaps / next steps
 
 - Build and run on Windows to shake out XAML issues (this cut was compile-checked on Linux only).

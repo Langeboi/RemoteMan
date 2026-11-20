@@ -34,5 +34,10 @@ WebView2 runtime ships with Windows 11 and current Windows 10.
 - VNC through an installed viewer (TigerVNC, TightVNC, RealVNC, UltraVNC).
 - Data sources: local SQLite (default), or shared PostgreSQL, SQL Server or MySQL/MariaDB with
   multi-server failover, live updates and presence (who is viewing, editing or connected).
+- **AI assistant** (button at the top right, Ctrl+Shift+A): pick Claude, ChatGPT, Gemini, Mistral, a
+  local Ollama server or any OpenAI-compatible endpoint. Signed in, it waits on standby; the button opens
+  a chat box styled like the chosen provider. With an API key it can read the active SSH session's last
+  50 lines (toggle per message) and type a suggested command into the terminal without running it.
+  Account sign-in instead shows the provider's own chat page, without session access.
 
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the design.

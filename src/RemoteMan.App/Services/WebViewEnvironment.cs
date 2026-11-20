@@ -13,4 +13,10 @@ public static class WebViewEnvironment
     public static Task<CoreWebView2Environment> GetAsync() =>
         _env ??= CoreWebView2Environment.CreateAsync(null, AppPaths.WebViewData,
             new CoreWebView2EnvironmentOptions("--disable-features=msSmartScreenProtection"));
+
+    private static Task<CoreWebView2Environment>? _ai;
+
+    /// <summary>A separate profile for AI account sign-in, so those cookies never mix with web entries.</summary>
+    public static Task<CoreWebView2Environment> GetAiAsync() =>
+        _ai ??= CoreWebView2Environment.CreateAsync(null, AppPaths.AiWebData);
 }
