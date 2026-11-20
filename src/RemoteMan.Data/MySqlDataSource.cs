@@ -30,12 +30,20 @@ public sealed class MySqlDataSource : SqlDataSource
         """,
         "CREATE TABLE IF NOT EXISTS remoteman_meta (id INT NOT NULL PRIMARY KEY, rev BIGINT NOT NULL)",
         "INSERT IGNORE INTO remoteman_meta (id, rev) VALUES (1, 0)",
+        """
+        CREATE TABLE IF NOT EXISTS remoteman_history (
+            revision BIGINT NOT NULL PRIMARY KEY, entry_id VARCHAR(36) NOT NULL, parent_id VARCHAR(36) NULL, kind INT NOT NULL, name VARCHAR(400) NOT NULL,
+            payload LONGTEXT NULL, changed_at BIGINT NOT NULL, changed_by VARCHAR(200) NULL, deleted INT NOT NULL DEFAULT 0,
+            action INT NOT NULL DEFAULT 0, fields TEXT NULL,
+            INDEX ix_remoteman_history_entry (entry_id, revision)) CHARACTER SET utf8mb4
+        """,
     ];
 
     protected override IEnumerable<(string, bool)> MigrationStatements =>
     [
         ("ALTER TABLE remoteman_entries ADD COLUMN created_at BIGINT NULL", true),
         ("ALTER TABLE remoteman_entries ADD COLUMN created_by VARCHAR(200) NULL", true),
+        ("ALTER TABLE remoteman_presence ADD COLUMN sessions TEXT NULL", true),
     ];
 
     // USER() is the name the client logged in with (CURRENT_USER() may be a wildcard account).

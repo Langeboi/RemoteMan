@@ -1,5 +1,6 @@
 using System.Data;
 using System.Data.Common;
+using System.Text.Json;
 using RemoteMan.Core.Model;
 using RemoteMan.Core.Storage;
 
@@ -84,6 +85,12 @@ public abstract class SqlDataSource : IDataSource
 
     public string? DatabaseUser { get; private set; }
 
+    public static readonly TimeSpan HistoryRetention = TimeSpan.FromDays(180);
+    public bool SupportsHistory => true;
+
+    /// <summary>"SELECT … LIMIT n" (SQL Server overrides with TOP).</summary>
+    protected virtual string Top(string columns, string rest, int n) => $"SELECT {columns} {rest} LIMIT {n}";
+
     public virtual async Task InitializeAsync(CancellationToken ct = default)
     {
         await using var c = await OpenAsync(ct);
@@ -97,6 +104,14 @@ public abstract class SqlDataSource : IDataSource
             try { await using var cmd = Cmd(c, sql); await cmd.ExecuteNonQueryAsync(ct); }
             catch (DbException) when (ignore) { }
         }
+        // History is kept for half a year; older versions go.
+        try
+        {
+            await using var prune = Cmd(c, "DELETE FROM remoteman_history WHERE changed_at < @cutoff", null,
+                ("@cutoff", (DateTimeOffset.UtcNow - HistoryRetention).ToUnixTimeMilliseconds()));
+            await prune.ExecuteNonQueryAsync(ct);
+        }
+        catch (DbException) { /* read-only login: pruning is someone else's job */ }
         if (CurrentUserSql is { } who)
         {
             await using var cmd = Cmd(c, who);
@@ -156,13 +171,12 @@ public abstract class SqlDataSource : IDataSource
         await using (var next = Cmd(c, NextRevisionSql, tx))
             rev = Convert.ToInt64(await next.ExecuteScalarAsync(ct));
 
-        if (expectedRevision is { } exp)
-        {
-            await using var check = Cmd(c, "SELECT revision FROM remoteman_entries WHERE id = @id", tx, ("@id", entry.Id.ToString()));
-            var current = await check.ExecuteScalarAsync(ct);
-            if (current is not null and not DBNull && Convert.ToInt64(current) != exp)
-                throw new ConcurrencyException(entry.Id, exp, Convert.ToInt64(current));
-        }
+        // The row as it is now: for the stale-save check and to record what this save changes.
+        Entry? before = null;
+        await using (var cur = Cmd(c, $"SELECT {SelectColumns} FROM remoteman_entries WHERE id = @id", tx, ("@id", entry.Id.ToString())))
+            before = (await ReadEntries(cur, ct)).FirstOrDefault();
+        if (expectedRevision is { } exp && before is not null && before.Revision != exp)
+            throw new ConcurrencyException(entry.Id, exp, before.Revision);
 
         var now = DateTimeOffset.UtcNow;
         var args = new (string, object?)[]
@@ -179,6 +193,14 @@ public abstract class SqlDataSource : IDataSource
             await using var ins = Cmd(c, "INSERT INTO remoteman_entries (id, parent_id, kind, name, payload, revision, updated_at, updated_by, deleted, created_at, created_by) VALUES (@id, @parent, @kind, @name, @payload, @rev, @at, @by, @del, @at, @by)", tx, args);
             await ins.ExecuteNonQueryAsync(ct);
         }
+        var action = before is null ? HistoryAction.Added
+            : entry.Deleted && !before.Deleted ? HistoryAction.Deleted
+            : !entry.Deleted && before.Deleted ? HistoryAction.Restored
+            : HistoryAction.Edited;
+        var fields = action == HistoryAction.Edited ? string.Join(",", EntryDiff.Diff(before, entry).Select(f => f.Path)) : null;
+        await using (var hist = Cmd(c, "INSERT INTO remoteman_history (revision, entry_id, parent_id, kind, name, payload, changed_at, changed_by, deleted, action, fields) VALUES (@rev, @id, @parent, @kind, @name, @payload, @at, @by, @del, @action, @fields)", tx,
+            [.. args, ("@action", (int)action), ("@fields", fields)]))
+            await hist.ExecuteNonQueryAsync(ct);
         if (AfterEntryWriteSql is { } notify)
         {
             await using var nc = Cmd(c, notify, tx, ("@rev", rev));
@@ -222,14 +244,15 @@ public abstract class SqlDataSource : IDataSource
         {
             ("@user", p.User), ("@machine", p.Machine), ("@entry", p.EntryId.ToString()),
             ("@state", (int)p.State), ("@seen", p.LastSeen.ToUnixTimeMilliseconds()),
+            ("@sessions", p.Sessions is { Count: > 0 } ss ? JsonSerializer.Serialize(ss.Select(x => new SessionRow(x.EntryId, x.Since.ToUnixTimeMilliseconds()))) : null),
         };
         // Update first; insert if missing (portable across all four dialects).
         int n;
-        await using (var upd = Cmd(c, "UPDATE remoteman_presence SET entry_id=@entry, state=@state, last_seen=@seen WHERE user_name=@user AND machine=@machine", tx, args))
+        await using (var upd = Cmd(c, "UPDATE remoteman_presence SET entry_id=@entry, state=@state, last_seen=@seen, sessions=@sessions WHERE user_name=@user AND machine=@machine", tx, args))
             n = await upd.ExecuteNonQueryAsync(ct);
         if (n == 0)
         {
-            await using var ins = Cmd(c, "INSERT INTO remoteman_presence (user_name, machine, entry_id, state, last_seen) VALUES (@user, @machine, @entry, @state, @seen)", tx, args);
+            await using var ins = Cmd(c, "INSERT INTO remoteman_presence (user_name, machine, entry_id, state, last_seen, sessions) VALUES (@user, @machine, @entry, @state, @seen, @sessions)", tx, args);
             await ins.ExecuteNonQueryAsync(ct);
         }
         if (AfterPresenceWriteSql is { } notify)
@@ -251,12 +274,68 @@ public abstract class SqlDataSource : IDataSource
     {
         var cutoff = (DateTimeOffset.UtcNow - Presence.Ttl).ToUnixTimeMilliseconds();
         await using var c = await OpenAsync(ct);
-        await using var cmd = Cmd(c, "SELECT user_name, machine, entry_id, state, last_seen FROM remoteman_presence WHERE last_seen > @cutoff", null, ("@cutoff", cutoff));
+        await using var cmd = Cmd(c, "SELECT user_name, machine, entry_id, state, last_seen, sessions FROM remoteman_presence WHERE last_seen > @cutoff", null, ("@cutoff", cutoff));
         var list = new List<Presence>();
         await using var r = await cmd.ExecuteReaderAsync(ct);
         while (await r.ReadAsync(ct))
             list.Add(new Presence(r.GetString(0), r.GetString(1), Guid.Parse(r.GetString(2)),
-                (PresenceState)Convert.ToInt32(r.GetValue(3)), DateTimeOffset.FromUnixTimeMilliseconds(Convert.ToInt64(r.GetValue(4)))));
+                (PresenceState)Convert.ToInt32(r.GetValue(3)), DateTimeOffset.FromUnixTimeMilliseconds(Convert.ToInt64(r.GetValue(4))),
+                r.IsDBNull(5) ? null : ParseSessions(r.GetString(5))));
+        return list;
+    }
+
+    private sealed record SessionRow(Guid E, long S);
+
+    private static IReadOnlyList<PresenceSession>? ParseSessions(string json)
+    {
+        try
+        {
+            return JsonSerializer.Deserialize<List<SessionRow>>(json)?
+                .Select(x => new PresenceSession(x.E, DateTimeOffset.FromUnixTimeMilliseconds(x.S))).ToList();
+        }
+        catch (JsonException) { return null; }
+    }
+
+    // ---------------- history ----------------
+
+    private const string HistoryColumns = "revision, entry_id, parent_id, kind, name, payload, changed_at, changed_by, deleted, action, fields";
+
+    public async Task<IReadOnlyList<HistoryRecord>> GetHistoryAsync(Guid entryId, int limit = 200, CancellationToken ct = default)
+    {
+        await using var c = await OpenAsync(ct);
+        await using var cmd = Cmd(c, Top(HistoryColumns, "FROM remoteman_history WHERE entry_id = @id ORDER BY revision DESC", Math.Max(1, limit)), null, ("@id", entryId.ToString()));
+        return await ReadHistory(cmd, ct);
+    }
+
+    public async Task<IReadOnlyList<HistoryRecord>> GetRecentHistoryAsync(int limit = 100, CancellationToken ct = default)
+    {
+        await using var c = await OpenAsync(ct);
+        await using var cmd = Cmd(c, Top(HistoryColumns, "FROM remoteman_history ORDER BY revision DESC", Math.Max(1, limit)));
+        return await ReadHistory(cmd, ct);
+    }
+
+    private static async Task<IReadOnlyList<HistoryRecord>> ReadHistory(DbCommand cmd, CancellationToken ct)
+    {
+        var list = new List<HistoryRecord>();
+        await using var r = await cmd.ExecuteReaderAsync(ct);
+        while (await r.ReadAsync(ct))
+        {
+            var e = new Entry
+            {
+                Revision = Convert.ToInt64(r.GetValue(0)),
+                Id = Guid.Parse(r.GetString(1)),
+                ParentId = r.IsDBNull(2) ? null : Guid.Parse(r.GetString(2)),
+                Kind = (EntryKind)Convert.ToInt32(r.GetValue(3)),
+                Name = r.GetString(4),
+                UpdatedAt = DateTimeOffset.FromUnixTimeMilliseconds(Convert.ToInt64(r.GetValue(6))),
+                UpdatedBy = r.IsDBNull(7) ? null : r.GetString(7),
+                Deleted = Convert.ToInt32(r.GetValue(8)) != 0,
+            };
+            EntryJson.ApplyPayload(e, r.IsDBNull(5) ? null : r.GetString(5));
+            var fields = r.IsDBNull(10) ? "" : r.GetString(10);
+            list.Add(new HistoryRecord(e, (HistoryAction)Convert.ToInt32(r.GetValue(9)),
+                fields.Split(',', StringSplitOptions.RemoveEmptyEntries)));
+        }
         return list;
     }
 

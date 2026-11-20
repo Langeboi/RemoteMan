@@ -24,6 +24,7 @@ public sealed class EntryStore : IAsyncDisposable
     private IReadOnlyList<Presence> _presence = Array.Empty<Presence>();
     private Timer? _heartbeat;
     private Presence? _myPresence;
+    private IReadOnlyList<PresenceSession> _mySessions = Array.Empty<PresenceSession>();
     private readonly IEntryCache? _cache;
     private Timer? _reconnect;
     private Timer? _cacheTimer;
@@ -272,11 +273,32 @@ public sealed class EntryStore : IAsyncDisposable
         return (LoginSource.None, null);
     }
 
+    /// <summary>
+    /// Everyone else on <paramref name="entryId"/>: looking at it, editing it, or connected to it in any of
+    /// their tabs (not only the one in front). One record per person and PC, about this entry; for someone
+    /// connected, <see cref="Presence.ConnectedSince"/> says since when.
+    /// </summary>
     public IEnumerable<Presence> PresenceFor(Guid entryId)
     {
         var now = DateTimeOffset.UtcNow;
-        return _presence.Where(p => p.EntryId == entryId && p.IsAlive(now) && !(p.User == User && p.Machine == Machine));
+        foreach (var p in _presence)
+        {
+            if (!p.IsAlive(now) || (p.User == User && p.Machine == Machine)) continue;
+            var session = p.Sessions?.FirstOrDefault(s => s.EntryId == entryId);
+            if (session is not null)
+                yield return p with
+                {
+                    EntryId = entryId,
+                    State = p.EntryId == entryId && p.State == PresenceState.Editing ? PresenceState.Editing : PresenceState.Connected,
+                    Sessions = [session],
+                };
+            else if (p.EntryId == entryId)
+                yield return p with { Sessions = null };
+        }
     }
+
+    /// <summary>Other people (and your own other PCs) with a connection to the entry open right now.</summary>
+    public IEnumerable<Presence> ConnectedTo(Guid entryId) => PresenceFor(entryId).Where(p => p.State == PresenceState.Connected);
 
     /// <summary>Tell others what this user is doing. Pass null to clear.</summary>
     public Task SetMyPresenceAsync(Guid? entryId, PresenceState state = PresenceState.Viewing)
@@ -285,13 +307,25 @@ public sealed class EntryStore : IAsyncDisposable
         return HeartbeatAsync();
     }
 
+    /// <summary>The connections this user has open (every tab, shown or not). Sent with the next heartbeat, which is now.</summary>
+    public Task SetMySessionsAsync(IEnumerable<PresenceSession> sessions)
+    {
+        var list = sessions.DistinctBy(s => s.EntryId).ToList();
+        if (list.Select(s => s.EntryId).SequenceEqual(_mySessions.Select(s => s.EntryId))) return Task.CompletedTask;
+        _mySessions = list;
+        return HeartbeatAsync();
+    }
+
     private async Task HeartbeatAsync()
     {
         if (!_source.SupportsPresence || !IsOnline) return;
         try
         {
+            var sessions = _mySessions.Count > 0 ? _mySessions : null;
             if (_myPresence is { } p)
-                await _source.HeartbeatPresenceAsync(p with { LastSeen = DateTimeOffset.UtcNow }, _cts.Token);
+                await _source.HeartbeatPresenceAsync(p with { LastSeen = DateTimeOffset.UtcNow, Sessions = sessions }, _cts.Token);
+            else if (sessions is not null)
+                await _source.HeartbeatPresenceAsync(new Presence(User, Machine, Guid.Empty, PresenceState.Viewing, DateTimeOffset.UtcNow, sessions), _cts.Token);
             else
                 await _source.ClearPresenceAsync(User, Machine, _cts.Token);
             await RefreshPresenceAsync();
@@ -351,6 +385,100 @@ public sealed class EntryStore : IAsyncDisposable
         EntriesChanged?.Invoke(this, applied);
         ScheduleCacheSave();
     }
+
+    // ---------------- history, restore, reservations ----------------
+
+    public bool SupportsHistory => _source.SupportsHistory;
+
+    /// <summary>Saved versions of an entry, newest first. Empty when the source keeps no history or is offline.</summary>
+    public async Task<IReadOnlyList<HistoryRecord>> GetHistoryAsync(Guid entryId, CancellationToken ct = default)
+    {
+        if (!IsOnline || !_source.SupportsHistory) return Array.Empty<HistoryRecord>();
+        try { return await _source.GetHistoryAsync(entryId, 200, ct); }
+        catch (Exception ex) when (IsConnectionFailure(ex)) { GoOffline(); return Array.Empty<HistoryRecord>(); }
+    }
+
+    /// <summary>The latest saves across all entries, newest first.</summary>
+    public async Task<IReadOnlyList<HistoryRecord>> GetActivityAsync(int limit = 100, CancellationToken ct = default)
+    {
+        if (!IsOnline || !_source.SupportsHistory) return Array.Empty<HistoryRecord>();
+        try { return await _source.GetRecentHistoryAsync(limit, ct); }
+        catch (Exception ex) when (IsConnectionFailure(ex)) { GoOffline(); return Array.Empty<HistoryRecord>(); }
+    }
+
+    /// <summary>
+    /// Saves an old version of an entry as its newest version (a new save, so the restore shows in
+    /// history too). Works on deleted entries: a deleted folder comes back with what was deleted with it.
+    /// The reservation in effect now is kept. Returns the number of entries brought back.
+    /// </summary>
+    public async Task<int> RestoreAsync(Entry snapshot, CancellationToken ct = default)
+    {
+        EnsureOnline();
+        var wasDeleted = Get(snapshot.Id) is null;
+        var restored = new List<Entry> { snapshot };
+        if (wasDeleted && snapshot.Kind == EntryKind.Folder)
+            restored.AddRange(await DeletedWithAsync(snapshot.Id, ct));
+        foreach (var s in restored)
+        {
+            var copy = Clone(s);
+            copy.Deleted = false;
+            _entries.TryGetValue(s.Id, out var current);   // includes tombstones
+            copy.Revision = current?.Revision ?? 0;
+            copy.Reservation = current is { Deleted: false } ? current.Reservation : null;
+            // Back at the top level if its folder is gone (and isn't coming back with it).
+            if (copy.ParentId is { } p && Get(p) is null && !restored.Any(r => r.Id == p)) copy.ParentId = null;
+            if (current is null)
+            {
+                // Not known here (deleted before this session): save over the tombstone without a revision check.
+                var saved = await _source.SaveAsync(copy, User, null, ct);
+                Apply([saved]);
+            }
+            else await SaveAsync(copy, ct);
+        }
+        return restored.Count;
+    }
+
+    /// <summary>Entries deleted in the same go as a folder: inside it, by the same person, within a minute.</summary>
+    private async Task<List<Entry>> DeletedWithAsync(Guid folderId, CancellationToken ct)
+    {
+        var recent = await _source.GetRecentHistoryAsync(1000, ct);
+        var tomb = recent.FirstOrDefault(h => h.Snapshot.Id == folderId && h.Action == HistoryAction.Deleted)?.Snapshot;
+        if (tomb is null) return [];
+        // Newest record per entry; only those whose latest state is that same deletion.
+        var latest = recent.GroupBy(h => h.Snapshot.Id).Select(g => g.First()).ToList();
+        var candidates = latest.Where(h => h.Action == HistoryAction.Deleted && h.Snapshot.UpdatedBy == tomb.UpdatedBy
+                && (h.Snapshot.UpdatedAt - tomb.UpdatedAt).Duration() < TimeSpan.FromMinutes(1) && Get(h.Snapshot.Id) is null)
+            .Select(h => h.Snapshot).ToList();
+        var inside = new HashSet<Guid> { folderId };
+        var result = new List<Entry>();
+        bool grew;
+        do
+        {
+            grew = false;
+            foreach (var c in candidates)
+                if (c.ParentId is { } p && inside.Contains(p) && inside.Add(c.Id)) { result.Add(c); grew = true; }
+        } while (grew);
+        return result;
+    }
+
+    /// <summary>Ask others to keep off an entry until <paramref name="until"/>, with an optional note.</summary>
+    public Task<Entry> ReserveAsync(Guid entryId, DateTimeOffset until, string? note, CancellationToken ct = default)
+    {
+        var copy = Clone(Get(entryId) ?? throw new InvalidOperationException("Entry not found."));
+        copy.Reservation = new Reservation { By = User, Until = until, Note = string.IsNullOrWhiteSpace(note) ? null : note.Trim() };
+        return SaveAsync(copy, ct);
+    }
+
+    public Task<Entry> ReleaseAsync(Guid entryId, CancellationToken ct = default)
+    {
+        var copy = Clone(Get(entryId) ?? throw new InvalidOperationException("Entry not found."));
+        copy.Reservation = null;
+        return SaveAsync(copy, ct);
+    }
+
+    /// <summary>The reservation someone else holds on the entry right now, if any.</summary>
+    public Reservation? ReservedByOthers(Entry e) =>
+        e.Reservation is { } r && r.IsActive(DateTimeOffset.UtcNow) && !string.Equals(r.By, User, StringComparison.OrdinalIgnoreCase) ? r : null;
 
     public static Entry Clone(Entry e)
     {

@@ -76,6 +76,9 @@ public sealed class Entry
     public ProxmoxSettings? Proxmox { get; set; }
     public PowerShellSettings? PowerShell { get; set; }
 
+    /// <summary>Someone has asked others to keep off this entry for a while (Reserve in the right-click menu).</summary>
+    public Reservation? Reservation { get; set; }
+
     /// <summary>Folders: glyph name (see the folder icon picker); null = plain folder.</summary>
     public string? Icon { get; set; }
     /// <summary>Folders: icon colour as #RRGGBB; null = the default grey.</summary>
@@ -111,6 +114,16 @@ public sealed class Entry
         EntryKind.WinBox => 8291,
         _ => 0,
     };
+}
+
+/// <summary>"Keep off this entry until …": others still can connect, after a warning. Ends by itself.</summary>
+public sealed class Reservation
+{
+    public string By { get; set; } = "";
+    public DateTimeOffset Until { get; set; }
+    public string? Note { get; set; }
+
+    public bool IsActive(DateTimeOffset now) => Until > now;
 }
 
 public sealed record HostEndpoint(string Host, int Port = 0)

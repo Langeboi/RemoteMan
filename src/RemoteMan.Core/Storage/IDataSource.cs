@@ -37,6 +37,17 @@ public interface IDataSource : IAsyncDisposable
     Task ClearPresenceAsync(string user, string machine, CancellationToken ct = default);
     Task<IReadOnlyList<Presence>> GetPresenceAsync(CancellationToken ct = default);
 
+    /// <summary>Whether every save is also kept in a history table (change history, restore, activity).</summary>
+    bool SupportsHistory => false;
+
+    /// <summary>Saved versions of one entry, newest first (at most <paramref name="limit"/>).</summary>
+    Task<IReadOnlyList<HistoryRecord>> GetHistoryAsync(Guid entryId, int limit = 200, CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyList<HistoryRecord>>(Array.Empty<HistoryRecord>());
+
+    /// <summary>The latest saves across all entries, newest first.</summary>
+    Task<IReadOnlyList<HistoryRecord>> GetRecentHistoryAsync(int limit = 100, CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyList<HistoryRecord>>(Array.Empty<HistoryRecord>());
+
     /// <summary>
     /// Raised when the backend tells us something changed (Postgres NOTIFY, SQL Server
     /// query notification) or a poll found a newer revision. The argument is a hint only;
@@ -47,6 +58,14 @@ public interface IDataSource : IAsyncDisposable
     /// <summary>Starts listening/polling for changes from other users.</summary>
     Task StartChangeFeedAsync(CancellationToken ct = default);
 }
+
+public enum HistoryAction { Edited = 0, Added = 1, Deleted = 2, Restored = 3 }
+
+/// <summary>
+/// One save of an entry. <see cref="Snapshot"/> is the entry exactly as saved: its Revision, UpdatedAt and
+/// UpdatedBy say when and by whom. <see cref="Fields"/> lists the paths that changed (see <see cref="EntryDiff"/>).
+/// </summary>
+public sealed record HistoryRecord(Entry Snapshot, HistoryAction Action, IReadOnlyList<string> Fields);
 
 public enum DataSourceKind { Sqlite, PostgreSql, SqlServer, MySql }
 
