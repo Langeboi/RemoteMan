@@ -6,8 +6,7 @@ namespace RemoteMan.Protocols.Web;
 
 /// <summary>
 /// Opens a web entry in a real browser. Chromium browsers get an isolated profile with
-/// certificate errors ignored (that flag is refused on a normal profile). Firefox has no
-/// such switch, so it opens normally.
+/// certificate errors ignored (that flag is refused on a normal profile).
 /// </summary>
 public static class ExternalBrowser
 {
@@ -21,28 +20,22 @@ public static class ExternalBrowser
         if (!Uri.TryCreate(url, UriKind.Absolute, out var uri) || uri.Scheme is not ("http" or "https"))
             throw new ArgumentException($"\"{url}\" is not a web address.");
 
-        if (kind is BrowserKind.SystemDefault or BrowserKind.Embedded)
+        if (kind is BrowserKind.SystemDefault or BrowserKind.Embedded or BrowserKind.Firefox)
         {
             Process.Start(new ProcessStartInfo(uri.AbsoluteUri) { UseShellExecute = true });
             return;
         }
         var exe = FindExe(kind) ?? throw new BrowserNotInstalledException(kind);
 
+        // Edge, Chrome and Brave are all Chromium, so they take the same switches.
         var psi = new ProcessStartInfo(exe) { UseShellExecute = false };
-        if (kind is BrowserKind.Chrome or BrowserKind.Edge)
+        if (ignoreCertErrors)
         {
-            if (ignoreCertErrors)
-            {
-                psi.ArgumentList.Add("--user-data-dir=" + Path.Combine(Path.GetTempPath(), "RemoteMan", $"profile-{kind}".ToLowerInvariant()));
-                psi.ArgumentList.Add("--ignore-certificate-errors");
-                psi.ArgumentList.Add("--no-first-run");
-            }
-            psi.ArgumentList.Add("--new-window");
+            psi.ArgumentList.Add("--user-data-dir=" + Path.Combine(Path.GetTempPath(), "RemoteMan", $"profile-{kind}".ToLowerInvariant()));
+            psi.ArgumentList.Add("--ignore-certificate-errors");
+            psi.ArgumentList.Add("--no-first-run");
         }
-        else if (kind == BrowserKind.Firefox)
-        {
-            psi.ArgumentList.Add("-new-window");
-        }
+        psi.ArgumentList.Add("--new-window");
         psi.ArgumentList.Add(uri.AbsoluteUri);
         Process.Start(psi);
     }
@@ -53,7 +46,7 @@ public static class ExternalBrowser
         {
             BrowserKind.Chrome => ("chrome.exe", new[] { @"Google\Chrome\Application" }),
             BrowserKind.Edge => ("msedge.exe", new[] { @"Microsoft\Edge\Application" }),
-            BrowserKind.Firefox => ("firefox.exe", new[] { "Mozilla Firefox", @"Firefox Developer Edition", @"Mozilla Firefox ESR" }),
+            BrowserKind.Brave => ("brave.exe", new[] { @"BraveSoftware\Brave-Browser\Application" }),
             _ => (null, Array.Empty<string>()),
         };
         if (name is null || !OperatingSystem.IsWindows()) return null;
@@ -92,7 +85,7 @@ public static class ExternalBrowser
         return null;
     }
 
-    /// <summary>Path from a registry value such as "C:\\x\\firefox.exe" -osint -url "%1"; null when missing.</summary>
+    /// <summary>Path from a registry value such as "C:\\x\\chrome.exe" --single-argument -url "%1"; null when missing.</summary>
     private static string? Exe(string? value)
     {
         if (string.IsNullOrWhiteSpace(value)) return null;
@@ -147,7 +140,7 @@ public static class BrowserInstaller
     {
         BrowserKind.Chrome => "Google Chrome",
         BrowserKind.Edge => "Microsoft Edge",
-        BrowserKind.Firefox => "Firefox",
+        BrowserKind.Brave => "Brave",
         _ => kind.ToString(),
     };
 
@@ -155,7 +148,7 @@ public static class BrowserInstaller
     {
         BrowserKind.Chrome => ("Google.Chrome", "https://www.google.com/chrome/"),
         BrowserKind.Edge => ("Microsoft.Edge", "https://www.microsoft.com/edge/download"),
-        BrowserKind.Firefox => ("Mozilla.Firefox", "https://www.mozilla.org/firefox/new/"),
+        BrowserKind.Brave => ("Brave.Brave", "https://brave.com/download/"),
         _ => throw new ArgumentOutOfRangeException(nameof(kind)),
     };
 

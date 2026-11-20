@@ -329,6 +329,16 @@ public class EndpointTests
     public void WebUrlsGetAScheme(string input, string expected) => Assert.Equal(expected, WebSettings.NormalizeUrl(input));
 
     [Fact]
+    public void FirefoxEntriesOpenInTheBuiltInBrowser()
+    {
+        var e = new Entry { Kind = EntryKind.Web, Name = "old" };
+        EntryJson.ApplyPayload(e, """{"Web":{"Url":"https://example.com/","Browser":"Firefox"}}""");
+        Assert.Equal(BrowserKind.Embedded, e.Web!.Browser);
+        e.Web.Browser = BrowserKind.Brave;
+        Assert.Equal(BrowserKind.Brave, e.Web.Browser);
+    }
+
+    [Fact]
     public async Task FallsBackToSecondaryWhenPrimaryFails()
     {
         var resolver = new EndpointResolver((host, port, ct) =>

@@ -25,13 +25,14 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
     public MainViewModel(AppSettings settings)
     {
         _settings = settings;
-        _isSplit = settings.SplitView;
+        _isSplit = settings.SplitPane;
     }
 
     // --- dialogs supplied by the window ---
     /// <summary>Opens the editor; returns the entries to save in order (the edited one last), or null on cancel.</summary>
     public Func<Entry, EntryStore, ISecretProtector, IReadOnlyList<Entry>?>? EditDialog { get; set; }
-    public Func<string, bool>? Confirm { get; set; }
+    /// <summary>(title, text, action button) for a destructive question; true means go ahead.</summary>
+    public Func<string, string, string, bool>? Confirm { get; set; }
     /// <summary>Shows a question with buttons; returns the index picked, or -1 when closed.</summary>
     public Func<string, string, string[], int>? Choose { get; set; }
 
@@ -314,7 +315,7 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
         if (o.External is { } ext && e.Kind == EntryKind.Web)
         {
             e.Web ??= new();
-            e.Web.Browser = ext ? (e.Web.Browser == BrowserKind.Embedded ? BrowserKind.SystemDefault : e.Web.Browser) : BrowserKind.Embedded;
+            e.Web.Browser = ext ? (e.Web.Browser == BrowserKind.Embedded ? BrowserKind.Edge : e.Web.Browser) : BrowserKind.Embedded;
         }
         await ConnectEntryAsync(e);
     }
@@ -386,7 +387,7 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
         var endpoint = result.Endpoint!;
 
         // Chosen external browser missing: offer to install it or use the built-in one, never just fail.
-        if (e.Kind == EntryKind.Web && e.Web is { Browser: BrowserKind.Chrome or BrowserKind.Edge or BrowserKind.Firefox } ws
+        if (e.Kind == EntryKind.Web && e.Web is { Browser: BrowserKind.Chrome or BrowserKind.Edge or BrowserKind.Brave } ws
             && !RemoteMan.Protocols.Web.ExternalBrowser.IsInstalled(ws.Browser))
         {
             var name = RemoteMan.Protocols.Web.BrowserInstaller.DisplayName(ws.Browser);
@@ -538,8 +539,9 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
     private async Task DeleteAsync()
     {
         if (_store is null || Selected is not { } s || s.Id == FavoritesId) return;
-        var what = s.IsFolder ? $"folder \"{s.Name}\" and everything in it" : $"\"{s.Name}\"";
-        if (Confirm?.Invoke($"Delete {what}?") != true) return;
+        var title = s.IsFolder ? $"Delete folder \"{s.Name}\"?" : $"Delete \"{s.Name}\"?";
+        var text = s.IsFolder ? "The folder and everything in it is removed for everyone using this data source." : "The entry is removed for everyone using this data source.";
+        if (Confirm?.Invoke(title, text, "Delete") != true) return;
         try { await _store.DeleteAsync(s.Id); }
         catch (Exception ex) { Message = ex.Message; }
     }

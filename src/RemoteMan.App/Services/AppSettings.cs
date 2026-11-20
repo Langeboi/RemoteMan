@@ -32,7 +32,8 @@ public sealed class AppSettings
     // Per-user UI state (not shared through the data source).
     public List<Guid> Favorites { get; set; } = new();
     public List<Guid> Recent { get; set; } = new();
-    public bool SplitView { get; set; } = true;
+    /// <summary>Two panes side by side. Off by default (single pane); a new name so earlier test builds' saved "on" is dropped.</summary>
+    public bool SplitPane { get; set; }
 
     public ZabbixConfig Zabbix { get; set; } = new();
 

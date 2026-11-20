@@ -192,7 +192,7 @@
                     <StackPanel>
                         <DockPanel>
                             <TextBlock Text="Browser" Width="90" Style="{StaticResource Label}" />
-                            <ComboBox x:Name="WebBrowser" Width="160" HorizontalAlignment="Left" />
+                            <ComboBox x:Name="WebBrowser" Width="230" HorizontalAlignment="Left" />
                         </DockPanel>
                         <CheckBox x:Name="WebIgnoreCert" Content="Ignore certificate errors" />
                         <CheckBox x:Name="WebAutoFill" Content="Fill in the login form automatically" />

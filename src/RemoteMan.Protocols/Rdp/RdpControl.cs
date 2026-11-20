@@ -94,6 +94,7 @@ public sealed class RdpControl : AxHost
     /// </summary>
     public void SetForeground(bool foreground)
     {
+        if (_closing || IsDisposed) return;
         _foreground = foreground;
         Visible = foreground;
         if (foreground && _connected && _sizeChangedWhileHidden) { _sizeChangedWhileHidden = false; _resizeDebounce.Start(); }
@@ -102,15 +103,21 @@ public sealed class RdpControl : AxHost
     private bool _foreground = true;
     private bool _sizeChangedWhileHidden;
 
+    /// <summary>Safe at any time, including before the control exists and while the tab is closing.</summary>
     public void Disconnect()
     {
-        try { if (Ocx.Connected != 0) Ocx.Disconnect(); } catch (COMException) { }
+        if (IsDisposed || GetOcx() is not { } ocx) return;
+        try { dynamic d = ocx; if (d.Connected != 0) d.Disconnect(); }
+        catch (Exception) { /* already gone: nothing to disconnect */ }
     }
+
+    /// <summary>Set while the tab closes: from then on nothing touches the ActiveX control.</summary>
+    private bool _closing;
 
     protected override void OnResize(EventArgs e)
     {
         base.OnResize(e);
-        if (!_connected) return;
+        if (!_connected || _closing) return;
         if (!_foreground) { _sizeChangedWhileHidden = true; return; }
         _resizeDebounce.Stop(); _resizeDebounce.Start();
     }
@@ -118,9 +125,9 @@ public sealed class RdpControl : AxHost
     /// <summary>Dynamic resolution: resize the remote desktop to the tab (Win 8.1+ hosts).</summary>
     private void FitSessionToControl()
     {
-        if (Width < 200 || Height < 200) return;
-        try { Ocx.UpdateSessionDisplaySettings((uint)Width, (uint)Height, (uint)Width, (uint)Height, 0u, 100u, 100u); }
-        catch (COMException) { /* older server: SmartSizing scales instead */ }
+        if (_closing || IsDisposed || Width < 200 || Height < 200 || GetOcx() is not { } ocx) return;
+        try { ((dynamic)ocx).UpdateSessionDisplaySettings((uint)Width, (uint)Height, (uint)Width, (uint)Height, 0u, 100u, 100u); }
+        catch (Exception) { /* older server: SmartSizing scales instead; or the session just ended */ }
     }
 
     private bool _hooked;
@@ -131,16 +138,24 @@ public sealed class RdpControl : AxHost
         _hooked = true;
         try
         {
-            ComEventsHelper.Combine(ocx, EventsIid, DispIdOnConnected, new Action(() => Connected?.Invoke()));
-            ComEventsHelper.Combine(ocx, EventsIid, DispIdOnLoginComplete, new Action(() => { _connected = true; LoginComplete?.Invoke(); }));
-            ComEventsHelper.Combine(ocx, EventsIid, DispIdOnDisconnected, new Action<int>(reason => { _connected = false; Disconnected?.Invoke(reason); }));
+            ComEventsHelper.Combine(ocx, EventsIid, DispIdOnConnected, new Action(() => { if (!_closing) Connected?.Invoke(); }));
+            ComEventsHelper.Combine(ocx, EventsIid, DispIdOnLoginComplete, new Action(() => { _connected = true; if (!_closing) LoginComplete?.Invoke(); }));
+            ComEventsHelper.Combine(ocx, EventsIid, DispIdOnDisconnected, new Action<int>(reason => { _connected = false; if (!_closing) Disconnected?.Invoke(reason); }));
         }
         catch (Exception) { /* events are a convenience; the session still works without them */ }
     }
 
     protected override void Dispose(bool disposing)
     {
-        if (disposing) { _resizeDebounce.Dispose(); Disconnect(); }
-        base.Dispose(disposing);
+        if (disposing)
+        {
+            _resizeDebounce.Stop();
+            _resizeDebounce.Dispose();
+            Disconnect();
+            _closing = true;
+            Connected = null; LoginComplete = null; Disconnected = null;
+        }
+        // Tearing down the ActiveX can throw when its window is already gone; closing a tab must never crash the app.
+        try { base.Dispose(disposing); } catch (Exception) { }
     }
 }

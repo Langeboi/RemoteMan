@@ -170,7 +170,7 @@ public sealed partial class MainViewModel
                 foreach (var s in ssh) MoveSession(s, 1);
             if (keep is not null) SetPaneActive(keep.Pane, keep);
         }
-        _settings.SplitView = value;
+        _settings.SplitPane = value;
         TrySaveSettings();
         ActiveSession = keep is not null && Sessions.Contains(keep) ? keep : PaneActive(FocusedPane);
         UpdateShown();

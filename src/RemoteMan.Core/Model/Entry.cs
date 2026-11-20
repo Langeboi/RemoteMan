@@ -144,7 +144,10 @@ public sealed class SnippetData
         Command.Replace("{host}", host).Replace("{user}", user ?? "").Replace("{name}", entryName);
 }
 
-public enum BrowserKind { Embedded = 0, Edge = 1, Chrome = 2, Firefox = 3, SystemDefault = 4 }
+/// <summary>Embedded is the built-in browser (WebView2, the Edge engine), the only one that can run inside a tab.
+/// The others open a separate window. Firefox is no longer offered; it stays here so old entries still load
+/// and opens in the built-in browser.</summary>
+public enum BrowserKind { Embedded = 0, Edge = 1, Chrome = 2, Firefox = 3, SystemDefault = 4, Brave = 5 }
 
 public sealed class WebSettings
 {
@@ -158,7 +161,12 @@ public sealed class WebSettings
     }
 
     public string Url { get; set; } = "https://";
-    public BrowserKind Browser { get; set; } = BrowserKind.Embedded;
+    private BrowserKind _browser = BrowserKind.Embedded;
+    public BrowserKind Browser
+    {
+        get => _browser;
+        set => _browser = value == BrowserKind.Firefox ? BrowserKind.Embedded : value;
+    }
     public bool IgnoreCertificateErrors { get; set; } = true;
     /// <summary>Try to fill the linked credential into the first login form.</summary>
     public bool AutoFill { get; set; } = true;

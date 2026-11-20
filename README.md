@@ -39,7 +39,7 @@ WebView2 runtime ships with Windows 11 and current Windows 10.
 - Web in embedded Chromium (WebView2) with certificate errors skipped and automatic login (finds the user
   and password boxes, fills them, presses login; handles late-loading and two-step login pages, with
   optional CSS selectors per entry), or opened
-  in Edge, Chrome or Firefox.
+  in Edge, Chrome or Brave in a separate window.
 - Copy on select in SSH, RDP and web tabs (no Ctrl+C needed); right click pastes in SSH.
 - RDP file transfer over the RDP clipboard: copy files on one side, paste on the other, or drop files on
   the tab's side strip and press Ctrl+V in the remote folder.

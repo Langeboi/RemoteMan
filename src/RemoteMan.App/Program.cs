@@ -24,9 +24,8 @@ public static class Program
             {
                 // An error inside the UI shouldn't take open sessions down with it: log, tell, carry on.
                 WriteLog(e.Exception);
-                MessageBox.Show($"Something went wrong:\n\n{e.Exception.Message}\n\nDetails were saved to {CrashLog}",
-                    "RemoteMan", MessageBoxButton.OK, MessageBoxImage.Warning);
                 e.Handled = true;
+                ShowError("Something went wrong", e.Exception.Message);
             };
             app.InitializeComponent();
             app.Run();
@@ -42,13 +41,24 @@ public static class Program
     {
         if (ex is null) return;
         WriteLog(ex);
+        ShowError("RemoteMan couldn't start", ex.GetBaseException().Message);
+        Environment.Exit(1);
+    }
+
+    /// <summary>The themed error box, with a button to open the log. Falls back to the plain Windows box
+    /// if WPF itself is what broke.</summary>
+    private static void ShowError(string title, string message)
+    {
+        var text = $"{message}\n\nDetails were saved to {CrashLog}";
         try
         {
-            MessageBox.Show($"RemoteMan couldn't start:\n\n{ex.GetBaseException().Message}\n\nDetails were saved to {CrashLog}",
-                "RemoteMan", MessageBoxButton.OK, MessageBoxImage.Error);
+            if (Views.ChoiceDialog.Show(null, title, text, ["OK", "Open log"], Views.DialogIcon.Error) == 1)
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(CrashLog) { UseShellExecute = true });
         }
-        catch (Exception) { }
-        Environment.Exit(1);
+        catch (Exception)
+        {
+            try { MessageBox.Show(text, title, MessageBoxButton.OK, MessageBoxImage.Error); } catch (Exception) { }
+        }
     }
 
     private static void WriteLog(Exception ex)

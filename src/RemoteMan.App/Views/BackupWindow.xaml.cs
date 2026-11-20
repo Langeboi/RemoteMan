@@ -218,8 +218,7 @@ public partial class BackupWindow : Window
         if (RestoreMerge.IsChecked == true)
         {
             var overwrite = items.Count(i => store.Get(i.Entry.Id) is not null);
-            if (MessageBox.Show(this, $"Merge {items.Count} entries? {overwrite} existing entr{(overwrite == 1 ? "y" : "ies")} will be overwritten with the backed-up version.",
-                    "RemoteMan", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes) return;
+            if (!ChoiceDialog.Confirm(this, $"Merge {items.Count} entries?", $"Merge {items.Count} entries? {overwrite} existing entr{(overwrite == 1 ? "y" : "ies")} will be overwritten with the backed-up version.", "Merge", danger: true)) return;
             var plan = await Task.Run(() => ImportPlanner.Plan(items, store.Entries.ToList(), protector, ImportMode.Merge));
             var n = await _main.SaveImportedAsync(plan, new Progress<int>(i => Status.Text = $"Restoring {i} of {plan.Count}…"));
             Status.Text = $"Restored {n} entries";

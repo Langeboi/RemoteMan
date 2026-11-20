@@ -9,11 +9,11 @@
                 <Button Style="{StaticResource FlatButton}" Content="‹" ToolTip="Back" AutomationProperties.Name="Back" Click="OnBack" />
                 <Button Style="{StaticResource FlatButton}" Content="⟳" ToolTip="Reload" AutomationProperties.Name="Reload" Click="OnReload" />
                 <ComboBox DockPanel.Dock="Right" x:Name="OpenIn" Width="130" Margin="6,0,0,0" VerticalAlignment="Center" SelectionChanged="OnOpenIn"
-                          ToolTip="Open this page in another browser">
+                          ToolTip="Open this page in a separate browser window">
                     <ComboBoxItem Content="Open in…" IsSelected="True" />
                     <ComboBoxItem Content="Edge" Tag="Edge" />
                     <ComboBoxItem Content="Chrome" Tag="Chrome" />
-                    <ComboBoxItem Content="Firefox" Tag="Firefox" />
+                    <ComboBoxItem Content="Brave" Tag="Brave" />
                     <ComboBoxItem Content="Default browser" Tag="SystemDefault" />
                 </ComboBox>
                 <TextBox x:Name="Address" FontFamily="{StaticResource MonoFont}" FontSize="11" VerticalAlignment="Center" KeyDown="OnAddressKey" />

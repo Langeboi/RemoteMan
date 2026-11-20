@@ -40,7 +40,7 @@ public partial class SnippetEditorWindow : Window
 
     private void OnDelete(object sender, RoutedEventArgs e)
     {
-        if (MessageBox.Show(this, $"Delete snippet \"{_e.Name}\"?", "RemoteMan", MessageBoxButton.YesNo) != MessageBoxResult.Yes) return;
+        if (!ChoiceDialog.Confirm(this, $"Delete snippet \"{_e.Name}\"?", "", "Delete", danger: true)) return;
         DeleteRequested = true;
         DialogResult = true;
     }

@@ -37,14 +37,23 @@ public partial class RdpSessionView : UserControl
         _rdp.Height = (int)(ActualHeight * dpi);
 
         _rdp.Connected += () => vm.StatusText = $"RDP {vm.Endpoint}{(vm.UsedFallback ? " (fallback)" : "")}";
-        _rdp.LoginComplete += () => vm.StatusText = $"RDP {vm.Endpoint}  {_rdp.Width}x{_rdp.Height}";
+        _rdp.LoginComplete += () => { if (_rdp is { } r) vm.StatusText = $"RDP {vm.Endpoint}  {r.Width}x{r.Height}"; };
         _rdp.Disconnected += reason =>
         {
+            if (_rdp is null) return; // tab is closing
             vm.StatusText = $"RDP disconnected (code {reason})";
             Host.Visibility = Visibility.Collapsed;
             State.Text = $"Disconnected from {vm.Endpoint} (code {reason}).";
         };
-        vm.Disposed += (_, _) => { _copy?.Dispose(); _rdp?.Dispose(); _rdp = null; Host.Dispose(); };
+        vm.Disposed += (_, _) =>
+        {
+            // Closing the tab: each step on its own, so one failing teardown can't take the app down.
+            var rdp = _rdp; _rdp = null;
+            try { _copy?.Dispose(); } catch (Exception) { }
+            _copy = null;
+            try { rdp?.Dispose(); } catch (Exception) { }
+            try { Host.Child = null; Host.Dispose(); } catch (Exception) { }
+        };
 
         // Copy on select needs clipboard redirection to bring the text back.
         if (vm.Settings.CopyOnSelect && vm.Settings.RedirectClipboard) _copy = new CopyOnSelect(_rdp);

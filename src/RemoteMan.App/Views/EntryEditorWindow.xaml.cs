@@ -24,6 +24,7 @@ public partial class EntryEditorWindow : Window
     private readonly EntryStore _store;
     private sealed record CredChoice(Guid Id, string Name);
     private sealed record JumpChoice(Guid? Id, string Name);
+    private sealed record BrowserChoice(BrowserKind Kind, string Label);
     private sealed record LoginChoice(LoginSource Source, string Name);
     /// <summary>Set on OK when "Save as a reusable credential too" was ticked: the caller saves it first.</summary>
     public Entry? NewCredential { get; private set; }
@@ -116,7 +117,16 @@ public partial class EntryEditorWindow : Window
 
         var w = entry.Web ?? new WebSettings();
         UrlBox.Text = w.Url;
-        WebBrowser.ItemsSource = Enum.GetValues<BrowserKind>(); WebBrowser.SelectedItem = w.Browser;
+        var browsers = new List<BrowserChoice>
+        {
+            new(BrowserKind.Embedded, "Built-in (in a tab)"),
+            new(BrowserKind.Edge, "Edge (separate window)"),
+            new(BrowserKind.Chrome, "Chrome (separate window)"),
+            new(BrowserKind.Brave, "Brave (separate window)"),
+            new(BrowserKind.SystemDefault, "Default browser (separate window)"),
+        };
+        WebBrowser.ItemsSource = browsers; WebBrowser.DisplayMemberPath = nameof(BrowserChoice.Label);
+        WebBrowser.SelectedItem = browsers.FirstOrDefault(b => b.Kind == w.Browser) ?? browsers[0];
         WebIgnoreCert.IsChecked = w.IgnoreCertificateErrors; WebAutoFill.IsChecked = w.AutoFill; WebAutoSubmit.IsChecked = w.AutoSubmit;
         WebUserSel.Text = w.UserFieldSelector; WebPassSel.Text = w.PasswordFieldSelector; WebSubmitSel.Text = w.SubmitSelector; WebCopySelect.IsChecked = w.CopyOnSelect;
 
@@ -259,7 +269,7 @@ public partial class EntryEditorWindow : Window
         KeyBox.Text = priv;
         KeyFromDisk.IsChecked = false;
         Clipboard.SetText(pub);
-        ChoiceDialog.Show(this, "New key created", "The public key is on the clipboard. Add it to ~/.ssh/authorized_keys on the server, then press OK here to save the entry.\n\n" + pub, ["OK"]);
+        ChoiceDialog.Info(this, "New key created", "The public key is on the clipboard. Add it to ~/.ssh/authorized_keys on the server, then press OK here to save the entry.\n\n" + pub);
     }
 
     private void OnCopyPublicKey(object sender, RoutedEventArgs e)
@@ -269,13 +279,13 @@ public partial class EntryEditorWindow : Window
             var key = KeyFromDisk.IsChecked == true ? System.IO.File.ReadAllText(Environment.ExpandEnvironmentVariables(KeyPathBox.Text))
                 : KeyBox.Text.Trim().Length > 0 ? KeyBox.Text
                 : _e.Credential?.ProtectedPrivateKey is { } stored ? _protector.Unprotect(stored) : null;
-            if (key is null) { ChoiceDialog.Show(this, "No key yet", "Paste, import or generate a key first.", ["OK"]); return; }
+            if (key is null) { ChoiceDialog.Info(this, "No key yet", "Paste, import or generate a key first."); return; }
             var pass = PassphraseBox.Password.Length > 0 ? PassphraseBox.Password
                 : _e.Credential?.ProtectedPassphrase is { } pp ? _protector.Unprotect(pp) : null;
             Clipboard.SetText(RemoteMan.Protocols.Ssh.SshKeys.PublicKeyLine(key, pass, UserBox.Text.Trim().Length > 0 ? UserBox.Text.Trim() : "remoteman"));
             Heading.Text = "Public key copied";
         }
-        catch (Exception ex) { ChoiceDialog.Show(this, "Couldn't read the key", ex.Message, ["OK"]); }
+        catch (Exception ex) { ChoiceDialog.Error(this, "Couldn't read the key", ex.Message); }
     }
 
     private void OnBrowseCert(object sender, RoutedEventArgs e)
@@ -379,7 +389,7 @@ public partial class EntryEditorWindow : Window
             case EntryKind.Web:
                 _e.Web ??= new();
                 _e.Web.Url = WebSettings.NormalizeUrl(UrlBox.Text);
-                _e.Web.Browser = (BrowserKind)(WebBrowser.SelectedItem ?? BrowserKind.Embedded);
+                _e.Web.Browser = (WebBrowser.SelectedItem as BrowserChoice)?.Kind ?? BrowserKind.Embedded;
                 _e.Web.IgnoreCertificateErrors = WebIgnoreCert.IsChecked == true;
                 _e.Web.AutoFill = WebAutoFill.IsChecked == true;
                 _e.Web.AutoSubmit = WebAutoSubmit.IsChecked == true;

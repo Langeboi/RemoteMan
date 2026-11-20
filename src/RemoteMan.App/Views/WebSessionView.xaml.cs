@@ -123,7 +123,7 @@ public partial class WebSessionView : UserControl
         catch (BrowserNotInstalledException)
         {
             var name = BrowserInstaller.DisplayName(kind);
-            if (ChoiceDialog.Show(owner, $"{name} isn't installed", $"Install {name} on this PC and open this page in it?", [$"Install {name}", "Cancel"]) != 0) return;
+            if (ChoiceDialog.Show(owner, $"{name} isn't installed", $"Install {name} on this PC and open this page in it?", [$"Install {name}", "Cancel"], DialogIcon.Question) != 0) return;
             _vm.StatusText = $"Installing {name}…";
             var outcome = await BrowserInstaller.InstallAsync(kind);
             _vm.StatusText = outcome switch
@@ -135,6 +135,6 @@ public partial class WebSessionView : UserControl
             if (outcome == BrowserInstaller.Result.Installed)
                 try { ExternalBrowser.Open(url, kind, _vm.Settings.IgnoreCertificateErrors); } catch (Exception ex) { _vm.StatusText = ex.Message; }
         }
-        catch (Exception ex) { ChoiceDialog.Show(owner, "Couldn't open the browser", ex.Message, ["OK"]); }
+        catch (Exception ex) { ChoiceDialog.Error(owner, "Couldn't open the browser", ex.Message); }
     }
 }

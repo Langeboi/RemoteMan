@@ -22,8 +22,8 @@ public partial class MainWindow : Window
         _vm = new MainViewModel(settings)
         {
             PromptPassword = title => PasswordPrompt.Show(this, title),
-            Choose = (title, text, buttons) => Views.ChoiceDialog.Show(this, title, text, buttons),
-            Confirm = text => MessageBox.Show(this, text, "RemoteMan", MessageBoxButton.YesNo, MessageBoxImage.Question) == MessageBoxResult.Yes,
+            Choose = (title, text, buttons) => Views.ChoiceDialog.Show(this, title, text, buttons, Views.DialogIcon.Question),
+            Confirm = (title, text, action) => Views.ChoiceDialog.Confirm(this, title, text, action, danger: true),
         };
         _vm.EditDialog = (entry, store, protector) =>
         {
@@ -301,7 +301,7 @@ public partial class MainWindow : Window
     {
         var dlg = new DataSourceWindow(_settings) { Owner = this };
         if (dlg.ShowDialog() == true)
-            MessageBox.Show(this, "Restart RemoteMan to switch data source.", "RemoteMan");
+            Views.ChoiceDialog.Info(this, "Restart to switch", "Restart RemoteMan to switch to the new data source.");
     }
 
     private void OnImport(object sender, RoutedEventArgs e) => new ImportWindow(_vm) { Owner = this }.ShowDialog();

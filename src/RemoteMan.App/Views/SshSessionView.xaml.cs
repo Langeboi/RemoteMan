@@ -274,7 +274,7 @@ public partial class SshSessionView : UserControl
         var items = RemoteList.SelectedItems.Cast<RemoteItem>().ToList();
         if (items.Count == 0) return;
         var what = items.Count == 1 ? items[0].Name : $"{items.Count} items";
-        if (MessageBox.Show(Window.GetWindow(this), $"Delete {what} on {_vm?.Endpoint.Host}?", "RemoteMan", MessageBoxButton.YesNo) != MessageBoxResult.Yes) return;
+        if (!ChoiceDialog.Confirm(Window.GetWindow(this), $"Delete {what}?", $"It is deleted on {_vm?.Endpoint.Host} and can't be undone.", "Delete", danger: true)) return;
         try { foreach (var i in items) await _sftp.DeleteAsync(i); }
         catch (Exception ex) { TransferText.Text = ex.Message; }
         await NavigateAsync(_sftp.CurrentDirectory);
@@ -558,7 +558,7 @@ public partial class SshSessionView : UserControl
     private async void OnDeleteSnippet(object sender, RoutedEventArgs e)
     {
         if (_main is null || SnippetList.SelectedItem is not Entry sel) return;
-        if (MessageBox.Show(Window.GetWindow(this), $"Delete snippet \"{sel.Name}\"?", "RemoteMan", MessageBoxButton.YesNo) == MessageBoxResult.Yes)
+        if (ChoiceDialog.Confirm(Window.GetWindow(this), $"Delete snippet \"{sel.Name}\"?", "", "Delete", danger: true))
             await _main.DeleteSnippetAsync(sel);
     }
 
