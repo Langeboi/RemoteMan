@@ -1,28 +1,32 @@
-<!-- Flat, square, muted. Matches the approved mockup. -->
+<!-- Onyx-style dark: near-black graphite, one teal accent, blue entry icons, yellow keys. Matches the approved UI refresh mockup. -->
 <ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
 
-    <Color x:Key="C.Bg">#1B1D20</Color>
-    <Color x:Key="C.Panel">#202226</Color>
-    <Color x:Key="C.Panel2">#1E2023</Color>
-    <Color x:Key="C.Header">#232529</Color>
-    <Color x:Key="C.Border">#34373C</Color>
-    <Color x:Key="C.BorderSoft">#2C2F33</Color>
-    <Color x:Key="C.Work">#141517</Color>
-    <Color x:Key="C.Text">#D4D7DC</Color>
-    <Color x:Key="C.TextStrong">#EEF0F2</Color>
-    <Color x:Key="C.Muted">#9DA2A9</Color>
-    <Color x:Key="C.Faint">#6E737B</Color>
-    <Color x:Key="C.Select">#33414F</Color>
-    <Color x:Key="C.Hover">#272A2F</Color>
-    <Color x:Key="C.Accent">#7C93AD</Color>
-    <Color x:Key="C.InputBorder">#3A3D42</Color>
-    <Color x:Key="C.Button">#2A2D31</Color>
-    <Color x:Key="C.ButtonBorder">#44474D</Color>
-    <Color x:Key="C.Presence">#C2B48A</Color>
-    <Color x:Key="C.Ok">#7FA37F</Color>
-    <Color x:Key="C.Warn">#B08A5A</Color>
-    <Color x:Key="C.Bad">#C46A6A</Color>
+    <Color x:Key="C.Bg">#0F1113</Color>
+    <Color x:Key="C.Panel">#16191C</Color>
+    <Color x:Key="C.Panel2">#131619</Color>
+    <Color x:Key="C.Header">#16191C</Color>
+    <Color x:Key="C.Border">#2A2F35</Color>
+    <Color x:Key="C.BorderSoft">#22272C</Color>
+    <Color x:Key="C.Work">#0B0D0F</Color>
+    <Color x:Key="C.Text">#E3E6EA</Color>
+    <Color x:Key="C.TextStrong">#F4F6F8</Color>
+    <Color x:Key="C.Muted">#9AA3AD</Color>
+    <Color x:Key="C.Faint">#7D8690</Color>
+    <Color x:Key="C.Select">#22282D</Color>
+    <Color x:Key="C.Hover">#1C2024</Color>
+    <Color x:Key="C.Accent">#3FB8A4</Color>
+    <Color x:Key="C.InputBorder">#2E343A</Color>
+    <Color x:Key="C.Button">#1D2125</Color>
+    <Color x:Key="C.ButtonBorder">#353B42</Color>
+    <Color x:Key="C.Presence">#E3D7A8</Color>
+    <Color x:Key="C.Ok">#54C08A</Color>
+    <Color x:Key="C.Warn">#E0A84A</Color>
+    <Color x:Key="C.Bad">#E5534B</Color>
+    <Color x:Key="C.Rail">#121417</Color>
+    <Color x:Key="C.EntryIcon">#5B9BEA</Color>
+    <Color x:Key="C.KeyIcon">#D6C25E</Color>
+    <Color x:Key="C.FolderIcon">#7D8A99</Color>
 
     <SolidColorBrush x:Key="Bg" Color="{StaticResource C.Bg}" />
     <SolidColorBrush x:Key="Panel" Color="{StaticResource C.Panel}" />
@@ -45,6 +49,10 @@
     <SolidColorBrush x:Key="Ok" Color="{StaticResource C.Ok}" />
     <SolidColorBrush x:Key="Warn" Color="{StaticResource C.Warn}" />
     <SolidColorBrush x:Key="Bad" Color="{StaticResource C.Bad}" />
+    <SolidColorBrush x:Key="Rail" Color="{StaticResource C.Rail}" />
+    <SolidColorBrush x:Key="EntryIcon" Color="{StaticResource C.EntryIcon}" />
+    <SolidColorBrush x:Key="KeyIcon" Color="{StaticResource C.KeyIcon}" />
+    <SolidColorBrush x:Key="FolderIcon" Color="{StaticResource C.FolderIcon}" />
 
     <FontFamily x:Key="UiFont">Segoe UI Variable Text, Segoe UI</FontFamily>
     <FontFamily x:Key="MonoFont">Cascadia Mono, Consolas</FontFamily>
@@ -72,7 +80,7 @@
         <Setter Property="VerticalAlignment" Value="Center" />
     </Style>
 
-    <!-- Protocol icons: 16px line glyphs, muted. Set Tag to RDP / SSH / WEB / VNC / KEY. -->
+    <!-- Protocol icons: 16px line glyphs, all one blue; credentials (keys) stay yellow. Set Tag to RDP / SSH / WEB / VNC / KEY. -->
     <Geometry x:Key="Icon.RDP">M1.5,2.5 H14.5 V11.5 H1.5 Z M5,14.5 H11 M8,11.5 V14.5</Geometry>
     <Geometry x:Key="Icon.SSH">M1.5,2.5 H14.5 V13.5 H1.5 Z M4,6 L6.5,8 L4,10 M8,10.5 H11.5</Geometry>
     <Geometry x:Key="Icon.WEB">M14.5,8 A6.5,6.5 0 1 1 1.5,8 A6.5,6.5 0 1 1 14.5,8 Z M1.5,8 H14.5 M8,1.5 C5,4.5 5,11.5 8,14.5 M8,1.5 C11,4.5 11,11.5 8,14.5</Geometry>
@@ -83,11 +91,11 @@
         <Setter Property="Width" Value="16" />
         <Setter Property="Height" Value="16" />
         <Setter Property="Stretch" Value="None" />
-        <Setter Property="StrokeThickness" Value="1.2" />
+        <Setter Property="StrokeThickness" Value="1.3" />
         <Setter Property="StrokeLineJoin" Value="Round" />
         <Setter Property="StrokeStartLineCap" Value="Round" />
         <Setter Property="StrokeEndLineCap" Value="Round" />
-        <Setter Property="Stroke" Value="{StaticResource Muted}" />
+        <Setter Property="Stroke" Value="{StaticResource EntryIcon}" />
         <Setter Property="SnapsToDevicePixels" Value="True" />
         <Setter Property="VerticalAlignment" Value="Center" />
         <Style.Triggers>
@@ -95,7 +103,7 @@
             <Trigger Property="Tag" Value="SSH"><Setter Property="Data" Value="{StaticResource Icon.SSH}" /><Setter Property="ToolTip" Value="SSH" /></Trigger>
             <Trigger Property="Tag" Value="WEB"><Setter Property="Data" Value="{StaticResource Icon.WEB}" /><Setter Property="ToolTip" Value="Web" /></Trigger>
             <Trigger Property="Tag" Value="VNC"><Setter Property="Data" Value="{StaticResource Icon.VNC}" /><Setter Property="ToolTip" Value="VNC" /></Trigger>
-            <Trigger Property="Tag" Value="KEY"><Setter Property="Data" Value="{StaticResource Icon.KEY}" /><Setter Property="ToolTip" Value="Credential" /></Trigger>
+            <Trigger Property="Tag" Value="KEY"><Setter Property="Data" Value="{StaticResource Icon.KEY}" /><Setter Property="ToolTip" Value="Credential" /><Setter Property="Stroke" Value="{StaticResource KeyIcon}" /></Trigger>
         </Style.Triggers>
     </Style>
 
@@ -116,7 +124,7 @@
                         <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
                     </Border>
                     <ControlTemplate.Triggers>
-                        <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="b" Property="Background" Value="#33363B" /></Trigger>
+                        <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="b" Property="Background" Value="#262B30" /></Trigger>
                         <Trigger Property="IsPressed" Value="True"><Setter TargetName="b" Property="Background" Value="{StaticResource Select}" /></Trigger>
                         <Trigger Property="IsKeyboardFocused" Value="True"><Setter TargetName="b" Property="BorderBrush" Value="{StaticResource Accent}" /></Trigger>
                         <Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="0.5" /></Trigger>
@@ -126,14 +134,14 @@
         </Setter>
     </Style>
     <Style TargetType="Button" x:Key="PrimaryButton" BasedOn="{StaticResource {x:Type Button}}">
-        <Setter Property="Background" Value="#3A4E63" />
-        <Setter Property="BorderBrush" Value="#50667D" />
+        <Setter Property="Background" Value="#1F5E55" />
+        <Setter Property="BorderBrush" Value="{StaticResource Accent}" />
         <Setter Property="Foreground" Value="{StaticResource TextStrong}" />
     </Style>
     <Style TargetType="Button" x:Key="FlatButton" BasedOn="{StaticResource {x:Type Button}}">
         <Setter Property="Background" Value="Transparent" />
         <Setter Property="BorderThickness" Value="0" />
-        <Setter Property="Foreground" Value="#B8BCC3" />
+        <Setter Property="Foreground" Value="#B7BEC6" />
         <Setter Property="Padding" Value="8,0" />
         <Setter Property="MinHeight" Value="22" />
     </Style>
@@ -194,30 +202,34 @@
     <!-- Menu strip -->
     <Style TargetType="Menu">
         <Setter Property="Background" Value="Transparent" />
-        <Setter Property="Foreground" Value="#B8BCC3" />
+        <Setter Property="Foreground" Value="#B7BEC6" />
     </Style>
 
-    <!-- Tree: full-row selection, 22px rows; indentation comes from the node's Depth -->
+    <!-- Tree: full-row selection, 24px rows, a 2px accent bar on the selected row; indentation comes from the node's Depth -->
     <Style TargetType="TreeViewItem" x:Key="EntryItem">
         <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}" />
         <Setter Property="IsSelected" Value="{Binding IsSelected, Mode=TwoWay}" />
-        <Setter Property="Foreground" Value="{StaticResource Text}" />
+        <Setter Property="Foreground" Value="#D5DADF" />
         <Setter Property="FocusVisualStyle" Value="{x:Null}" />
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="TreeViewItem">
                     <StackPanel>
-                        <Border x:Name="row" Height="22" Background="Transparent" Padding="{Binding Indent}">
-                            <ContentPresenter ContentSource="Header" VerticalAlignment="Center" />
+                        <Border x:Name="row" Height="24" Background="Transparent" BorderBrush="Transparent" BorderThickness="2,0,0,0">
+                            <ContentPresenter ContentSource="Header" VerticalAlignment="Center" Margin="{Binding Indent}" />
                         </Border>
                         <ItemsPresenter x:Name="kids" />
                     </StackPanel>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsExpanded" Value="False"><Setter TargetName="kids" Property="Visibility" Value="Collapsed" /></Trigger>
                         <Trigger SourceName="row" Property="IsMouseOver" Value="True"><Setter TargetName="row" Property="Background" Value="{StaticResource Hover}" /></Trigger>
-                        <DataTrigger Binding="{Binding IsLinkTarget}" Value="True"><Setter TargetName="row" Property="Background" Value="#2D2B25" /></DataTrigger>
+                        <DataTrigger Binding="{Binding IsLinkTarget}" Value="True">
+                            <Setter TargetName="row" Property="Background" Value="#1F1E17" />
+                            <Setter TargetName="row" Property="BorderBrush" Value="{StaticResource KeyIcon}" />
+                        </DataTrigger>
                         <Trigger Property="IsSelected" Value="True">
                             <Setter TargetName="row" Property="Background" Value="{StaticResource Select}" />
+                            <Setter TargetName="row" Property="BorderBrush" Value="{StaticResource Accent}" />
                             <Setter Property="Foreground" Value="{StaticResource TextStrong}" />
                         </Trigger>
                     </ControlTemplate.Triggers>
@@ -226,26 +238,126 @@
         </Setter>
     </Style>
 
-    <!-- Session tabs: square, 26px, thin accent line on the active tab -->
+    <!-- Session tabs: 32px, a 2px line on the active tab (accent in the focused pane, grey in the other) -->
     <Style TargetType="ListBoxItem" x:Key="SessionTab">
         <Setter Property="Foreground" Value="{StaticResource Muted}" />
         <Setter Property="FocusVisualStyle" Value="{x:Null}" />
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="ListBoxItem">
-                    <Border x:Name="tab" Height="26" Padding="10,0" Background="Transparent" BorderBrush="{StaticResource Border}" BorderThickness="0,0,1,0">
+                    <Border x:Name="tab" Height="32" Padding="12,0,6,0" Background="Transparent" BorderBrush="{StaticResource Border}" BorderThickness="0,0,1,0">
                         <Grid>
-                            <Border x:Name="line" Height="1" VerticalAlignment="Top" Background="Transparent" Margin="-10,0" />
+                            <Border x:Name="line" Height="2" VerticalAlignment="Top" Background="Transparent" Margin="-12,0,-6,0" />
                             <ContentPresenter VerticalAlignment="Center" />
                         </Grid>
                     </Border>
                     <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True"><Setter Property="Foreground" Value="{StaticResource Text}" /></Trigger>
                         <Trigger Property="IsSelected" Value="True">
-                            <Setter TargetName="tab" Property="Background" Value="{StaticResource Work}" />
-                            <Setter TargetName="line" Property="Background" Value="{StaticResource Accent}" />
+                            <Setter TargetName="tab" Property="Background" Value="{StaticResource Bg}" />
+                            <Setter TargetName="line" Property="Background" Value="#4A525B" />
                             <Setter Property="Foreground" Value="{StaticResource TextStrong}" />
                         </Trigger>
-                        <Trigger Property="IsMouseOver" Value="True"><Setter Property="Foreground" Value="{StaticResource Text}" /></Trigger>
+                        <MultiDataTrigger>
+                            <MultiDataTrigger.Conditions>
+                                <Condition Binding="{Binding IsSelected, RelativeSource={RelativeSource TemplatedParent}}" Value="True" />
+                                <Condition Binding="{Binding Tag, RelativeSource={RelativeSource AncestorType=ListBox}}" Value="focused" />
+                            </MultiDataTrigger.Conditions>
+                            <Setter TargetName="line" Property="Background" Value="{StaticResource Accent}" />
+                        </MultiDataTrigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- Icon rail buttons: 34px squares, accent glyph and a 2px bar when checked -->
+    <Style TargetType="RadioButton" x:Key="RailButton">
+        <Setter Property="Foreground" Value="#8E98A3" />
+        <Setter Property="Width" Value="34" />
+        <Setter Property="Height" Value="34" />
+        <Setter Property="Margin" Value="0,2" />
+        <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="RadioButton">
+                    <Border x:Name="b" Background="Transparent" CornerRadius="5" BorderBrush="Transparent" BorderThickness="2,0,0,0">
+                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="b" Property="Background" Value="{StaticResource Hover}" /></Trigger>
+                        <Trigger Property="IsChecked" Value="True">
+                            <Setter TargetName="b" Property="Background" Value="#1F2327" />
+                            <Setter TargetName="b" Property="BorderBrush" Value="{StaticResource Accent}" />
+                            <Setter Property="Foreground" Value="{StaticResource Accent}" />
+                        </Trigger>
+                        <Trigger Property="IsKeyboardFocused" Value="True"><Setter TargetName="b" Property="Background" Value="{StaticResource Hover}" /></Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- Title bar icon buttons (also clickable inside the custom window chrome) -->
+    <Style TargetType="Button" x:Key="BarButton" BasedOn="{StaticResource FlatButton}">
+        <Setter Property="Width" Value="30" />
+        <Setter Property="Height" Value="28" />
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="WindowChrome.IsHitTestVisibleInChrome" Value="True" />
+    </Style>
+    <Style TargetType="ToggleButton" x:Key="BarToggle">
+        <Setter Property="Foreground" Value="#B7BEC6" />
+        <Setter Property="Width" Value="30" />
+        <Setter Property="Height" Value="28" />
+        <Setter Property="WindowChrome.IsHitTestVisibleInChrome" Value="True" />
+        <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ToggleButton">
+                    <Border x:Name="b" Background="Transparent" CornerRadius="4">
+                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="b" Property="Background" Value="{StaticResource Hover}" /></Trigger>
+                        <Trigger Property="IsChecked" Value="True">
+                            <Setter TargetName="b" Property="Background" Value="#1F2327" />
+                            <Setter Property="Foreground" Value="{StaticResource Accent}" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+    <Style TargetType="Button" x:Key="CaptionButton">
+        <Setter Property="Width" Value="46" />
+        <Setter Property="Foreground" Value="#9AA3AD" />
+        <Setter Property="WindowChrome.IsHitTestVisibleInChrome" Value="True" />
+        <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <Border x:Name="b" Background="Transparent">
+                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="b" Property="Background" Value="#262B30" /></Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+    <Style TargetType="Button" x:Key="CloseCaptionButton" BasedOn="{StaticResource CaptionButton}">
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <Border x:Name="b" Background="Transparent">
+                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="b" Property="Background" Value="#C42B1C" />
+                            <Setter Property="Foreground" Value="White" />
+                        </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>
             </Setter.Value>

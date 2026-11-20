@@ -5,7 +5,19 @@ using RemoteMan.Core.Model;
 
 namespace RemoteMan.App.ViewModels;
 
-public sealed record PresenceChip(string Initials, string ToolTip);
+/// <summary>A colored initials circle: who is on an entry, or who is online.</summary>
+public sealed record PresenceChip(string Initials, string ToolTip, string Color = "#5B9BEA")
+{
+    private static readonly string[] Palette = ["#D98C5F", "#B48AE6", "#5B9BEA", "#54C08A", "#E0A84A", "#3FB8A4", "#E57A9A"];
+
+    /// <summary>Same user, same color, on every machine.</summary>
+    public static string ColorFor(string user)
+    {
+        var h = 0;
+        foreach (var c in user.ToLowerInvariant()) h = unchecked(h * 31 + c);
+        return Palette[(int)((uint)h % Palette.Length)];
+    }
+}
 
 /// <summary>A row in the navigation tree.</summary>
 public sealed partial class EntryNode : ObservableObject
@@ -24,7 +36,7 @@ public sealed partial class EntryNode : ObservableObject
     [ObservableProperty] private bool _isLinkTarget;
 
     public int Depth { get; }
-    public Thickness Indent => new(8 + Depth * 14, 0, 8, 0);
+    public Thickness Indent => new(8 + Depth * 16, 0, 8, 0);
     public string Name => Entry.Name;
     public bool IsFolder => Entry.Kind == EntryKind.Folder;
     public bool HasLinkedCredential => Entry.CredentialId is not null;

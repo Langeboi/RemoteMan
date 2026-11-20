@@ -23,6 +23,11 @@ public sealed class AppSettings
     public string? ActiveDataSource { get; set; }
     public int FallbackTimeoutMs { get; set; } = 2000;
 
+    // Per-user UI state (not shared through the data source).
+    public List<Guid> Favorites { get; set; } = new();
+    public List<Guid> Recent { get; set; } = new();
+    public bool SplitView { get; set; } = true;
+
     public DataSourceConfig Active =>
         DataSources.FirstOrDefault(d => d.Name == ActiveDataSource) ?? DataSources[0];
 
