@@ -292,6 +292,31 @@ public class StoreTests : IDisposable
         public Task StartChangeFeedAsync(CancellationToken ct = default) => inner.StartChangeFeedAsync(ct);
         public ValueTask DisposeAsync() => inner.DisposeAsync();
     }
+
+    [Fact]
+    public async Task LoginIsInheritedFromFoldersAndOldEntriesKeepTheirLogin()
+    {
+        await using var store = new EntryStore(new SqliteDataSource(_db), "alice", "pc1");
+        await store.OpenAsync();
+        var cred = await store.SaveAsync(new Entry { Kind = EntryKind.Credential, Name = "admin", Credential = new() { UserName = "a" } });
+        var top = await store.SaveAsync(new Entry { Kind = EntryKind.Folder, Name = "DC", Login = LoginSource.Saved, CredentialId = cred.Id });
+        var sub = await store.SaveAsync(new Entry { Kind = EntryKind.Folder, Name = "Hyper-V", ParentId = top.Id, Login = LoginSource.Inherited });
+        var rdp = await store.SaveAsync(new Entry { Kind = EntryKind.Rdp, Name = "hv01", ParentId = sub.Id, Login = LoginSource.Inherited });
+        Assert.Equal((LoginSource.Saved, cred.Id), (store.ResolveLogin(rdp).Source, store.ResolveLogin(rdp).Holder!.Id));
+
+        var own = await store.SaveAsync(new Entry { Kind = EntryKind.Ssh, Name = "web", Login = LoginSource.Embedded,
+            Credential = new() { Type = CredentialType.SshKey, UserName = "root", PrivateKeyPath = "~/.ssh/id" } });
+        var back = EntryStore.Clone(store.Get(own.Id)!);
+        Assert.Equal(CredentialType.SshKey, back.Credential!.Type);
+        Assert.Equal(LoginSource.Embedded, store.ResolveLogin(back).Source);
+
+        // Payload written by an older version: linked credential, or the SSO flag.
+        var old = new Entry();
+        EntryJson.ApplyPayload(old, $$"""{"CredentialId":"{{cred.Id}}"}""");
+        Assert.Equal(LoginSource.Saved, old.Login);
+        EntryJson.ApplyPayload(old, """{"UseWindowsLogin":true}""");
+        Assert.True(old.UseWindowsLogin);
+    }
 }
 
 public class EndpointTests

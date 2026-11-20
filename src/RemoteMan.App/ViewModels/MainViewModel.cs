@@ -8,6 +8,8 @@ using RemoteMan.Core.Networking;
 using RemoteMan.Core.Security;
 using RemoteMan.Core.Storage;
 using RemoteMan.Data;
+using RemoteMan.Protocols.Rdp;
+using RemoteMan.Protocols.Ssh;
 
 namespace RemoteMan.App.ViewModels;
 
@@ -27,7 +29,8 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
     }
 
     // --- dialogs supplied by the window ---
-    public Func<Entry, EntryStore, ISecretProtector, Entry?>? EditDialog { get; set; }
+    /// <summary>Opens the editor; returns the entries to save in order (the edited one last), or null on cancel.</summary>
+    public Func<Entry, EntryStore, ISecretProtector, IReadOnlyList<Entry>?>? EditDialog { get; set; }
     public Func<string, bool>? Confirm { get; set; }
     /// <summary>Shows a question with buttons; returns the index picked, or -1 when closed.</summary>
     public Func<string, string, string[], int>? Choose { get; set; }
@@ -143,6 +146,15 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
                 }
             }
             Add(null, Roots, 0);
+
+            // Favorites: a fixed group at the top with shortcuts to the starred entries.
+            var favorites = all.Where(e => e.Favorite && e.Kind != EntryKind.Folder).OrderBy(e => e.Name, StringComparer.OrdinalIgnoreCase).ToList();
+            if (favorites.Count > 0)
+            {
+                var group = new EntryNode(new Entry { Id = FavoritesId, Kind = EntryKind.Folder, Name = "Favorites" }, 0) { IsExpanded = !expanded.Contains(FavoritesId) };
+                foreach (var f in favorites) group.Children.Add(new EntryNode(f, 1));
+                Roots.Insert(0, group);
+            }
         }
 
         if (selectedId is { } id && _nodes.TryGetValue(id, out var sel)) { sel.IsSelected = true; Selected = sel; }
@@ -150,6 +162,9 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
         ApplyPresence();
         RefreshProperties();
     }
+
+    /// <summary>Id of the virtual Favorites group (never stored).</summary>
+    public static readonly Guid FavoritesId = new("f4f0a7e0-0000-4000-8000-000000000001");
 
     private static bool Matches(Entry e, string f) =>
         e.Name.Contains(f, StringComparison.OrdinalIgnoreCase) ||
@@ -192,15 +207,26 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
 
         if (e.Kind == EntryKind.Credential)
         {
-            Properties.Add(new PropertyRow("Login", (e.Credential?.Domain is { Length: > 0 } d ? d + "\\" : "") + e.Credential?.UserName));
-            var usedBy = _store.Entries.Where(x => x.CredentialId == e.Id).Select(x => x.Name).ToList();
+            var ct = e.Credential?.Type ?? CredentialType.Password;
+            Properties.Add(new PropertyRow("Type", ct switch { CredentialType.SshKey => "SSH key", CredentialType.Certificate => "certificate", CredentialType.Secret => "secret", _ => "user name and password" }));
+            if (e.Credential?.UserName is { Length: > 0 })
+                Properties.Add(new PropertyRow("Login", (e.Credential?.Domain is { Length: > 0 } d ? d + "\\" : "") + e.Credential?.UserName));
+            var usedBy = _store.Entries.Where(x => x.Login == LoginSource.Saved && x.CredentialId == e.Id).Select(x => x.Name).ToList();
             Properties.Add(new PropertyRow("Used by", usedBy.Count > 0 ? string.Join(", ", usedBy) : "nothing"));
         }
-        else if (e.IsConnectable)
+        else if (e.IsConnectable || e.Kind == EntryKind.Folder)
         {
-            var cred = e.CredentialId is { } cid ? _store.Get(cid) : null;
-            Properties.Add(new PropertyRow("Login", e.UseWindowsLogin ? "Windows (SSO)" : cred?.Name ?? "none (Ctrl+click a credential)"));
-            if (cred is not null && _nodes.TryGetValue(cred.Id, out var cn)) cn.IsLinkTarget = true;
+            var (src, holder) = _store.ResolveLogin(e);
+            var text = src switch
+            {
+                LoginSource.WindowsLogin => "Windows (SSO)",
+                LoginSource.Saved => holder!.Name,
+                LoginSource.Embedded => "typed in" + (holder?.Credential?.UserName is { Length: > 0 } u ? $" ({u})" : ""),
+                _ => e.IsConnectable ? "none (Ctrl+click a credential)" : "none",
+            };
+            if (e.Login == LoginSource.Inherited && src != LoginSource.None) text += ", from folder";
+            Properties.Add(new PropertyRow("Login", text));
+            if (src == LoginSource.Saved && _nodes.TryGetValue(holder!.Id, out var cn)) cn.IsLinkTarget = true;
         }
         switch (e.Kind)
         {
@@ -276,6 +302,41 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
 
     private bool CanConnect(EntryNode? node) => (node ?? Selected)?.Entry.IsConnectable == true;
 
+    /// <summary>One-off changes for "Connect with": nothing is saved.</summary>
+    public sealed record ConnectOptions(bool? External = null, LoginSource? Login = null, Guid? CredentialId = null, bool? AdminSession = null);
+
+    public async Task ConnectWithAsync(EntryNode node, ConnectOptions o)
+    {
+        if (node.Entry is not { IsConnectable: true } original || _store is null) return;
+        var e = EntryStore.Clone(original);
+        if (o.Login is { } l) { e.Login = l; e.CredentialId = o.CredentialId; }
+        if (o.AdminSession is { } admin) { e.Rdp ??= new(); e.Rdp.AdminSession = admin; }
+        if (o.External == true && e.Kind == EntryKind.Rdp) { await OpenInMstscAsync(e); return; }
+        if (o.External is { } ext && e.Kind == EntryKind.Web)
+        {
+            e.Web ??= new();
+            e.Web.Browser = ext ? (e.Web.Browser == BrowserKind.Embedded ? BrowserKind.SystemDefault : e.Web.Browser) : BrowserKind.Embedded;
+        }
+        await ConnectEntryAsync(e);
+    }
+
+    /// <summary>Asks for a password the credential doesn't store. Null means cancelled.</summary>
+    public Func<string, string?>? PromptPassword { get; set; }
+
+    private RemoteMan.Protocols.ResolvedCredential? ResolveForConnect(Entry e)
+    {
+        if (_store is null || _protector is null) return RemoteMan.Protocols.ResolvedCredential.None;
+        var cred = Secrets.Resolve(e, _store, _protector);
+        if (cred.AskPassword && cred.Password is null)
+        {
+            var who = cred.Domain is { Length: > 0 } d ? $"{d}\\{cred.UserName}" : cred.UserName;
+            var pw = PromptPassword?.Invoke($"Password for {who} on {e.Name}");
+            if (pw is null) return null;
+            cred = cred with { Password = pw };
+        }
+        return cred;
+    }
+
     private async Task ConnectEntryAsync(Entry e)
     {
         var probe = EntryStore.Clone(e);
@@ -292,7 +353,7 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
             return;
         }
 
-        var cred = _store is null || _protector is null ? new RemoteMan.Protocols.ResolvedCredential(null, null, null, null, null) : Secrets.Resolve(e, _store, _protector);
+        if (ResolveForConnect(e) is not { } cred) { Message = ""; return; }
         var endpoint = result.Endpoint!;
 
         // Chosen external browser missing: offer to install it or use the built-in one, never just fail.
@@ -388,6 +449,7 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
     {
         var kind = Enum.Parse<EntryKind>(kindName);
         var parent = Selected?.Entry is { } s ? (s.Kind == EntryKind.Folder ? s.Id : s.ParentId) : null;
+        if (parent == FavoritesId) parent = null;
         var e = new Entry { Kind = kind, ParentId = parent, Name = kind == EntryKind.Folder ? "New folder" : "" };
         switch (kind)
         {
@@ -401,19 +463,20 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
     }
 
     [RelayCommand(CanExecute = nameof(HasSelection))]
-    private Task EditAsync() => Selected is { } s ? EditAndSaveAsync(EntryStore.Clone(s.Entry)) : Task.CompletedTask;
+    private Task EditAsync() => Selected is { } s && s.Id != FavoritesId ? EditAndSaveAsync(EntryStore.Clone(s.Entry)) : Task.CompletedTask;
 
     private async Task EditAndSaveAsync(Entry e)
     {
         if (_store is null || _protector is null || EditDialog is null) return;
         if (!_store.IsOnline) { Message = "Offline: entries can be opened but not changed until the database is back"; return; }
         await _store.SetMyPresenceAsync(e.Id, PresenceState.Editing);
-        var edited = EditDialog(e, _store, _protector);
+        var toSave = EditDialog(e, _store, _protector);
         await _store.SetMyPresenceAsync(Selected?.Id, PresenceState.Viewing);
-        if (edited is null) return;
+        if (toSave is null || toSave.Count == 0) return;
         try
         {
-            var saved = await _store.SaveAsync(edited);
+            Entry saved = null!;
+            foreach (var item in toSave) saved = await _store.SaveAsync(item);
             if (_nodes.TryGetValue(saved.Id, out var n)) { n.IsSelected = true; Selected = n; }
         }
         catch (ConcurrencyException ex)
@@ -426,7 +489,7 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
     [RelayCommand(CanExecute = nameof(HasSelection))]
     private async Task DeleteAsync()
     {
-        if (_store is null || Selected is not { } s) return;
+        if (_store is null || Selected is not { } s || s.Id == FavoritesId) return;
         var what = s.IsFolder ? $"folder \"{s.Name}\" and everything in it" : $"\"{s.Name}\"";
         if (Confirm?.Invoke($"Delete {what}?") != true) return;
         try { await _store.DeleteAsync(s.Id); }
@@ -446,6 +509,115 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
         return EditAndSaveAsync(copy);
     }
 
+    // ---------------- entry menu actions ----------------
+
+    public IEnumerable<Entry> Folders => _store?.Entries.Where(x => x.Kind == EntryKind.Folder) ?? [];
+    public IEnumerable<Entry> Credentials => (_store?.Entries ?? []).Where(x => x.Kind == EntryKind.Credential).OrderBy(x => x.Name, StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>"Datacenter / Hyper-V" style path for the Move to menu.</summary>
+    public string FolderPath(Entry folder)
+    {
+        var parts = new List<string>();
+        for (Entry? f = folder; f is not null && parts.Count < 32; f = f.ParentId is { } p ? _store?.Get(p) : null) parts.Insert(0, f.Name);
+        return string.Join(" / ", parts);
+    }
+
+    public async Task SaveChangeAsync(Entry original, Action<Entry> change, string done)
+    {
+        if (_store is null) return;
+        if (!_store.IsOnline) { Message = "Offline: entries can't be changed until the database is back"; return; }
+        var copy = EntryStore.Clone(original);
+        change(copy);
+        try { await _store.SaveAsync(copy); Message = done; }
+        catch (Exception ex) { Message = ex.Message; }
+    }
+
+    public Task ToggleFavoriteAsync(Entry e) =>
+        SaveChangeAsync(e, x => x.Favorite = !x.Favorite, e.Favorite ? $"Removed {e.Name} from favorites" : $"Added {e.Name} to favorites");
+
+    public Task SetLoginAsync(Entry e, LoginSource source, Guid? credentialId = null) =>
+        SaveChangeAsync(e, x => { x.Login = source; x.CredentialId = credentialId; if (source != LoginSource.Embedded) x.Credential = null; },
+            source switch
+            {
+                LoginSource.Saved => $"Linked {_store?.Get(credentialId ?? Guid.Empty)?.Name} to {e.Name}",
+                LoginSource.WindowsLogin => $"{e.Name} signs in with your Windows login",
+                _ => $"Removed the login from {e.Name}",
+            });
+
+    public void CopyHost(Entry e)
+    {
+        var host = e.Kind == EntryKind.Web && e.Endpoints.Count == 0 ? WebSettings.NormalizeUrl(e.Web?.Url) : e.Endpoints.FirstOrDefault()?.ToString();
+        if (string.IsNullOrEmpty(host)) { Message = $"{e.Name} has no host"; return; }
+        CredentialClipboard.CopyText(host, secret: false);
+        Message = "Host copied";
+    }
+
+    /// <summary>Opens an RDP entry in Windows' own Remote Desktop client. The password is handed over
+    /// through Windows Credential Manager (TERMSRV/host) and removed again shortly after.</summary>
+    public async Task OpenInMstscAsync(Entry e)
+    {
+        if (e.Endpoints.FirstOrDefault() is not { } ep) { Message = $"{e.Name} has no host"; return; }
+        if (ResolveForConnect(e) is not { } cred) return;
+        try
+        {
+            var file = RdpFiles.Write(e, ep, cred);
+            await RdpFiles.LaunchMstscAsync(file, ep, cred);
+            Message = $"Opened {e.Name} in Remote Desktop Connection";
+        }
+        catch (Exception ex) { Message = ex.Message; }
+    }
+
+    public void SaveRdpFile(Entry e, string path)
+    {
+        if (e.Endpoints.FirstOrDefault() is not { } ep) { Message = $"{e.Name} has no host"; return; }
+        var cred = _store is null || _protector is null ? RemoteMan.Protocols.ResolvedCredential.None : Secrets.Resolve(e, _store, _protector);
+        System.IO.File.WriteAllText(path, RdpFiles.Build(e, ep, cred));
+        Message = $"Saved {System.IO.Path.GetFileName(path)} (without the password)";
+    }
+
+    public void Ping(Entry e)
+    {
+        var host = e.Endpoints.FirstOrDefault()?.Host ?? (Uri.TryCreate(WebSettings.NormalizeUrl(e.Web?.Url), UriKind.Absolute, out var u) ? u.Host : null);
+        if (host is null) { Message = $"{e.Name} has no host"; return; }
+        var psi = new System.Diagnostics.ProcessStartInfo("cmd.exe") { UseShellExecute = true };
+        psi.ArgumentList.Add("/k"); psi.ArgumentList.Add("ping"); psi.ArgumentList.Add("-t"); psi.ArgumentList.Add(host);
+        System.Diagnostics.Process.Start(psi);
+    }
+
+    public async Task OpenInWinScpAsync(Entry e)
+    {
+        if (e.Endpoints.FirstOrDefault() is not { } ep) { Message = $"{e.Name} has no host"; return; }
+        if (ResolveForConnect(e) is not { } cred) return;
+        if (!WinScp.IsInstalled)
+        {
+            var pick = Choose?.Invoke("WinSCP isn't installed", "Browse files on this server in WinSCP? It isn't installed on this PC. RemoteMan's own Files panel (Ctrl+Shift+F in an SSH tab) works without it.",
+                ["Install WinSCP", "Cancel"]) ?? 1;
+            if (pick != 0) return;
+            Message = "Installing WinSCP…";
+            var r = await RemoteMan.Protocols.Web.WingetInstaller.InstallAsync("WinSCP.WinSCP", "https://winscp.net/eng/download.php", () => WinScp.IsInstalled);
+            if (r != RemoteMan.Protocols.Web.WingetInstaller.Result.Installed)
+            {
+                Message = r == RemoteMan.Protocols.Web.WingetInstaller.Result.DownloadPageOpened ? "Opened the WinSCP download page" : "Couldn't install WinSCP";
+                return;
+            }
+        }
+        try { WinScp.Open(ep, cred); Message = $"Opened {e.Name} in WinSCP"; }
+        catch (Exception ex) { Message = ex.Message; }
+    }
+
+    /// <summary>Text for the "Properties and history" dialog.</summary>
+    public string Describe(Entry e)
+    {
+        var lines = new List<string> { $"Type: {e.Kind}" };
+        if (e.ParentId is { } p && _store?.Get(p) is { } folder) lines.Add($"Folder: {FolderPath(folder)}");
+        foreach (var r in Properties) lines.Add($"{r.Key}: {r.Value}");
+        lines.Add("");
+        lines.Add($"Created: {(e.CreatedAt is { } c ? c.ToLocalTime().ToString("g") : "unknown")}{(e.CreatedBy is { } cb ? " by " + cb : "")}");
+        lines.Add($"Last modified: {e.UpdatedAt.ToLocalTime():g}{(e.UpdatedBy is { } ub ? " by " + ub : "")}");
+        lines.Add($"Revision: {e.Revision}");
+        return string.Join("\n", lines.Distinct());
+    }
+
     // ---------------- copy login details ----------------
 
     /// <summary>The credential for the selected entry: its own for credential entries, else the linked one.</summary>
@@ -453,7 +625,7 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
     {
         if (_store is null || _protector is null || Selected?.Entry is not { } e) return null;
         var c = Secrets.Resolve(e, _store, _protector);
-        if (c.UserName is null && c.Password is null) { Message = $"{e.Name} has no login linked"; return null; }
+        if (c.UserName is null && c.Password is null) { Message = c.AskPassword ? $"{e.Name} asks for the password when connecting" : $"{e.Name} has no login"; return null; }
         return c;
     }
 

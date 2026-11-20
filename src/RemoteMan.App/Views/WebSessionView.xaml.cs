@@ -37,6 +37,25 @@ public partial class WebSessionView : UserControl
         {
             if (vm.Settings.IgnoreCertificateErrors) a.Action = CoreWebView2ServerCertificateErrorAction.AlwaysAllow;
         };
+        // Certificate credential: offer that client certificate when a site asks for one. WebView2 can
+        // only present certificates from the Windows store, so it is added to the user's store once.
+        if (vm.Credential.Certificate is { } pfx)
+        {
+            try
+            {
+                var thumb = ClientCertificates.EnsureInUserStore(pfx, vm.Credential.Password);
+                core.ClientCertificateRequested += (_, a) =>
+                {
+                    var match = a.MutuallyTrustedCertificates.FirstOrDefault(c =>
+                        string.Equals(c.ToX509Certificate2().Thumbprint, thumb, StringComparison.OrdinalIgnoreCase));
+                    if (match is null) return;
+                    a.SelectedCertificate = match;
+                    a.Handled = true;
+                };
+            }
+            catch (Exception ex) { vm.StatusText = $"Client certificate not usable: {ex.Message}"; }
+        }
+
         core.BasicAuthenticationRequested += (_, a) =>
         {
             if (!sso && vm.Credential.UserName is { } u) { a.Response.UserName = u; a.Response.Password = vm.Credential.Password ?? ""; }
