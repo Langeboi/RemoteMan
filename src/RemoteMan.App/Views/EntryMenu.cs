@@ -96,6 +96,11 @@ public static class EntryMenu
             menu.Items.Add(PasteItem(vm, e.Id));
             menu.Items.Add(Item("Expand all inside", "expand", () => vm.SetExpanded(e.Id, true)));
             menu.Items.Add(Item("Collapse all inside", "collapse", () => vm.SetExpanded(e.Id, false)));
+            menu.Items.Add(Item("Change icon…", "folder", () =>
+            {
+                if (FolderIconPicker.Show(owner, e, out var icon, out var color))
+                    _ = vm.SaveChangeAsync(e, x => { x.Icon = icon; x.IconColor = color; }, $"Changed the icon of {e.Name}");
+            }));
             menu.Items.Add(new Separator());
         }
 
@@ -175,15 +180,62 @@ public static class EntryMenu
         menu.Items.Add(del);
     }
 
+    /// <summary>Everything that can be created, in menu order: group, name, one line on what it's for, icon tag, icon colour.</summary>
+    public static readonly IReadOnlyList<(string Group, EntryKind Kind, string Name, string Description, string Tag, string Color)> EntryTypes =
+    [
+        ("Remote desktop", EntryKind.Rdp, "RDP", "Windows desktops and servers", "RDP", "#5B9BEA"),
+        ("Remote desktop", EntryKind.Vnc, "VNC", "Linux desktops, appliances", "VNC", "#5B9BEA"),
+        ("Remote desktop", EntryKind.Proxmox, "Proxmox console", "A VM or container console", "PVE", "#5B9BEA"),
+        ("Terminal", EntryKind.Ssh, "SSH", "Linux, switches, firewalls", "SSH", "#3FB8A4"),
+        ("Terminal", EntryKind.Telnet, "Telnet", "Older switches and devices", "TEL", "#3FB8A4"),
+        ("Terminal", EntryKind.Serial, "Serial console", "COM port / USB console cable", "SER", "#3FB8A4"),
+        ("Files", EntryKind.Sftp, "SFTP / SCP", "Browse and copy files over SSH", "SFTP", "#D6A85E"),
+        ("Files", EntryKind.Ftp, "FTP / FTPS", "Old-style file servers", "FTP", "#D6A85E"),
+        ("Web", EntryKind.Web, "Web page", "Admin pages, dashboards", "WEB", "#8C9BF0"),
+        ("Tools", EntryKind.PowerShell, "PowerShell remoting", "Enter-PSSession to a server", "PS", "#C77DDB"),
+        ("Tools", EntryKind.WinBox, "WinBox", "MikroTik routers", "WBX", "#C77DDB"),
+        ("Organize", EntryKind.Folder, "Folder", "Group entries, share a login", "DIR", "#9AA3AD"),
+        ("Organize", EntryKind.Credential, "Credential", "Login to reuse across entries", "KEY", "#D6C25E"),
+    ];
+
+    /// <summary>The New entry menu: icon, name and a line of explanation per type, grouped under small headings.</summary>
+    public static void FillNew(ItemsControl menu, MainViewModel vm, Guid? parent)
+    {
+        string? group = null;
+        foreach (var t in EntryTypes)
+        {
+            if (t.Group != group)
+            {
+                if (group is not null) menu.Items.Add(new Separator());
+                group = t.Group;
+                var head = new MenuItem { Header = t.Group.ToUpperInvariant(), IsEnabled = false, FontSize = 10, Height = 20 };
+                head.SetResourceReference(Control.ForegroundProperty, "Faint");
+                menu.Items.Add(head);
+            }
+            var kind = t.Kind.ToString();
+            var color = (Color)ColorConverter.ConvertFromString(t.Color);
+            var icon = new System.Windows.Shapes.Path
+            {
+                Width = 16, Height = 16, Stretch = Stretch.None, StrokeThickness = 1.3, Stroke = new SolidColorBrush(color),
+                StrokeLineJoin = PenLineJoin.Round, StrokeStartLineCap = PenLineCap.Round, StrokeEndLineCap = PenLineCap.Round, SnapsToDevicePixels = true,
+            };
+            icon.SetResourceReference(System.Windows.Shapes.Path.DataProperty, "Icon." + t.Tag);
+            var text = new StackPanel { Margin = new Thickness(2, 3, 0, 3) };
+            text.Children.Add(new TextBlock { Text = t.Name });
+            var desc = new TextBlock { Text = t.Description, FontSize = 11 };
+            desc.SetResourceReference(TextBlock.ForegroundProperty, "Muted");
+            text.Children.Add(desc);
+            var mi = new MenuItem { Header = text, Icon = icon, MinWidth = 260 };
+            mi.Click += (_, _) => _ = vm.NewEntryInAsync(kind, parent);
+            menu.Items.Add(mi);
+        }
+    }
+
     /// <summary>"New entry" submenu that creates in <paramref name="parent"/> (null = top level).</summary>
     private static MenuItem NewSubmenu(MainViewModel vm, Guid? parent)
     {
         var mi = Item("New entry", "new");
-        foreach (var (label, kind, icon) in new[] { ("RDP", "Rdp", "rdp"), ("SSH", "Ssh", "ssh"), ("Web", "Web", "web"), ("VNC", "Vnc", "vnc"), ("Credential", "Credential", "key"), ("Folder", "Folder", "folder") })
-        {
-            if (kind == "Credential") mi.Items.Add(new Separator());
-            mi.Items.Add(Item(label, icon, () => _ = vm.NewEntryInAsync(kind, parent)));
-        }
+        FillNew(mi, vm, parent);
         return mi;
     }
 

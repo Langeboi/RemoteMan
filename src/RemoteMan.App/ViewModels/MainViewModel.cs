@@ -513,6 +513,13 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
             case EntryKind.Vnc: e.Vnc = new(); e.Endpoints.Add(new HostEndpoint("", 5900)); break;
             case EntryKind.Web: e.Web = new(); break;
             case EntryKind.Credential: e.Credential = new(); break;
+            case EntryKind.Telnet: e.Ssh = new(); e.Endpoints.Add(new HostEndpoint("", 23)); break;
+            case EntryKind.Serial: e.Ssh = new(); e.Serial = new(); break;
+            case EntryKind.Sftp: e.Ssh = new(); e.Endpoints.Add(new HostEndpoint("", 22)); break;
+            case EntryKind.Ftp: e.Ftp = new(); e.Endpoints.Add(new HostEndpoint("", 21)); break;
+            case EntryKind.Proxmox: e.Proxmox = new(); e.Endpoints.Add(new HostEndpoint("", 8006)); break;
+            case EntryKind.PowerShell: e.PowerShell = new(); e.Endpoints.Add(new HostEndpoint("", 5985)); break;
+            case EntryKind.WinBox: e.Endpoints.Add(new HostEndpoint("", 8291)); break;
         }
         return EditAndSaveAsync(e);
     }

@@ -30,6 +30,12 @@ public static class EntryJson
         public VncSettings? Vnc { get; set; }
         public CredentialData? Credential { get; set; }
         public SnippetData? Snippet { get; set; }
+        public SerialSettings? Serial { get; set; }
+        public FtpSettings? Ftp { get; set; }
+        public ProxmoxSettings? Proxmox { get; set; }
+        public PowerShellSettings? PowerShell { get; set; }
+        public string? Icon { get; set; }
+        public string? IconColor { get; set; }
     }
 
     public static string ToPayload(Entry e) => JsonSerializer.Serialize(new Payload
@@ -42,6 +48,8 @@ public static class EntryJson
         Favorite = e.Favorite ? true : null,
         ZabbixHostId = string.IsNullOrEmpty(e.ZabbixHostId) ? null : e.ZabbixHostId,
         Rdp = e.Rdp, Ssh = e.Ssh, Web = e.Web, Vnc = e.Vnc, Credential = e.Credential, Snippet = e.Snippet,
+        Serial = e.Serial, Ftp = e.Ftp, Proxmox = e.Proxmox, PowerShell = e.PowerShell,
+        Icon = string.IsNullOrEmpty(e.Icon) ? null : e.Icon, IconColor = string.IsNullOrEmpty(e.IconColor) ? null : e.IconColor,
     }, Options);
 
     public static void ApplyPayload(Entry e, string? json)
@@ -58,5 +66,7 @@ public static class EntryJson
         e.Favorite = p.Favorite == true;
         e.ZabbixHostId = p.ZabbixHostId;
         e.Rdp = p.Rdp; e.Ssh = p.Ssh; e.Web = p.Web; e.Vnc = p.Vnc; e.Credential = p.Credential; e.Snippet = p.Snippet;
+        e.Serial = p.Serial; e.Ftp = p.Ftp; e.Proxmox = p.Proxmox; e.PowerShell = p.PowerShell;
+        e.Icon = p.Icon; e.IconColor = p.IconColor;
     }
 }

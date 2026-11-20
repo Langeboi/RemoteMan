@@ -321,8 +321,8 @@ public partial class MainWindow : Window
     private void OnNewMenu(object sender, RoutedEventArgs e)
     {
         var menu = new ContextMenu();
-        foreach (var (label, kind) in new[] { ("New RDP entry", "Rdp"), ("New SSH entry", "Ssh"), ("New web entry", "Web"), ("New VNC entry", "Vnc"), ("New credential", "Credential"), ("New folder", "Folder") })
-            menu.Items.Add(new MenuItem { Header = label, Command = _vm.NewEntryCommand, CommandParameter = kind });
+        var parent = _vm.Selected?.Entry is { } s ? (s.Kind == RemoteMan.Core.Model.EntryKind.Folder ? s.Id : s.ParentId) : null;
+        EntryMenu.FillNew(menu, _vm, parent == MainViewModel.FavoritesId ? null : parent);
         menu.PlacementTarget = (UIElement)sender;
         menu.Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom;
         menu.IsOpen = true;

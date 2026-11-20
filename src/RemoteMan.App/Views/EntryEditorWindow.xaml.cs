@@ -58,6 +58,8 @@ public partial class EntryEditorWindow : Window
         }
 
         NameBox.Text = entry.Name;
+        Show(FolderIconButton, kind == EntryKind.Folder);
+        UpdateFolderIconPreview();
         TagsBox.Text = entry.Tags;
         _zabbixHostId = entry.ZabbixHostId;
 
@@ -190,6 +192,20 @@ public partial class EntryEditorWindow : Window
         }
         var target = string.IsNullOrWhiteSpace(NameBox.Text) ? "this entry" : NameBox.Text.Trim();
         JumpPath.Text = names.Count == 0 ? "" : $"this PC → {string.Join(" → ", names)} → {target}";
+    }
+
+    private void UpdateFolderIconPreview()
+    {
+        FolderIconPreview.Data = FolderIcons.GlyphFor(_e.Icon);
+        FolderIconPreview.Stroke = FolderIcons.BrushFor(_e.IconColor);
+    }
+
+    private void OnFolderIcon(object sender, RoutedEventArgs e)
+    {
+        _e.Name = NameBox.Text.Trim().Length > 0 ? NameBox.Text.Trim() : _e.Name;
+        if (!FolderIconPicker.Show(this, _e, out var icon, out var color)) return;
+        _e.Icon = icon; _e.IconColor = color;
+        UpdateFolderIconPreview();
     }
 
     private static void Show(UIElement el, bool visible) => el.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;

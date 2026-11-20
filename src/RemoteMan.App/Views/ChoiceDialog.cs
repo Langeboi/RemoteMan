@@ -17,7 +17,7 @@ public static class ChoiceDialog
 {
     /// <summary>Returns the index of the pressed button, or -1 when the dialog was closed with ×.</summary>
     public static int Show(Window? owner, string title, string text, IReadOnlyList<string> buttons,
-        DialogIcon icon = DialogIcon.None, bool danger = false)
+        DialogIcon icon = DialogIcon.None, bool danger = false, UIElement? extra = null)
     {
         var result = -1;
         owner ??= Application.Current?.Windows.OfType<Window>().FirstOrDefault(x => x.IsActive)
@@ -106,6 +106,7 @@ public static class ChoiceDialog
             message.Style = new Style(typeof(TextBox)); // no theme border or hover on a read-only message
             texts.Children.Add(message);
         }
+        if (extra is not null) texts.Children.Add(extra);
         body.Children.Add(texts);
         Grid.SetRow(body, 1);
         grid.Children.Add(body);

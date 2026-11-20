@@ -86,6 +86,14 @@
     <Geometry x:Key="Icon.WEB">M14.5,8 A6.5,6.5 0 1 1 1.5,8 A6.5,6.5 0 1 1 14.5,8 Z M1.5,8 H14.5 M8,1.5 C5,4.5 5,11.5 8,14.5 M8,1.5 C11,4.5 11,11.5 8,14.5</Geometry>
     <Geometry x:Key="Icon.VNC">M1.5,9.5 V1.5 H10.5 V4.5 M4.5,4.5 H14.5 V12.5 H4.5 Z M7,14.5 H12</Geometry>
     <Geometry x:Key="Icon.KEY">M8,10.5 A3,3 0 1 1 2,10.5 A3,3 0 1 1 8,10.5 Z M7.2,8.3 L14,1.5 M11.5,4 L13.5,6 M9.8,5.7 L11.3,7.2</Geometry>
+    <Geometry x:Key="Icon.TEL">M1.5,2.5 h13 v11 h-13 z M4,6.5 h4 M6,6.5 V11 M9.5,10.5 h2.5</Geometry>
+    <Geometry x:Key="Icon.SER">M2,5 h12 l-1.5,6 h-9 z M5,7.5 h0.01 M8,7.5 h0.01 M11,7.5 h0.01 M6,9.5 h0.01 M10,9.5 h0.01</Geometry>
+    <Geometry x:Key="Icon.SFTP">M1.5,4 h4.5 l1.5,1.5 h7 v8 h-13 z M6,10.5 h4 M8.5,9 l1.5,1.5 L8.5,12</Geometry>
+    <Geometry x:Key="Icon.FTP">M1.5,4 h4.5 l1.5,1.5 h7 v8 h-13 z M8,8 v4 M6,10 l2,2 l2,-2</Geometry>
+    <Geometry x:Key="Icon.PVE">M1.5,3.5 h13 v8 h-13 z M4,7.5 h2 M10,6 l2,1.5 l-2,1.5 M5,14.5 h6</Geometry>
+    <Geometry x:Key="Icon.PS">M1.5,2.5 h13 v11 h-13 z M1.5,4.5 h13 M4,7 l3,2 l-3,2 M8,11.5 h4</Geometry>
+    <Geometry x:Key="Icon.WBX">M2,3.5 h12 v9 h-12 z M2,6 h12 M4.5,9 h2 M9.5,9 h2 M4.5,10.8 h7</Geometry>
+    <Geometry x:Key="Icon.DIR">M1.5,3.5 h4.5 l1.5,1.5 h7 v8 h-13 z</Geometry>
 
     <Style TargetType="Path" x:Key="KindIcon">
         <Setter Property="Width" Value="16" />
@@ -103,6 +111,13 @@
             <Trigger Property="Tag" Value="SSH"><Setter Property="Data" Value="{StaticResource Icon.SSH}" /><Setter Property="ToolTip" Value="SSH" /></Trigger>
             <Trigger Property="Tag" Value="WEB"><Setter Property="Data" Value="{StaticResource Icon.WEB}" /><Setter Property="ToolTip" Value="Web" /></Trigger>
             <Trigger Property="Tag" Value="VNC"><Setter Property="Data" Value="{StaticResource Icon.VNC}" /><Setter Property="ToolTip" Value="VNC" /></Trigger>
+            <Trigger Property="Tag" Value="TEL"><Setter Property="Data" Value="{StaticResource Icon.TEL}" /><Setter Property="ToolTip" Value="Telnet" /></Trigger>
+            <Trigger Property="Tag" Value="SER"><Setter Property="Data" Value="{StaticResource Icon.SER}" /><Setter Property="ToolTip" Value="Serial console" /></Trigger>
+            <Trigger Property="Tag" Value="SFTP"><Setter Property="Data" Value="{StaticResource Icon.SFTP}" /><Setter Property="ToolTip" Value="SFTP" /></Trigger>
+            <Trigger Property="Tag" Value="FTP"><Setter Property="Data" Value="{StaticResource Icon.FTP}" /><Setter Property="ToolTip" Value="FTP" /></Trigger>
+            <Trigger Property="Tag" Value="PVE"><Setter Property="Data" Value="{StaticResource Icon.PVE}" /><Setter Property="ToolTip" Value="Proxmox console" /></Trigger>
+            <Trigger Property="Tag" Value="PS"><Setter Property="Data" Value="{StaticResource Icon.PS}" /><Setter Property="ToolTip" Value="PowerShell remoting" /></Trigger>
+            <Trigger Property="Tag" Value="WBX"><Setter Property="Data" Value="{StaticResource Icon.WBX}" /><Setter Property="ToolTip" Value="WinBox" /></Trigger>
             <Trigger Property="Tag" Value="KEY"><Setter Property="Data" Value="{StaticResource Icon.KEY}" /><Setter Property="ToolTip" Value="Credential" /><Setter Property="Stroke" Value="{StaticResource KeyIcon}" /></Trigger>
         </Style.Triggers>
     </Style>

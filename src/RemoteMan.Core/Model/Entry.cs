@@ -9,9 +9,21 @@ public enum EntryKind
     Ssh = 2,
     Vnc = 3,
     Web = 4,
+    Telnet = 5,
+    /// <summary>Console cable on a COM port.</summary>
+    Serial = 6,
+    /// <summary>File browser over SSH.</summary>
+    Sftp = 7,
+    Ftp = 8,
+    /// <summary>Console of a Proxmox VM or container (noVNC in the built-in browser).</summary>
+    Proxmox = 9,
     Credential = 10,
     /// <summary>A saved command for SSH sessions. Not shown in the tree; lives in the Snippets panel.</summary>
     Snippet = 11,
+    /// <summary>Enter-PSSession to a Windows server, in a PowerShell window.</summary>
+    PowerShell = 12,
+    /// <summary>MikroTik WinBox, started with the address and login.</summary>
+    WinBox = 13,
 }
 
 /// <summary>
@@ -59,6 +71,15 @@ public sealed class Entry
     public VncSettings? Vnc { get; set; }
     public CredentialData? Credential { get; set; }
     public SnippetData? Snippet { get; set; }
+    public SerialSettings? Serial { get; set; }
+    public FtpSettings? Ftp { get; set; }
+    public ProxmoxSettings? Proxmox { get; set; }
+    public PowerShellSettings? PowerShell { get; set; }
+
+    /// <summary>Folders: glyph name (see the folder icon picker); null = plain folder.</summary>
+    public string? Icon { get; set; }
+    /// <summary>Folders: icon colour as #RRGGBB; null = the default grey.</summary>
+    public string? IconColor { get; set; }
 
     // --- sync metadata (owned by the data source) ---
     public DateTimeOffset? CreatedAt { get; set; }
@@ -68,14 +89,26 @@ public sealed class Entry
     public string? UpdatedBy { get; set; }
     public bool Deleted { get; set; }
 
-    [JsonIgnore] public bool IsConnectable => Kind is EntryKind.Rdp or EntryKind.Ssh or EntryKind.Vnc or EntryKind.Web;
+    [JsonIgnore] public bool IsConnectable => Kind is EntryKind.Rdp or EntryKind.Ssh or EntryKind.Vnc or EntryKind.Web
+        or EntryKind.Telnet or EntryKind.Serial or EntryKind.Sftp or EntryKind.Ftp or EntryKind.Proxmox or EntryKind.PowerShell or EntryKind.WinBox;
+
+    /// <summary>Opens in the terminal (SSH, Telnet, serial console).</summary>
+    [JsonIgnore] public bool IsTerminal => Kind is EntryKind.Ssh or EntryKind.Telnet or EntryKind.Serial;
+
+    /// <summary>Has hosts to connect to (everything connectable except a serial port).</summary>
+    [JsonIgnore] public bool HasHosts => IsConnectable && Kind != EntryKind.Serial && Kind != EntryKind.Web;
 
     public static int DefaultPort(EntryKind kind) => kind switch
     {
         EntryKind.Rdp => 3389,
-        EntryKind.Ssh => 22,
+        EntryKind.Ssh or EntryKind.Sftp => 22,
         EntryKind.Vnc => 5900,
         EntryKind.Web => 443,
+        EntryKind.Telnet => 23,
+        EntryKind.Ftp => 21,
+        EntryKind.Proxmox => 8006,
+        EntryKind.PowerShell => 5985,
+        EntryKind.WinBox => 8291,
         _ => 0,
     };
 }
@@ -115,6 +148,43 @@ public sealed class SshSettings
     public string? DownloadFolder { get; set; }
     /// <summary>Another SSH entry to connect through (ProxyJump). That entry may have its own jump host.</summary>
     public Guid? JumpHostId { get; set; }
+}
+
+public sealed class SerialSettings
+{
+    public string PortName { get; set; } = "COM1";
+    public int BaudRate { get; set; } = 9600;
+    public int DataBits { get; set; } = 8;
+    /// <summary>None, Odd, Even, Mark, Space.</summary>
+    public string Parity { get; set; } = "None";
+    /// <summary>One, OnePointFive, Two.</summary>
+    public string StopBits { get; set; } = "One";
+    /// <summary>None, XOnXOff, RequestToSend.</summary>
+    public string FlowControl { get; set; } = "None";
+}
+
+public sealed class FtpSettings
+{
+    /// <summary>Explicit TLS (FTPS).</summary>
+    public bool UseTls { get; set; }
+    public bool IgnoreCertificateErrors { get; set; } = true;
+    public string? StartFolder { get; set; }
+}
+
+public sealed class ProxmoxSettings
+{
+    public string Node { get; set; } = "pve";
+    public int VmId { get; set; } = 100;
+    /// <summary>LXC container instead of a VM.</summary>
+    public bool Container { get; set; }
+    public bool IgnoreCertificateErrors { get; set; } = true;
+}
+
+public sealed class PowerShellSettings
+{
+    /// <summary>WinRM over HTTPS (port 5986).</summary>
+    public bool UseSsl { get; set; }
+    public string? ConfigurationName { get; set; }
 }
 
 public sealed class SnippetData

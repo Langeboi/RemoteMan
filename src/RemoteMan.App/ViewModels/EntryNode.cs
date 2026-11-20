@@ -28,7 +28,7 @@ public sealed partial class EntryNode : ObservableObject
         Depth = depth;
     }
 
-    [ObservableProperty] [NotifyPropertyChangedFor(nameof(Name), nameof(KindTag), nameof(IsFolder), nameof(HasLinkedCredential))]
+    [ObservableProperty] [NotifyPropertyChangedFor(nameof(Name), nameof(KindTag), nameof(IsFolder), nameof(HasLinkedCredential), nameof(FolderGlyph), nameof(FolderBrush))]
     private Entry _entry;
 
     [ObservableProperty] private bool _isExpanded = true;
@@ -53,6 +53,9 @@ public sealed partial class EntryNode : ObservableObject
     public bool HasLinkedCredential => Entry.CredentialId is not null;
     public string KindTag => KindTagFor(Entry.Kind);
     public Guid Id => Entry.Id;
+    /// <summary>Folder icon chosen in the folder icon picker (plain folder by default).</summary>
+    public System.Windows.Media.Geometry FolderGlyph => RemoteMan.App.Views.FolderIcons.GlyphFor(Entry.Icon);
+    public System.Windows.Media.Brush FolderBrush => RemoteMan.App.Views.FolderIcons.BrushFor(Entry.IconColor);
 
     public ObservableCollection<EntryNode> Children { get; } = new();
     public ObservableCollection<PresenceChip> People { get; } = new();
@@ -64,6 +67,13 @@ public sealed partial class EntryNode : ObservableObject
         EntryKind.Vnc => "VNC",
         EntryKind.Web => "WEB",
         EntryKind.Credential => "KEY",
+        EntryKind.Telnet => "TEL",
+        EntryKind.Serial => "SER",
+        EntryKind.Sftp => "SFTP",
+        EntryKind.Ftp => "FTP",
+        EntryKind.Proxmox => "PVE",
+        EntryKind.PowerShell => "PS",
+        EntryKind.WinBox => "WBX",
         _ => "",
     };
 }
