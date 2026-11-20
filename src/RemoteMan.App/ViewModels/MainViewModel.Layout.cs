@@ -185,22 +185,19 @@ public sealed partial class MainViewModel
         var byId = all.ToDictionary(e => e.Id);
         return PanelMode switch
         {
-            "fav" => _settings.Favorites.Where(byId.ContainsKey).Select(id => byId[id]),
+            "fav" => all.Where(e => e.Favorite && e.Kind != EntryKind.Folder).OrderBy(e => e.Name, StringComparer.OrdinalIgnoreCase),
             "recent" => _settings.Recent.Where(byId.ContainsKey).Select(id => byId[id]),
             "cred" => all.Where(e => e.Kind == EntryKind.Credential).OrderBy(e => e.Name, StringComparer.OrdinalIgnoreCase),
             _ => Enumerable.Empty<Entry>(),
         };
     }
 
+    /// <summary>Title bar star: favorites are stored on the entry (see ToggleFavoriteAsync).</summary>
     [RelayCommand]
-    private void ToggleFavorite()
+    private async Task ToggleFavorite()
     {
-        if (Selected?.Entry is not { } e || e.Kind == EntryKind.Folder) return;
-        var removed = _settings.Favorites.Remove(e.Id);
-        if (!removed) _settings.Favorites.Add(e.Id);
-        TrySaveSettings();
-        Message = removed ? $"Removed {e.Name} from favorites" : $"Added {e.Name} to favorites";
-        if (PanelMode == "fav") RebuildTree();
+        if (Selected?.Entry is not { } e || e.Kind == EntryKind.Folder || e.Id == FavoritesId) return;
+        await ToggleFavoriteAsync(e);
     }
 
     private void RememberRecent(Entry e)

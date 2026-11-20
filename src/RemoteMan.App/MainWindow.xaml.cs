@@ -19,11 +19,17 @@ public partial class MainWindow : Window
         _settings = settings;
         _vm = new MainViewModel(settings)
         {
+            EditDialog = (entry, store, protector) =>
+            {
+                var w = new EntryEditorWindow(entry, store, protector) { Owner = this, Zabbix = _vm.ZabbixSnapshot };
+                if (w.ShowDialog() != true) return null;
+                // A login typed in the entry and kept as a reusable credential is saved first.
+                return w.NewCredential is { } cred ? [cred, entry] : [entry];
+            },
+            PromptPassword = title => PasswordPrompt.Show(this, title),
             Choose = (title, text, buttons) => Views.ChoiceDialog.Show(this, title, text, buttons),
             Confirm = text => MessageBox.Show(this, text, "RemoteMan", MessageBoxButton.YesNo, MessageBoxImage.Question) == MessageBoxResult.Yes,
         };
-        _vm.EditDialog = (entry, store, protector) =>
-            new EntryEditorWindow(entry, store, protector) { Owner = this, Zabbix = _vm.ZabbixSnapshot }.ShowDialog() == true ? entry : null;
         _vm.ZabbixLinkDialog = (snap, entry) =>
         {
             var dlg = new ZabbixLinkWindow(snap, entry) { Owner = this };
@@ -155,6 +161,21 @@ public partial class MainWindow : Window
         if (clicked.Entry.Kind != Core.Model.EntryKind.Credential) return;
         e.Handled = true;
         await _vm.TryCtrlClickLinkAsync(clicked);
+    }
+
+    // ---------------- right-click menu ----------------
+
+    /// <summary>Right-click selects the entry under the mouse first, so the menu acts on it.</summary>
+    private void OnTreeRightButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        if (FindItem(e.OriginalSource as DependencyObject) is { } item) { item.IsSelected = true; item.Focus(); }
+    }
+
+    private void OnTreeContextMenuOpening(object sender, ContextMenuEventArgs e)
+    {
+        if (_vm.Selected is not { } node || Tree.ContextMenu is not { } menu) { e.Handled = true; return; }
+        EntryMenu.Fill(menu, node, _vm, this);
+        if (menu.Items.Count == 0) e.Handled = true;
     }
 
     // ---------------- drag and drop: move entries between folders ----------------

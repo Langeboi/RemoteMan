@@ -29,16 +29,29 @@ public sealed class Entry
     /// <summary>Host/port pairs. Index 0 is the primary; the rest are tried in order.</summary>
     public List<HostEndpoint> Endpoints { get; set; } = new();
 
-    /// <summary>Credential entry used to log in (set by Ctrl+click linking).</summary>
+    /// <summary>Where the login for this entry (or, on a folder, for entries inheriting from it) comes from.</summary>
+    public LoginSource Login { get; set; }
+
+    /// <summary>Saved credential entry used when <see cref="Login"/> is <see cref="LoginSource.Saved"/> (Ctrl+click linking).</summary>
     public Guid? CredentialId { get; set; }
 
     /// <summary>Single sign-on: log in as the current Windows user instead of a stored credential (RDP, web).</summary>
-    public bool UseWindowsLogin { get; set; }
+    [JsonIgnore]
+    public bool UseWindowsLogin
+    {
+        get => Login == LoginSource.WindowsLogin;
+        set { if (value) Login = LoginSource.WindowsLogin; else if (Login == LoginSource.WindowsLogin) Login = LoginSource.None; }
+    }
+
+    /// <summary>Shown under Favorites at the top of the tree.</summary>
+    public bool Favorite { get; set; }
 
     /// <summary>Zabbix host this entry is linked to (set on import or by "Link to Zabbix host"). Wins over automatic matching.</summary>
     public string? ZabbixHostId { get; set; }
 
     public RdpSettings? Rdp { get; set; }
+    /// <summary>Credential entries: the secret itself. Other entries: the login typed into the entry
+    /// (<see cref="LoginSource.Embedded"/>).</summary>
     public SshSettings? Ssh { get; set; }
     public WebSettings? Web { get; set; }
     public VncSettings? Vnc { get; set; }
@@ -134,8 +147,35 @@ public sealed class VncSettings
     public bool ViewOnly { get; set; }
 }
 
+public enum LoginSource
+{
+    /// <summary>No stored login: Windows or the server asks.</summary>
+    None = 0,
+    /// <summary>Use the nearest parent folder's login.</summary>
+    Inherited = 1,
+    /// <summary>A saved credential entry (<see cref="Entry.CredentialId"/>).</summary>
+    Saved = 2,
+    /// <summary>The current Windows user (SSO).</summary>
+    WindowsLogin = 3,
+    /// <summary>Typed into the entry itself (<see cref="Entry.Credential"/>).</summary>
+    Embedded = 4,
+}
+
+public enum CredentialType
+{
+    /// <summary>User name, domain and password.</summary>
+    Password = 0,
+    /// <summary>User name and an SSH private key (stored, or a file on this PC) with optional passphrase.</summary>
+    SshKey = 1,
+    /// <summary>A .pfx/.p12 client certificate with its password.</summary>
+    Certificate = 2,
+    /// <summary>A token or API key to copy and paste.</summary>
+    Secret = 3,
+}
+
 public sealed class CredentialData
 {
+    public CredentialType Type { get; set; }
     public string? UserName { get; set; }
     public string? Domain { get; set; }
     /// <summary>Encrypted with the data source's <c>ISecretProtector</c>; never plaintext at rest.</summary>
@@ -143,4 +183,11 @@ public sealed class CredentialData
     /// <summary>OpenSSH/PuTTY private key text, protected the same way.</summary>
     public string? ProtectedPrivateKey { get; set; }
     public string? ProtectedPassphrase { get; set; }
+    /// <summary>SSH key kept on disk instead of in the entry (only the path is stored).</summary>
+    public string? PrivateKeyPath { get; set; }
+    /// <summary>Base64 .pfx bytes, protected like the password (which holds the .pfx password).</summary>
+    public string? ProtectedCertificate { get; set; }
+    /// <summary>Don't store a password; ask for it on connect.</summary>
+    public bool AskPassword { get; set; }
+    public string? Notes { get; set; }
 }
