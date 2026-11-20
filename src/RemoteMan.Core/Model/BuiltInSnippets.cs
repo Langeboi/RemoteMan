@@ -4,12 +4,12 @@ namespace RemoteMan.Core.Model;
 /// The starter snippet library, added on first run (and from the Snippets panel's menu) as normal
 /// snippet entries, so they can be edited, deleted and shared like any other.
 /// Groups are "Category/Group": the panel shows one category at a time, with collapsible groups.
-/// Snippets with PressEnter = false are typed but not run, because they need a value filled in
-/// (an IP, an interface name) or they reboot or change something.
+/// None of them run on their own: they are typed into the terminal and you press Enter. The ones that
+/// end in a space or "=" expect a value (an IP, an interface) after them.
 /// </summary>
 public static class BuiltInSnippets
 {
-    public sealed record Def(string Group, string Name, string Command, bool PressEnter = true);
+    public sealed record Def(string Group, string Name, string Command, bool PressEnter = false);
 
     public const string Debian = "Debian";
     public const string FortiOs = "FortiOS 7.6";
@@ -23,22 +23,22 @@ public static class BuiltInSnippets
         new($"{Debian}/System", "CPU and memory hogs", "ps -eo pid,user,%cpu,%mem,etime,cmd --sort=-%cpu | head -15"),
         new($"{Debian}/System", "Time and NTP sync", "timedatectl"),
         new($"{Debian}/System", "Kernel messages (errors)", "sudo dmesg --level=err,warn -T | tail -30"),
-        new($"{Debian}/System", "Reboot", "sudo systemctl reboot", PressEnter: false),
+        new($"{Debian}/System", "Reboot", "sudo systemctl reboot"),
 
         new($"{Debian}/Packages", "Update everything", "sudo apt update && sudo apt full-upgrade -y"),
         new($"{Debian}/Packages", "List available updates", "sudo apt update -qq && apt list --upgradable"),
         new($"{Debian}/Packages", "Remove unused packages", "sudo apt autoremove --purge -y && sudo apt clean"),
         new($"{Debian}/Packages", "Reboot needed?", "[ -f /var/run/reboot-required ] && cat /var/run/reboot-required /var/run/reboot-required.pkgs 2>/dev/null || echo 'No reboot needed'"),
-        new($"{Debian}/Packages", "Is a package installed?", "dpkg -l | grep -i ", PressEnter: false),
-        new($"{Debian}/Packages", "Package versions available", "apt-cache policy ", PressEnter: false),
+        new($"{Debian}/Packages", "Is a package installed?", "dpkg -l | grep -i "),
+        new($"{Debian}/Packages", "Package versions available", "apt-cache policy "),
         new($"{Debian}/Packages", "Automatic updates status", "systemctl status unattended-upgrades --no-pager; tail -5 /var/log/unattended-upgrades/unattended-upgrades.log 2>/dev/null"),
 
         new($"{Debian}/Services and logs", "Failed services", "systemctl --failed --no-pager"),
         new($"{Debian}/Services and logs", "Running services", "systemctl list-units --type=service --state=running --no-pager"),
         new($"{Debian}/Services and logs", "Errors since boot", "journalctl -p err -b --no-pager | tail -50"),
         new($"{Debian}/Services and logs", "Follow the log", "journalctl -f"),
-        new($"{Debian}/Services and logs", "Log of one service", "journalctl -e --no-pager -n 100 -u ", PressEnter: false),
-        new($"{Debian}/Services and logs", "Restart a service", "sudo systemctl restart ", PressEnter: false),
+        new($"{Debian}/Services and logs", "Log of one service", "journalctl -e --no-pager -n 100 -u "),
+        new($"{Debian}/Services and logs", "Restart a service", "sudo systemctl restart "),
         new($"{Debian}/Services and logs", "Journal disk use", "journalctl --disk-usage"),
 
         new($"{Debian}/Network", "Addresses", "ip -br -c address"),
@@ -55,7 +55,7 @@ public static class BuiltInSnippets
         new($"{Debian}/Disks", "Biggest folders here", "sudo du -xh --max-depth=1 . 2>/dev/null | sort -rh | head -20"),
         new($"{Debian}/Disks", "Files over 500 MB", "sudo find / -xdev -type f -size +500M -exec ls -lh {} + 2>/dev/null"),
         new($"{Debian}/Disks", "Software RAID status", "cat /proc/mdstat"),
-        new($"{Debian}/Disks", "Disk health (SMART)", "sudo smartctl -H /dev/", PressEnter: false),
+        new($"{Debian}/Disks", "Disk health (SMART)", "sudo smartctl -H /dev/"),
 
         new($"{Debian}/Users and security", "Who is logged in", "w"),
         new($"{Debian}/Users and security", "Last logins", "last -n 20"),
@@ -75,10 +75,10 @@ public static class BuiltInSnippets
         new($"{FortiOs}/Interfaces", "Interface config", "show system interface"),
         new($"{FortiOs}/Interfaces", "ARP table", "get system arp"),
         new($"{FortiOs}/Interfaces", "DHCP leases", "execute dhcp lease-list"),
-        new($"{FortiOs}/Interfaces", "Port details", "diagnose hardware deviceinfo nic ", PressEnter: false),
+        new($"{FortiOs}/Interfaces", "Port details", "diagnose hardware deviceinfo nic "),
 
         new($"{FortiOs}/Routing", "Routing table", "get router info routing-table all"),
-        new($"{FortiOs}/Routing", "Route lookup", "get router info routing-table details ", PressEnter: false),
+        new($"{FortiOs}/Routing", "Route lookup", "get router info routing-table details "),
         new($"{FortiOs}/Routing", "BGP summary", "get router info bgp summary"),
         new($"{FortiOs}/Routing", "OSPF neighbours", "get router info ospf neighbor"),
         new($"{FortiOs}/Routing", "SD-WAN members", "diagnose sys sdwan member"),
@@ -95,18 +95,17 @@ public static class BuiltInSnippets
         new($"{FortiOs}/VPN", "SSL VPN users", "get vpn ssl monitor"),
 
         new($"{FortiOs}/Troubleshooting", "Debug flow (add the IP)",
-            "diagnose debug reset\ndiagnose debug flow filter clear\ndiagnose debug flow show function-name enable\ndiagnose debug console timestamp enable\ndiagnose debug flow trace start 20\ndiagnose debug enable\ndiagnose debug flow filter addr ",
-            PressEnter: false),
+            "diagnose debug reset\ndiagnose debug flow filter clear\ndiagnose debug flow show function-name enable\ndiagnose debug console timestamp enable\ndiagnose debug flow trace start 20\ndiagnose debug enable\ndiagnose debug flow filter addr "),
         new($"{FortiOs}/Troubleshooting", "Stop debugging", "diagnose debug disable\ndiagnose debug reset"),
-        new($"{FortiOs}/Troubleshooting", "Packet sniffer", "diagnose sniffer packet any 'host ' 4 20 l", PressEnter: false),
-        new($"{FortiOs}/Troubleshooting", "Ping", "execute ping ", PressEnter: false),
-        new($"{FortiOs}/Troubleshooting", "Traceroute", "execute traceroute ", PressEnter: false),
+        new($"{FortiOs}/Troubleshooting", "Packet sniffer (add filter, e.g. 'host 10.0.0.1' 4 20 l)", "diagnose sniffer packet any "),
+        new($"{FortiOs}/Troubleshooting", "Ping", "execute ping "),
+        new($"{FortiOs}/Troubleshooting", "Traceroute", "execute traceroute "),
         new($"{FortiOs}/Troubleshooting", "FortiGuard connection", "diagnose debug rating"),
 
         new($"{FortiOs}/HA and maintenance", "HA status", "get system ha status"),
         new($"{FortiOs}/HA and maintenance", "HA config in sync?", "diagnose sys ha checksum cluster"),
         new($"{FortiOs}/HA and maintenance", "Signature versions", "diagnose autoupdate versions"),
-        new($"{FortiOs}/HA and maintenance", "Reboot", "execute reboot", PressEnter: false),
+        new($"{FortiOs}/HA and maintenance", "Reboot", "execute reboot"),
 
         // ---------------- MikroTik RouterOS 7.25 ----------------
         new($"{MikroTik}/System", "Resources", "/system resource print"),
@@ -122,7 +121,7 @@ public static class BuiltInSnippets
         new($"{MikroTik}/Interfaces", "Bridge ports", "/interface bridge port print"),
         new($"{MikroTik}/Interfaces", "Bridge VLANs", "/interface bridge vlan print"),
         new($"{MikroTik}/Interfaces", "VLAN interfaces", "/interface vlan print"),
-        new($"{MikroTik}/Interfaces", "Live traffic on a port", "/interface monitor-traffic ", PressEnter: false),
+        new($"{MikroTik}/Interfaces", "Live traffic on a port", "/interface monitor-traffic "),
         new($"{MikroTik}/Interfaces", "WiFi clients", "/interface wifi registration-table print"),
         new($"{MikroTik}/Interfaces", "WireGuard peers", "/interface wireguard peers print"),
 
@@ -141,17 +140,17 @@ public static class BuiltInSnippets
         new($"{MikroTik}/Routing", "OSPF neighbours", "/routing ospf neighbor print"),
         new($"{MikroTik}/Routing", "BGP sessions", "/routing bgp session print"),
 
-        new($"{MikroTik}/Tools", "Ping", "/ping count=4 ", PressEnter: false),
-        new($"{MikroTik}/Tools", "Traceroute", "/tool traceroute ", PressEnter: false),
-        new($"{MikroTik}/Tools", "Torch (live flows on a port)", "/tool torch interface=", PressEnter: false),
+        new($"{MikroTik}/Tools", "Ping", "/ping count=4 "),
+        new($"{MikroTik}/Tools", "Traceroute", "/tool traceroute "),
+        new($"{MikroTik}/Tools", "Torch (live flows on a port)", "/tool torch interface="),
 
         new($"{MikroTik}/Backup and updates", "Show config", "/export terse"),
         new($"{MikroTik}/Backup and updates", "Show config with secrets", "/export terse show-sensitive"),
-        new($"{MikroTik}/Backup and updates", "Save backup file", "/system backup save name={name} password=", PressEnter: false),
+        new($"{MikroTik}/Backup and updates", "Save backup file", "/system backup save name={name} password="),
         new($"{MikroTik}/Backup and updates", "Check for updates", "/system package update check-for-updates"),
-        new($"{MikroTik}/Backup and updates", "Install update and reboot", "/system package update install", PressEnter: false),
-        new($"{MikroTik}/Backup and updates", "Upgrade RouterBOARD firmware", "/system routerboard upgrade", PressEnter: false),
-        new($"{MikroTik}/Backup and updates", "Reboot", "/system reboot", PressEnter: false),
+        new($"{MikroTik}/Backup and updates", "Install update and reboot", "/system package update install"),
+        new($"{MikroTik}/Backup and updates", "Upgrade RouterBOARD firmware", "/system routerboard upgrade"),
+        new($"{MikroTik}/Backup and updates", "Reboot", "/system reboot"),
     ];
 
     public static Entry ToEntry(Def d) => new()

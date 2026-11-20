@@ -500,13 +500,12 @@ public partial class SshSessionView : UserControl
         if (_main is null || _vm is null || SnippetList.SelectedItem is not Entry sel || sel.Snippet is null) return;
         List<SshSessionViewModel> targets = onlyHere ? [_vm] : _targets.Where(t => t.IsChecked).Select(t => t.Session).ToList();
         if (targets.Count == 0) { SnippetStatus.Text = "Tick at least one session under Send to."; return; }
-        // "Press Enter" off: type the text only, so it can be checked before running.
+        // Typed only, unless the snippet is set to run or "Also press Enter" is ticked for this send.
         var toSend = sel;
-        if (PressEnterBox.IsChecked != true && sel.Snippet.PressEnter)
+        if (PressEnterBox.IsChecked == true && !sel.Snippet.PressEnter)
         {
             toSend = EntryStore.Clone(sel);
-            toSend.Snippet!.PressEnter = false;
-            toSend.Snippet.Command = toSend.Snippet.Command.TrimEnd('\r', '\n');
+            toSend.Snippet!.PressEnter = true;
         }
         var sent = _main.SendSnippet(toSend, targets);
         var missed = targets.Count - sent;

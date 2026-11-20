@@ -27,9 +27,9 @@
             <TextBlock Grid.Row="2" Text="Command" Style="{StaticResource MutedText}" Margin="0,5,0,0" />
             <TextBox x:Name="CommandBox" Grid.Row="2" Grid.Column="1" Margin="0,2" AcceptsReturn="True" AcceptsTab="True" TextWrapping="NoWrap"
                      VerticalContentAlignment="Top" FontFamily="{StaticResource MonoFont}" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto" />
-            <CheckBox x:Name="EnterBox" Grid.Row="3" Grid.Column="1" Content="Press Enter after the text" />
+            <CheckBox x:Name="EnterBox" Grid.Row="3" Grid.Column="1" Content="Run it right away (press Enter after the text)" />
             <TextBlock Grid.Row="4" Grid.Column="1" Style="{StaticResource MutedText}" FontSize="11" TextWrapping="Wrap" Margin="0,2,0,0"
-                       Text="Group as Category/Group, e.g. Debian/Network. Several lines are typed one after another. {host}, {user} and {name} are replaced with each session's host, login and entry name." />
+                       Text="Off by default: the text is typed and you press Enter. End it with a space if a value goes after it. Group as Category/Group, e.g. Debian/Network. In several lines, all but the last run as they are typed. {host}, {user} and {name} are replaced with each session's host, login and entry name." />
         </Grid>
     </DockPanel>
 </Window>

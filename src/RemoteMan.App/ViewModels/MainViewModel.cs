@@ -496,7 +496,8 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
         foreach (var t in targets)
         {
             var text = sn.Expand(t.Endpoint.Host, t.Credential.UserName, t.Entry.Name).Replace("\r\n", "\n");
-            if (sn.PressEnter && !text.EndsWith('\n')) text += "\n";
+            // Type only (the default): never end on a newline, so the last line waits for Enter.
+            text = sn.PressEnter ? text.TrimEnd('\n') + "\n" : text.TrimEnd('\n');
             // Terminals expect CR for Enter.
             if (t.Send(text.Replace('\n', '\r'))) n++;
         }

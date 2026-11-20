@@ -107,8 +107,14 @@ public sealed class SnippetData
     public string Command { get; set; } = "";
     /// <summary>Heading the snippet is listed under in the panel.</summary>
     public string? Group { get; set; }
-    /// <summary>Press Enter after the text (a final newline is added if missing).</summary>
-    public bool PressEnter { get; set; } = true;
+    /// <summary>
+    /// Run it: press Enter after the text. Off by default, so a snippet is only typed and you check it,
+    /// fill in what's missing and press Enter yourself. (In a multi-line snippet the earlier lines still run.)
+    /// </summary>
+    public bool PressEnter { get; set; }
+
+    /// <summary>Ends in a space or "=": the snippet expects a value (an IP, an interface) typed after it.</summary>
+    [JsonIgnore] public bool NeedsValue => Command.EndsWith(' ') || Command.EndsWith('=');
 
     public const string DefaultCategory = "My snippets";
 

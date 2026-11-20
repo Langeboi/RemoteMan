@@ -118,13 +118,14 @@
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
-                    <CheckBox x:Name="PressEnterBox" Content="Press Enter after sending" IsChecked="True" Foreground="{StaticResource Muted}" />
+                    <CheckBox x:Name="PressEnterBox" Content="Also press Enter (run it now)" IsChecked="False" Foreground="{StaticResource Muted}"
+                              ToolTip="Off: the snippet is only typed, so you can check it and fill in an IP or interface before pressing Enter" />
                     <DockPanel Margin="0,4,0,0">
                         <Button DockPanel.Dock="Right" Content="Edit" Margin="6,0,0,0" Click="OnEditSnippet" />
                         <Button x:Name="SendButton" Content="Send" Style="{StaticResource PrimaryButton}" Click="OnSendSnippet" />
                     </DockPanel>
                     <TextBlock x:Name="SnippetStatus" Style="{StaticResource MutedText}" FontSize="11" Margin="0,4,0,0" TextWrapping="Wrap"
-                               Text="Double-click sends to this tab only. {host}, {user} and {name} are filled in per session." />
+                               Text="Snippets are typed, not run: check them, fill in what's missing, press Enter. Double-click sends to this tab only." />
                 </StackPanel>
             </Border>
             <ListBox x:Name="SnippetList" Background="Transparent" BorderThickness="0" Foreground="{StaticResource Text}"
@@ -174,7 +175,7 @@
                                         <StackPanel>
                                             <DockPanel>
                                                 <TextBlock x:Name="fill" DockPanel.Dock="Right" Text="fill in" FontSize="10" Foreground="{StaticResource Presence}" Margin="6,0,0,0"
-                                                           Visibility="Collapsed" ToolTip="Typed without Enter: add the value (IP, port, name) and press Enter yourself" />
+                                                           Visibility="Collapsed" ToolTip="Add the value it asks for (IP, interface, name) after it, then press Enter" />
                                                 <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
                                             </DockPanel>
                                             <TextBlock Text="{Binding Snippet.Command}" FontFamily="{StaticResource MonoFont}" FontSize="10.5"
@@ -184,7 +185,7 @@
                                     <ControlTemplate.Triggers>
                                         <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="b" Property="Background" Value="{StaticResource Hover}" /></Trigger>
                                         <Trigger Property="IsSelected" Value="True"><Setter TargetName="b" Property="Background" Value="{StaticResource Select}" /></Trigger>
-                                        <DataTrigger Binding="{Binding Snippet.PressEnter}" Value="False"><Setter TargetName="fill" Property="Visibility" Value="Visible" /></DataTrigger>
+                                        <DataTrigger Binding="{Binding Snippet.NeedsValue}" Value="True"><Setter TargetName="fill" Property="Visibility" Value="Visible" /></DataTrigger>
                                     </ControlTemplate.Triggers>
                                 </ControlTemplate>
                             </Setter.Value>

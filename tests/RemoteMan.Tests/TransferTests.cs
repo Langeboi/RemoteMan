@@ -218,6 +218,12 @@ public class TransferTests
         Assert.Equal(("Debian", "Network"), (new SnippetData { Group = "Debian/Network" }.Category, new SnippetData { Group = "Debian/Network" }.SubGroup));
         Assert.Equal(("Lab 3", "General"), (new SnippetData { Group = "Lab 3" }.Category, new SnippetData { Group = "Lab 3" }.SubGroup));
         Assert.Equal(SnippetData.DefaultCategory, new SnippetData().Category);
+        // Nothing runs on its own; the ones that want a value say so.
+        Assert.All(BuiltInSnippets.All, d => Assert.False(d.PressEnter));
+        Assert.False(new SnippetData().PressEnter);
+        Assert.True(new SnippetData { Command = "/tool torch interface=" }.NeedsValue);
+        Assert.True(new SnippetData { Command = "execute ping " }.NeedsValue);
+        Assert.False(new SnippetData { Command = "get system status" }.NeedsValue);
         // Computed parts are not stored.
         Assert.DoesNotContain("SubGroup", RemoteMan.Core.Storage.EntryJson.ToPayload(BuiltInSnippets.ToEntry(BuiltInSnippets.All[0])));
     }
