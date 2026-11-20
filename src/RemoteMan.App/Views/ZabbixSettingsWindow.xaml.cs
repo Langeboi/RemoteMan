@@ -10,7 +10,7 @@ namespace RemoteMan.App.Views;
 
 public partial class ZabbixSettingsWindow : Window
 {
-    private sealed record Choice<T>(T Value, string Name);
+    public sealed record Choice<T>(T Value, string Name) { public override string ToString() => Name; }
 
     private readonly AppSettings _settings;
     private readonly EntryStore? _store;

@@ -14,7 +14,7 @@ namespace RemoteMan.App.Views;
 /// <summary>Export to an encrypted .rmx file, automatic daily backups, and restore.</summary>
 public partial class BackupWindow : Window
 {
-    private sealed record Scope(Guid? FolderId, string Name);
+    public sealed record Scope(Guid? FolderId, string Name) { public override string ToString() => Name; }
 
     private readonly MainViewModel _main;
     private ExportBundle? _opened;

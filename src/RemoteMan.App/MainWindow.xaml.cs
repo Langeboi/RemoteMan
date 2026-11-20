@@ -192,14 +192,25 @@ public partial class MainWindow : Window
     // ---------------- right-click menu ----------------
 
     /// <summary>Right-click selects the entry under the mouse first, so the menu acts on it.</summary>
+    private bool _rightClickOnEmpty;
+
     private void OnTreeRightButtonDown(object sender, MouseButtonEventArgs e)
     {
-        if (FindItem(e.OriginalSource as DependencyObject) is { } item) { item.IsSelected = true; item.Focus(); }
+        var item = FindItem(e.OriginalSource as DependencyObject);
+        _rightClickOnEmpty = item is null;
+        if (item is not null) { item.IsSelected = true; item.Focus(); }
     }
 
     private void OnTreeContextMenuOpening(object sender, ContextMenuEventArgs e)
     {
-        if (_vm.Selected is not { } node || Tree.ContextMenu is not { } menu) { e.Handled = true; return; }
+        if (Tree.ContextMenu is not { } menu) { e.Handled = true; return; }
+        // Empty space (or the keyboard menu key with nothing selected): new, paste, expand, import.
+        if (_rightClickOnEmpty || _vm.Selected is not { } node)
+        {
+            _rightClickOnEmpty = false;
+            EntryMenu.FillBackground(menu, _vm, () => OnImport(this, new RoutedEventArgs()));
+            return;
+        }
         EntryMenu.Fill(menu, node, _vm, this);
         if (menu.Items.Count == 0) e.Handled = true;
     }
@@ -277,6 +288,22 @@ public partial class MainWindow : Window
         if (e.Key == Key.Enter && _vm.Selected is { } n)
         {
             if (n.Entry.IsConnectable) _vm.ConnectCommand.Execute(n); else n.IsExpanded = !n.IsExpanded;
+            e.Handled = true;
+        }
+        else if (e.Key == Key.C && Keyboard.Modifiers == ModifierKeys.Control && _vm.Selected is { } c && c.Id != MainViewModel.FavoritesId)
+        {
+            _vm.CopyEntry(c.Entry);
+            e.Handled = true;
+        }
+        else if (e.Key == Key.V && Keyboard.Modifiers == ModifierKeys.Control)
+        {
+            var target = _vm.Selected?.Entry is { } s ? (s.Kind == RemoteMan.Core.Model.EntryKind.Folder ? s.Id : s.ParentId) : null;
+            _ = _vm.PasteAsync(target == MainViewModel.FavoritesId ? null : target);
+            e.Handled = true;
+        }
+        else if (e.Key == Key.F5)
+        {
+            _ = _vm.RefreshAsync();
             e.Handled = true;
         }
     }

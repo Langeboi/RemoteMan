@@ -38,7 +38,7 @@ public sealed partial class ImportRow : ObservableObject
 
 public partial class ImportWindow : Window
 {
-    private sealed record FolderChoice(Guid? Id, string Name);
+    public sealed record FolderChoice(Guid? Id, string Name) { public override string ToString() => Name; }
 
     private readonly MainViewModel _main;
     private ImportResult? _result;
@@ -55,7 +55,7 @@ public partial class ImportWindow : Window
         if (main.Store is { } store)
         {
             var all = store.Entries.Where(e => e.Kind == EntryKind.Folder).ToList();
-            string PathOf(Entry f) => f.ParentId is { } p && all.FirstOrDefault(x => x.Id == p) is { } parent ? PathOf(parent) + " \\ " + f.Name : f.Name;
+            string PathOf(Entry f) => f.ParentId is { } p && all.FirstOrDefault(x => x.Id == p) is { } parent ? PathOf(parent) + " / " + f.Name : f.Name;
             folders.AddRange(all.Select(f => new FolderChoice(f.Id, PathOf(f))).OrderBy(f => f.Name, StringComparer.OrdinalIgnoreCase));
         }
         TargetBox.ItemsSource = folders;

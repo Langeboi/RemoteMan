@@ -33,6 +33,18 @@ public static class EntryMenu
         ["info"] = G("M12.5,7 A5.5,5.5 0 1 1 1.5,7 A5.5,5.5 0 1 1 12.5,7 Z M7,4 V7 L9,8.5"),
         ["delete"] = G("M2,4 H12 M5,4 V2 H9 V4 M3.5,4 L4.3,12 H9.7 L10.5,4"),
         ["new"] = G("M7,2 V12 M2,7 H12"),
+        ["copy"] = G("M2,4 H9 V12 H2 Z M5,4 V2 H12 V10 H9"),
+        ["paste"] = G("M3,3 H11 V13 H3 Z M5,3 V1.5 H9 V3 M5,7 H9 M5,10 H9"),
+        ["expand"] = G("M3,5 L7,9 L11,5"),
+        ["collapse"] = G("M3,9 L7,5 L11,9"),
+        ["refresh"] = G("M11.5,4.5 A5,5 0 1 0 12,8 M11.5,1.5 V4.5 H8.5"),
+        ["import"] = G("M7,1.5 V9 M4,6 L7,9 L10,6 M2,10 V12.5 H12 V10"),
+        ["rdp"] = G("M1.5,2.5 H12.5 V9.5 H1.5 Z M4.5,12.5 H9.5 M7,9.5 V12.5"),
+        ["ssh"] = G("M1.5,2.5 H12.5 V11.5 H1.5 Z M4,5.5 L6,7 L4,8.5 M7.5,9 H10"),
+        ["web"] = G("M12.5,7 A5.5,5.5 0 1 1 1.5,7 A5.5,5.5 0 1 1 12.5,7 Z M1.5,7 H12.5 M7,1.5 C4.5,4 4.5,10 7,12.5 M7,1.5 C9.5,4 9.5,10 7,12.5"),
+        ["vnc"] = G("M1.5,8.5 V1.5 H9.5 V4 M4,4 H12.5 V11 H4 Z M6.5,12.5 H10"),
+        ["key"] = G("M6,7 A2.5,2.5 0 1 1 1,7 A2.5,2.5 0 1 1 6,7 Z M6,7 H12.5 M10.5,7 V9.5 M12.5,7 V9"),
+        ["folder"] = G("M1,4 H5 L6,5 H13 V12 H1 Z"),
     };
 
     private static Geometry G(string data) { var g = Geometry.Parse(data); g.Freeze(); return g; }
@@ -77,8 +89,19 @@ public static class EntryMenu
             menu.Items.Add(new Separator());
         }
 
+        // --- folder: create inside it ---
+        if (isFolder)
+        {
+            menu.Items.Add(NewSubmenu(vm, e.Id));
+            menu.Items.Add(PasteItem(vm, e.Id));
+            menu.Items.Add(Item("Expand all inside", "expand", () => vm.SetExpanded(e.Id, true)));
+            menu.Items.Add(Item("Collapse all inside", "collapse", () => vm.SetExpanded(e.Id, false)));
+            menu.Items.Add(new Separator());
+        }
+
         // --- organise ---
-        menu.Items.Add(Item("Edit", "edit", () => vm.EditCommand.Execute(null), "F2"));
+        menu.Items.Add(Item(isFolder ? "Edit folder (name, login for entries inside)" : "Edit", "edit", () => vm.EditCommand.Execute(null), "F2"));
+        menu.Items.Add(Item("Copy", "copy", () => vm.CopyEntry(e), "Ctrl+C"));
         if (!isFolder) menu.Items.Add(Item("Duplicate…", "duplicate", () => vm.DuplicateCommand.Execute(null), "Ctrl+D"));
         var move = Item("Move to", "move");
         move.Items.Add(Item("(top level)", null, () => _ = vm.MoveAsync(e.Id, null), enabled: vm.CanMove(e.Id, null)));
@@ -150,6 +173,35 @@ public static class EntryMenu
         var del = Item("Delete", "delete", () => vm.DeleteCommand.Execute(null), "Del");
         del.SetResourceReference(Control.ForegroundProperty, "Bad");
         menu.Items.Add(del);
+    }
+
+    /// <summary>"New entry" submenu that creates in <paramref name="parent"/> (null = top level).</summary>
+    private static MenuItem NewSubmenu(MainViewModel vm, Guid? parent)
+    {
+        var mi = Item("New entry", "new");
+        foreach (var (label, kind, icon) in new[] { ("RDP", "Rdp", "rdp"), ("SSH", "Ssh", "ssh"), ("Web", "Web", "web"), ("VNC", "Vnc", "vnc"), ("Credential", "Credential", "key"), ("Folder", "Folder", "folder") })
+        {
+            if (kind == "Credential") mi.Items.Add(new Separator());
+            mi.Items.Add(Item(label, icon, () => _ = vm.NewEntryInAsync(kind, parent)));
+        }
+        return mi;
+    }
+
+    private static MenuItem PasteItem(MainViewModel vm, Guid? folder) =>
+        Item(vm.CopiedEntry is { } c ? $"Paste \"{c.Name}\"" : "Paste", "paste", () => _ = vm.PasteAsync(folder), enabled: vm.CopiedEntry is not null);
+
+    /// <summary>Right-click on empty space in the tree.</summary>
+    public static void FillBackground(ContextMenu menu, MainViewModel vm, Action import)
+    {
+        menu.Items.Clear();
+        menu.Items.Add(NewSubmenu(vm, null));
+        menu.Items.Add(PasteItem(vm, null));
+        menu.Items.Add(new Separator());
+        menu.Items.Add(Item("Expand all", "expand", () => vm.SetExpanded(null, true)));
+        menu.Items.Add(Item("Collapse all", "collapse", () => vm.SetExpanded(null, false)));
+        menu.Items.Add(new Separator());
+        menu.Items.Add(Item("Import…", "import", import));
+        menu.Items.Add(Item("Refresh", "refresh", () => _ = vm.RefreshAsync(), "F5"));
     }
 
     private static MenuItem Item(string header, string? icon = null, Action? click = null, string? gesture = null, bool bold = false, bool enabled = true)

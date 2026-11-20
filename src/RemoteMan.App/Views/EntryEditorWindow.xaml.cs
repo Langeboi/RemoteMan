@@ -22,10 +22,10 @@ public partial class EntryEditorWindow : Window
     private readonly ISecretProtector _protector;
     private readonly ObservableCollection<HostRow> _hosts = new();
     private readonly EntryStore _store;
-    private sealed record CredChoice(Guid Id, string Name);
-    private sealed record JumpChoice(Guid? Id, string Name);
-    private sealed record BrowserChoice(BrowserKind Kind, string Label);
-    private sealed record LoginChoice(LoginSource Source, string Name);
+    public sealed record CredChoice(Guid Id, string Name) { public override string ToString() => Name; }
+    public sealed record JumpChoice(Guid? Id, string Name) { public override string ToString() => Name; }
+    public sealed record BrowserChoice(BrowserKind Kind, string Label) { public override string ToString() => Label; }
+    public sealed record LoginChoice(LoginSource Source, string Name) { public override string ToString() => Name; }
     /// <summary>Set on OK when "Save as a reusable credential too" was ticked: the caller saves it first.</summary>
     public Entry? NewCredential { get; private set; }
     private string? _certBase64;

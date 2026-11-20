@@ -496,8 +496,14 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
     [RelayCommand]
     private Task NewEntryAsync(string kindName)
     {
-        var kind = Enum.Parse<EntryKind>(kindName);
         var parent = Selected?.Entry is { } s ? (s.Kind == EntryKind.Folder ? s.Id : s.ParentId) : null;
+        return NewEntryInAsync(kindName, parent);
+    }
+
+    /// <summary>Opens the editor for a new entry inside <paramref name="parent"/> (null = top level).</summary>
+    public Task NewEntryInAsync(string kindName, Guid? parent)
+    {
+        var kind = Enum.Parse<EntryKind>(kindName);
         if (parent == FavoritesId) parent = null;
         var e = new Entry { Kind = kind, ParentId = parent, Name = kind == EntryKind.Folder ? "New folder" : "" };
         switch (kind)
@@ -570,6 +576,72 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
         var parts = new List<string>();
         for (Entry? f = folder; f is not null && parts.Count < 32; f = f.ParentId is { } p ? _store?.Get(p) : null) parts.Insert(0, f.Name);
         return string.Join(" / ", parts);
+    }
+
+    // ---------------- tree: copy and paste, expand and collapse ----------------
+
+    private Guid? _copiedId;
+
+    /// <summary>The entry (or folder) waiting to be pasted, if it still exists.</summary>
+    public Entry? CopiedEntry => _copiedId is { } id ? _store?.Get(id) : null;
+
+    public void CopyEntry(Entry e)
+    {
+        _copiedId = e.Id;
+        Message = $"Copied {e.Name}. Right-click a folder or empty space and choose Paste.";
+    }
+
+    /// <summary>Pastes a copy of the copied entry into <paramref name="folder"/>; a folder comes with everything in it.</summary>
+    public async Task PasteAsync(Guid? folder)
+    {
+        if (_store is null || CopiedEntry is not { } src) return;
+        if (!_store.IsOnline) { Message = "Offline: entries can't be added until the database is back"; return; }
+        for (var f = folder; f is { } fid; f = _store.Get(fid)?.ParentId)
+            if (fid == src.Id) { Message = "A folder can't be pasted inside itself"; return; }
+        try
+        {
+            var n = await PasteTreeAsync(src, folder, top: true);
+            Message = n == 1 ? $"Pasted {src.Name}" : $"Pasted {src.Name} ({n} entries)";
+            if (folder is { } t && _nodes.TryGetValue(t, out var node)) node.IsExpanded = true;
+        }
+        catch (Exception ex) { Message = ex.Message; }
+    }
+
+    private async Task<int> PasteTreeAsync(Entry src, Guid? parent, bool top)
+    {
+        var c = EntryStore.Clone(src);
+        c.Id = Guid.NewGuid();
+        c.Revision = 0;
+        c.ParentId = parent;
+        c.UpdatedBy = null; c.CreatedAt = null; c.CreatedBy = null;
+        if (top && _store!.Entries.Any(x => x.ParentId == parent && x.Name.Equals(c.Name, StringComparison.OrdinalIgnoreCase))) c.Name += " (copy)";
+        await _store!.SaveAsync(c);
+        var count = 1;
+        if (src.Kind == EntryKind.Folder)
+            foreach (var child in _store.Entries.Where(x => x.ParentId == src.Id).ToList())
+                count += await PasteTreeAsync(child, c.Id, top: false);
+        return count;
+    }
+
+    /// <summary>Expands or collapses every folder, or only <paramref name="root"/> and the folders inside it.</summary>
+    public void SetExpanded(Guid? root, bool expanded)
+    {
+        bool Under(Entry e)
+        {
+            if (root is null) return true;
+            for (Guid? f = e.Id; f is { } fid; f = _store?.Get(fid)?.ParentId)
+                if (fid == root) return true;
+            return false;
+        }
+        foreach (var n in _nodes.Values.Where(n => n.Entry.Kind == EntryKind.Folder && Under(n.Entry)))
+            n.IsExpanded = expanded;
+    }
+
+    public async Task RefreshAsync()
+    {
+        if (_store is null) return;
+        try { await _store.PullAsync(); Message = "Refreshed"; }
+        catch (Exception ex) { Message = ex.Message; }
     }
 
     public async Task SaveChangeAsync(Entry original, Action<Entry> change, string done)
