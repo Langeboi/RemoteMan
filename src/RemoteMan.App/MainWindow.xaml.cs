@@ -20,6 +20,7 @@ public partial class MainWindow : Window
         _vm = new MainViewModel(settings)
         {
             EditDialog = (entry, store, protector) => new EntryEditorWindow(entry, store, protector) { Owner = this }.ShowDialog() == true ? entry : null,
+            Choose = (title, text, buttons) => Views.ChoiceDialog.Show(this, title, text, buttons),
             Confirm = text => MessageBox.Show(this, text, "RemoteMan", MessageBoxButton.YesNo, MessageBoxImage.Question) == MessageBoxResult.Yes,
         };
         DataContext = _vm;
@@ -130,11 +131,72 @@ public partial class MainWindow : Window
     /// <summary>Ctrl+click a credential to link it to the selected connection, without changing the selection.</summary>
     private async void OnTreeMouseDown(object sender, MouseButtonEventArgs e)
     {
+        _dragStart = e.GetPosition(Tree);
+        _dragNode = FindItem(e.OriginalSource as DependencyObject)?.DataContext as EntryNode;
         if (Keyboard.Modifiers != ModifierKeys.Control) return;
         if (FindItem(e.OriginalSource as DependencyObject)?.DataContext is not EntryNode clicked) return;
         if (clicked.Entry.Kind != Core.Model.EntryKind.Credential) return;
         e.Handled = true;
         await _vm.TryCtrlClickLinkAsync(clicked);
+    }
+
+    // ---------------- drag and drop: move entries between folders ----------------
+
+    private const string DragFormat = "RemoteMan.EntryId";
+    private Point _dragStart;
+    private EntryNode? _dragNode;
+    private EntryNode? _dropHighlight;
+
+    private void OnTreeMouseMove(object sender, MouseEventArgs e)
+    {
+        if (e.LeftButton != MouseButtonState.Pressed || _dragNode is null || Keyboard.Modifiers == ModifierKeys.Control) return;
+        var d = e.GetPosition(Tree) - _dragStart;
+        if (Math.Abs(d.X) < SystemParameters.MinimumHorizontalDragDistance && Math.Abs(d.Y) < SystemParameters.MinimumVerticalDragDistance) return;
+        var node = _dragNode;
+        _dragNode = null;
+        DragDrop.DoDragDrop(Tree, new DataObject(DragFormat, node.Id.ToString()), DragDropEffects.Move);
+        SetDropHighlight(null);
+    }
+
+    /// <summary>Dropping on a folder moves into it; on an entry, into that entry's folder; on empty space, to the top level.</summary>
+    private Guid? DropFolder(DragEventArgs e, out EntryNode? highlight)
+    {
+        highlight = null;
+        if (FindItem(e.OriginalSource as DependencyObject)?.DataContext is not EntryNode target) return null;
+        if (target.IsFolder) { highlight = target; return target.Id; }
+        if (target.Entry.ParentId is { } p && _vm.FindNode(p) is { } parent) { highlight = parent; return p; }
+        return null;
+    }
+
+    private void OnTreeDragOver(object sender, DragEventArgs e)
+    {
+        e.Effects = DragDropEffects.None;
+        if (e.Data.GetData(DragFormat) is string id && Guid.TryParse(id, out var moving))
+        {
+            var folder = DropFolder(e, out var highlight);
+            if (_vm.CanMove(moving, folder)) { e.Effects = DragDropEffects.Move; SetDropHighlight(highlight); }
+            else SetDropHighlight(null);
+        }
+        e.Handled = true;
+    }
+
+    private void OnTreeDragLeave(object sender, DragEventArgs e) => SetDropHighlight(null);
+
+    private async void OnTreeDrop(object sender, DragEventArgs e)
+    {
+        SetDropHighlight(null);
+        if (e.Data.GetData(DragFormat) is not string id || !Guid.TryParse(id, out var moving)) return;
+        var folder = DropFolder(e, out _);
+        e.Handled = true;
+        await _vm.MoveAsync(moving, folder);
+    }
+
+    private void SetDropHighlight(EntryNode? node)
+    {
+        if (ReferenceEquals(node, _dropHighlight)) return;
+        if (_dropHighlight is not null) _dropHighlight.IsDropTarget = false;
+        _dropHighlight = node;
+        if (node is not null) node.IsDropTarget = true;
     }
 
     private void OnTreeDoubleClick(object sender, MouseButtonEventArgs e)

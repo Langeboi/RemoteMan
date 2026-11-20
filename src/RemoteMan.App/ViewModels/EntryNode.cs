@@ -36,6 +36,7 @@ public sealed partial class EntryNode : ObservableObject
     [ObservableProperty] private bool _isLinkTarget;
     /// <summary>Tiny initials badge on the corner of the protocol icon: the first person on this entry, tooltip lists everyone.</summary>
     [ObservableProperty] private PresenceChip? _badge;
+    [ObservableProperty] private bool _isDropTarget;
 
     public int Depth { get; }
     public Thickness Indent => new(8 + Depth * 16, 0, 8, 0);

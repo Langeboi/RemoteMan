@@ -93,11 +93,29 @@ public partial class WebSessionView : UserControl
         Web.CoreWebView2.Navigate(url);
     }
 
-    private void OnOpenIn(object sender, SelectionChangedEventArgs e)
+    private async void OnOpenIn(object sender, SelectionChangedEventArgs e)
     {
         if (OpenIn.SelectedItem is not ComboBoxItem { Tag: string tag } || _vm is null) return;
-        try { ExternalBrowser.Open(Web.Source?.ToString() ?? _vm.Url, Enum.Parse<BrowserKind>(tag), _vm.Settings.IgnoreCertificateErrors); }
-        catch (Exception ex) { MessageBox.Show(Window.GetWindow(this), ex.Message, "RemoteMan"); }
         OpenIn.SelectedIndex = 0;
+        var url = Web.Source?.ToString() ?? _vm.Url;
+        var kind = Enum.Parse<BrowserKind>(tag);
+        var owner = Window.GetWindow(this);
+        try { ExternalBrowser.Open(url, kind, _vm.Settings.IgnoreCertificateErrors); }
+        catch (BrowserNotInstalledException)
+        {
+            var name = BrowserInstaller.DisplayName(kind);
+            if (ChoiceDialog.Show(owner, $"{name} isn't installed", $"Install {name} on this PC and open this page in it?", [$"Install {name}", "Cancel"]) != 0) return;
+            _vm.StatusText = $"Installing {name}…";
+            var outcome = await BrowserInstaller.InstallAsync(kind);
+            _vm.StatusText = outcome switch
+            {
+                BrowserInstaller.Result.Installed => $"{name} installed",
+                BrowserInstaller.Result.DownloadPageOpened => $"Opened the {name} download page",
+                _ => $"Couldn't install {name}",
+            };
+            if (outcome == BrowserInstaller.Result.Installed)
+                try { ExternalBrowser.Open(url, kind, _vm.Settings.IgnoreCertificateErrors); } catch (Exception ex) { _vm.StatusText = ex.Message; }
+        }
+        catch (Exception ex) { ChoiceDialog.Show(owner, "Couldn't open the browser", ex.Message, ["OK"]); }
     }
 }
