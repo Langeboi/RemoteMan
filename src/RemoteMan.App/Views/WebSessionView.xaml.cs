@@ -14,7 +14,6 @@ public partial class WebSessionView : UserControl
 {
     private WebSessionViewModel? _vm;
     private bool _started;
-    private bool _filled;
 
     public WebSessionView()
     {
@@ -40,12 +39,16 @@ public partial class WebSessionView : UserControl
         };
         core.SourceChanged += (_, _) => Address.Text = core.Source;
         core.DocumentTitleChanged += (_, _) => vm.StatusText = core.DocumentTitle;
-        core.NavigationCompleted += async (_, _) =>
+        // Auto-login runs in every page of this tab, limited to the entry's own hosts.
+        if (vm.Settings.AutoFill && vm.Credential.Password is not null)
         {
-            if (_filled || !vm.Settings.AutoFill || vm.Credential.Password is null) return;
-            _filled = true;
-            await core.ExecuteScriptAsync(AutoFillScript.Build(vm.Credential.UserName, vm.Credential.Password));
-        };
+            var hosts = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { vm.Endpoint.Host };
+            if (Uri.TryCreate(vm.Settings.Url, UriKind.Absolute, out var u)) hosts.Add(u.Host);
+            foreach (var ep in vm.Entry.Endpoints) hosts.Add(ep.Host);
+            var s = vm.Settings;
+            await core.AddScriptToExecuteOnDocumentCreatedAsync(AutoFillScript.Build(vm.Credential.UserName, vm.Credential.Password,
+                new AutoLoginOptions(hosts, s.AutoSubmit, Blank(s.UserFieldSelector), Blank(s.PasswordFieldSelector), Blank(s.SubmitSelector))));
+        }
         core.NewWindowRequested += (_, a) => { a.Handled = true; core.Navigate(a.Uri); };
 
         // Copy on select: the page reports selections, the host writes the Windows clipboard.
@@ -76,6 +79,8 @@ public partial class WebSessionView : UserControl
           }, 0);
         }, true);
         """;
+
+    private static string? Blank(string? s) => string.IsNullOrWhiteSpace(s) ? null : s.Trim();
 
     private void OnBack(object sender, RoutedEventArgs e) { if (Web.CanGoBack) Web.GoBack(); }
     private void OnReload(object sender, RoutedEventArgs e) => Web.Reload();

@@ -21,10 +21,15 @@ WebView2 runtime ships with Windows 11 and current Windows 10.
   (`ssh host`, `rdp://host:3390`, `https://…`).
 - Several hosts per entry: primary first, then fallbacks, each probed with a 2 s TCP check.
 - **Ctrl+click** a credential while a connection is selected to link it.
+- Duplicate (Ctrl+D) opens the editor on the copy so you change what differs before saving.
+- Copy user name (Ctrl+Shift+U), password (Ctrl+Shift+P) or both (Ctrl+Shift+B: paste once for the user
+  name, again for the password). Passwords stay out of clipboard history and are cleared after 30 s.
 - RDP embedded (Windows' own mstscax control), resizes with the tab, no certificate prompts.
 - SSH in an xterm.js terminal: host keys accepted automatically (trust on first use, changes logged),
   modern and legacy algorithms, password / keyboard-interactive / key auth (OpenSSH, PEM, PuTTY .ppk).
-- Web in embedded Chromium (WebView2) with certificate errors skipped and login auto-fill, or opened
+- Web in embedded Chromium (WebView2) with certificate errors skipped and automatic login (finds the user
+  and password boxes, fills them, presses login; handles late-loading and two-step login pages, with
+  optional CSS selectors per entry), or opened
   in Edge, Chrome or Firefox.
 - Copy on select in SSH, RDP and web tabs (no Ctrl+C needed); right click pastes in SSH.
 - RDP file transfer over the RDP clipboard: copy files on one side, paste on the other, or drop files on

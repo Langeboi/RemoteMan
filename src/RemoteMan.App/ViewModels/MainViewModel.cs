@@ -41,6 +41,7 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
     [ObservableProperty] private string _searchText = "";
     [ObservableProperty] private string _dataSourceText = "Opening…";
     [ObservableProperty] private bool _dataSourceOk;
+    [ObservableProperty] private bool _isSharedSource;
     [ObservableProperty] private string _onlineText = "";
     [ObservableProperty] private string _message = "";
     [ObservableProperty] private string _sessionStatus = "";
@@ -63,6 +64,12 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
             _store = new EntryStore(source, user, Environment.MachineName);
             _store.EntriesChanged += (_, _) => OnUi(RebuildTree);
             _store.PresenceChanged += (_, _) => OnUi(ApplyPresence);
+            source.ConnectionChanged += (_, up) => OnUi(() =>
+            {
+                DataSourceOk = up;
+                DataSourceText = up ? source.DisplayName : $"{source.DisplayName}: not reachable, retrying";
+            });
+            IsSharedSource = cfg.Kind != DataSourceKind.Sqlite;
             await _store.OpenAsync();
             DataSourceText = source.DisplayName;
             DataSourceOk = true;
@@ -72,6 +79,7 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
         {
             DataSourceOk = false;
             DataSourceText = $"{cfg.Name}: {ex.Message}";
+            Message = DataSourceText;
         }
     }
 
@@ -343,15 +351,54 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
         await _store.DeleteAsync(s.Id);
     }
 
+    /// <summary>Copies the entry and opens the editor on the copy; nothing is saved if you cancel.</summary>
     [RelayCommand]
-    private async Task DuplicateAsync()
+    private Task DuplicateAsync()
     {
-        if (_store is null || Selected?.Entry is not { } e || e.Kind == EntryKind.Folder) return;
+        if (_store is null || Selected?.Entry is not { } e || e.Kind == EntryKind.Folder) return Task.CompletedTask;
         var copy = EntryStore.Clone(e);
         copy.Id = Guid.NewGuid();
         copy.Revision = 0;
+        copy.UpdatedBy = null;
         copy.Name += " (copy)";
-        await _store.SaveAsync(copy);
+        return EditAndSaveAsync(copy);
+    }
+
+    // ---------------- copy login details ----------------
+
+    /// <summary>The credential for the selected entry: its own for credential entries, else the linked one.</summary>
+    private RemoteMan.Protocols.ResolvedCredential? SelectedCredential()
+    {
+        if (_store is null || _protector is null || Selected?.Entry is not { } e) return null;
+        var c = Secrets.Resolve(e, _store, _protector);
+        if (c.UserName is null && c.Password is null) { Message = $"{e.Name} has no login linked"; return null; }
+        return c;
+    }
+
+    [RelayCommand]
+    private void CopyUserName()
+    {
+        if (SelectedCredential() is not { } c) return;
+        var user = c.Domain is { Length: > 0 } d ? $"{d}\\{c.UserName}" : c.UserName ?? "";
+        CredentialClipboard.CopyText(user, secret: false);
+        Message = "User name copied";
+    }
+
+    [RelayCommand]
+    private void CopyPassword()
+    {
+        if (SelectedCredential() is not { Password: { } pw }) { Message = "No password stored"; return; }
+        CredentialClipboard.CopyText(pw, secret: true);
+        Message = $"Password copied, clears in {CredentialClipboard.ClearAfter.TotalSeconds:0} s";
+    }
+
+    [RelayCommand]
+    private void CopyBoth()
+    {
+        if (SelectedCredential() is not { } c) return;
+        var user = c.Domain is { Length: > 0 } d ? $"{d}\\{c.UserName}" : c.UserName ?? "";
+        CredentialClipboard.CopyBoth(user, c.Password ?? "");
+        Message = "Paste once for the user name, again for the password";
     }
 
     public async ValueTask DisposeAsync()

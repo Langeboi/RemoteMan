@@ -123,6 +123,20 @@
                         </DockPanel>
                         <CheckBox x:Name="WebIgnoreCert" Content="Ignore certificate errors" />
                         <CheckBox x:Name="WebAutoFill" Content="Fill in the login form automatically" />
+                        <CheckBox x:Name="WebAutoSubmit" Content="Then press the login button" Margin="18,3,0,3" />
+                        <TextBlock Text="Form fields (optional CSS selectors, leave empty to detect automatically)" Style="{StaticResource Muted}" FontSize="11" Margin="0,6,0,2" />
+                        <DockPanel Margin="0,2">
+                            <TextBlock Text="User field" Width="90" Style="{StaticResource Label}" />
+                            <TextBox x:Name="WebUserSel" FontFamily="{StaticResource MonoFont}" FontSize="11" ToolTip="e.g. #username or input[name=login]" />
+                        </DockPanel>
+                        <DockPanel Margin="0,2">
+                            <TextBlock Text="Password field" Width="90" Style="{StaticResource Label}" />
+                            <TextBox x:Name="WebPassSel" FontFamily="{StaticResource MonoFont}" FontSize="11" ToolTip="e.g. #password" />
+                        </DockPanel>
+                        <DockPanel Margin="0,2">
+                            <TextBlock Text="Login button" Width="90" Style="{StaticResource Label}" />
+                            <TextBox x:Name="WebSubmitSel" FontFamily="{StaticResource MonoFont}" FontSize="11" ToolTip="e.g. button#login" />
+                        </DockPanel>
                         <CheckBox x:Name="WebCopySelect" Content="Copy text as soon as it is selected" />
                     </StackPanel>
                 </GroupBox>

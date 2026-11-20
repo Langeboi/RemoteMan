@@ -39,6 +39,14 @@ public abstract class SqlDataSource : IDataSource
     public event EventHandler<ChangeSignal>? Changed;
     protected void RaiseChanged(ChangeSignal s) => Changed?.Invoke(this, s);
 
+    private int _connected = 1;
+    public bool IsConnected => Volatile.Read(ref _connected) == 1;
+    public event EventHandler<bool>? ConnectionChanged;
+    protected void SetConnected(bool value)
+    {
+        if (Interlocked.Exchange(ref _connected, value ? 1 : 0) != (value ? 1 : 0)) ConnectionChanged?.Invoke(this, value);
+    }
+
     protected abstract DbConnection CreateConnection();
     protected abstract IEnumerable<string> SchemaStatements { get; }
     /// <summary>Statement that increments the counter row and returns the new value.</summary>
@@ -256,12 +264,14 @@ public abstract class SqlDataSource : IDataSource
                         var stamp = Convert.ToInt64(await cmd.ExecuteScalarAsync(ct));
                         if (stamp != Interlocked.Exchange(ref _seenPresenceStamp, stamp)) RaiseChanged(new ChangeSignal(ChangeSignalKind.Presence));
                     }
+                    SetConnected(true);
                     await Task.Delay(intervalMs, ct);
                 }
             }
             catch (OperationCanceledException) { return; }
             catch (Exception)
             {
+                SetConnected(false);
                 // Server unreachable: back off, the RedundantDataSource decides about failover.
                 try { await Task.Delay(Math.Min(intervalMs * 5, 5000), ct); } catch (OperationCanceledException) { return; }
             }

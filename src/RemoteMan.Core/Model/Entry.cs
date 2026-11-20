@@ -100,6 +100,12 @@ public sealed class WebSettings
     public bool IgnoreCertificateErrors { get; set; } = true;
     /// <summary>Try to fill the linked credential into the first login form.</summary>
     public bool AutoFill { get; set; } = true;
+    /// <summary>After filling, press the login button (once per page load, so a failed login doesn't loop).</summary>
+    public bool AutoSubmit { get; set; } = true;
+    /// <summary>Optional CSS selectors for pages the automatic detection gets wrong.</summary>
+    public string? UserFieldSelector { get; set; }
+    public string? PasswordFieldSelector { get; set; }
+    public string? SubmitSelector { get; set; }
     public bool CopyOnSelect { get; set; } = true;
 }
 

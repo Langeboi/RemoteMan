@@ -70,12 +70,14 @@ public sealed class PostgresDataSource : SqlDataSource
                 };
                 await using (var cmd = new NpgsqlCommand($"LISTEN {Channel}", conn)) await cmd.ExecuteNonQueryAsync(ct);
                 // Catch up on anything that happened while we were not listening.
+                SetConnected(true);
                 RaiseChanged(new ChangeSignal(ChangeSignalKind.Entries));
                 while (!ct.IsCancellationRequested) await conn.WaitAsync(ct);
             }
             catch (OperationCanceledException) { return; }
             catch (Exception)
             {
+                SetConnected(false);
                 try { await Task.Delay(2000, ct); } catch (OperationCanceledException) { return; }
             }
         }

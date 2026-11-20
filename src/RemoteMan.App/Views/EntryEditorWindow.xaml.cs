@@ -73,7 +73,8 @@ public partial class EntryEditorWindow : Window
         var w = entry.Web ?? new WebSettings();
         UrlBox.Text = w.Url;
         WebBrowser.ItemsSource = Enum.GetValues<BrowserKind>(); WebBrowser.SelectedItem = w.Browser;
-        WebIgnoreCert.IsChecked = w.IgnoreCertificateErrors; WebAutoFill.IsChecked = w.AutoFill; WebCopySelect.IsChecked = w.CopyOnSelect;
+        WebIgnoreCert.IsChecked = w.IgnoreCertificateErrors; WebAutoFill.IsChecked = w.AutoFill; WebAutoSubmit.IsChecked = w.AutoSubmit;
+        WebUserSel.Text = w.UserFieldSelector; WebPassSel.Text = w.PasswordFieldSelector; WebSubmitSel.Text = w.SubmitSelector; WebCopySelect.IsChecked = w.CopyOnSelect;
 
         var v = entry.Vnc ?? new VncSettings();
         VncViewerBox.ItemsSource = Enum.GetValues<VncViewer>(); VncViewerBox.SelectedItem = v.Viewer; VncViewOnly.IsChecked = v.ViewOnly;
@@ -149,6 +150,10 @@ public partial class EntryEditorWindow : Window
                 _e.Web.Browser = (BrowserKind)(WebBrowser.SelectedItem ?? BrowserKind.Embedded);
                 _e.Web.IgnoreCertificateErrors = WebIgnoreCert.IsChecked == true;
                 _e.Web.AutoFill = WebAutoFill.IsChecked == true;
+                _e.Web.AutoSubmit = WebAutoSubmit.IsChecked == true;
+                _e.Web.UserFieldSelector = string.IsNullOrWhiteSpace(WebUserSel.Text) ? null : WebUserSel.Text.Trim();
+                _e.Web.PasswordFieldSelector = string.IsNullOrWhiteSpace(WebPassSel.Text) ? null : WebPassSel.Text.Trim();
+                _e.Web.SubmitSelector = string.IsNullOrWhiteSpace(WebSubmitSel.Text) ? null : WebSubmitSel.Text.Trim();
                 _e.Web.CopyOnSelect = WebCopySelect.IsChecked == true;
                 break;
             case EntryKind.Vnc:
