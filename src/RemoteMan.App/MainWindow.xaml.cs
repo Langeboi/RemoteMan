@@ -98,6 +98,10 @@ public partial class MainWindow : Window
             MessageBox.Show(this, "Restart RemoteMan to switch data source.", "RemoteMan");
     }
 
+    private void OnImport(object sender, RoutedEventArgs e) => new ImportWindow(_vm) { Owner = this }.ShowDialog();
+    private void OnExportBackup(object sender, RoutedEventArgs e) => new BackupWindow(_vm) { Owner = this }.ShowDialog();
+    private void OnRestore(object sender, RoutedEventArgs e) => new BackupWindow(_vm, section: 2) { Owner = this }.ShowDialog();
+
     private void OnExit(object sender, RoutedEventArgs e) => Close();
 
     private static TreeViewItem? FindItem(DependencyObject? d)

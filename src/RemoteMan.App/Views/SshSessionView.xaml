@@ -66,16 +66,129 @@
             </ListView>
         </DockPanel>
 
-        <!-- Side strip: toggles the Files panel; also a drop target -->
+        <!-- Snippets panel: saved commands, sent to this and other SSH tabs -->
+        <DockPanel x:Name="SnippetsPanel" Grid.Column="2" Background="{StaticResource Panel}" Visibility="Collapsed">
+            <Border DockPanel.Dock="Top" Height="24" BorderBrush="{StaticResource Border}" BorderThickness="0,0,0,1">
+                <DockPanel Margin="6,0,2,0">
+                    <Button DockPanel.Dock="Right" Style="{StaticResource FlatButton}" Content="⋯" ToolTip="More" AutomationProperties.Name="More snippet actions" Click="OnSnippetMore" />
+                    <Button DockPanel.Dock="Right" Style="{StaticResource FlatButton}" ToolTip="New snippet" AutomationProperties.Name="New snippet" Click="OnNewSnippet">
+                        <Path Data="M5,0 V10 M0,5 H10" Stroke="#B8BCC3" StrokeThickness="1.5" />
+                    </Button>
+                    <Grid>
+                        <TextBox x:Name="SnippetFilter" BorderThickness="0" Background="Transparent" TextChanged="OnSnippetFilterChanged"
+                                 AutomationProperties.Name="Filter snippets" KeyDown="OnSnippetFilterKey" />
+                        <TextBlock Text="Filter snippets" Foreground="{StaticResource Faint}" IsHitTestVisible="False" VerticalAlignment="Center" Margin="5,0">
+                            <TextBlock.Style>
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="Visibility" Value="Collapsed" />
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding Text, ElementName=SnippetFilter}" Value=""><Setter Property="Visibility" Value="Visible" /></DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                        </TextBlock>
+                    </Grid>
+                </DockPanel>
+            </Border>
+            <Border DockPanel.Dock="Bottom" BorderBrush="{StaticResource Border}" BorderThickness="0,1,0,0" Background="{StaticResource Panel2}" Padding="8,6">
+                <StackPanel>
+                    <TextBlock Text="Send to" Style="{StaticResource Muted}" FontSize="11" />
+                    <ItemsControl x:Name="TargetList" Margin="0,4,0,0" Focusable="False">
+                        <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Border BorderThickness="1" Padding="5,0" Margin="0,0,4,4">
+                                    <Border.Style>
+                                        <Style TargetType="Border">
+                                            <Setter Property="BorderBrush" Value="{StaticResource InputBorder}" />
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding IsChecked}" Value="True">
+                                                    <Setter Property="BorderBrush" Value="#50667D" />
+                                                    <Setter Property="Background" Value="#26313C" />
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Border.Style>
+                                    <CheckBox Content="{Binding Title}" IsChecked="{Binding IsChecked}" Margin="0,2" />
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                    <CheckBox x:Name="PressEnterBox" Content="Press Enter after sending" IsChecked="True" Foreground="{StaticResource Muted}" />
+                    <DockPanel Margin="0,4,0,0">
+                        <Button DockPanel.Dock="Right" Content="Edit" Margin="6,0,0,0" Click="OnEditSnippet" />
+                        <Button x:Name="SendButton" Content="Send" Style="{StaticResource PrimaryButton}" Click="OnSendSnippet" />
+                    </DockPanel>
+                    <TextBlock x:Name="SnippetStatus" Style="{StaticResource Muted}" FontSize="11" Margin="0,4,0,0" TextWrapping="Wrap"
+                               Text="Double-click sends to this tab only. {host}, {user} and {name} are filled in per session." />
+                </StackPanel>
+            </Border>
+            <ListBox x:Name="SnippetList" Background="Transparent" BorderThickness="0" Foreground="{StaticResource Text}"
+                     ScrollViewer.HorizontalScrollBarVisibility="Disabled" VirtualizingPanel.IsVirtualizingWhenGrouping="True"
+                     MouseDoubleClick="OnSnippetDoubleClick" KeyDown="OnSnippetKey" SelectionChanged="OnSnippetSelected">
+                <ListBox.GroupStyle>
+                    <GroupStyle>
+                        <GroupStyle.HeaderTemplate>
+                            <DataTemplate>
+                                <TextBlock Text="{Binding Name}" Style="{StaticResource Muted}" FontSize="11" FontWeight="SemiBold" Margin="8,6,0,2" />
+                            </DataTemplate>
+                        </GroupStyle.HeaderTemplate>
+                    </GroupStyle>
+                </ListBox.GroupStyle>
+                <ListBox.ContextMenu>
+                    <ContextMenu>
+                        <MenuItem Header="Send to this tab" Click="OnSendHere" />
+                        <MenuItem Header="Edit…" Click="OnEditSnippet" />
+                        <MenuItem Header="Duplicate…" Click="OnDuplicateSnippet" />
+                        <Separator />
+                        <MenuItem Header="Delete" Click="OnDeleteSnippet" />
+                    </ContextMenu>
+                </ListBox.ContextMenu>
+                <ListBox.ItemContainerStyle>
+                    <Style TargetType="ListBoxItem">
+                        <Setter Property="Foreground" Value="{StaticResource Text}" />
+                        <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+                        <Setter Property="Template">
+                            <Setter.Value>
+                                <ControlTemplate TargetType="ListBoxItem">
+                                    <Border x:Name="b" Background="Transparent" Padding="16,3,8,3" ToolTip="{Binding Snippet.Command}">
+                                        <StackPanel>
+                                            <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
+                                            <TextBlock Text="{Binding Snippet.Command}" FontFamily="{StaticResource MonoFont}" FontSize="10.5"
+                                                       Foreground="{StaticResource Muted}" TextTrimming="CharacterEllipsis" MaxHeight="15" />
+                                        </StackPanel>
+                                    </Border>
+                                    <ControlTemplate.Triggers>
+                                        <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="b" Property="Background" Value="{StaticResource Hover}" /></Trigger>
+                                        <Trigger Property="IsSelected" Value="True"><Setter TargetName="b" Property="Background" Value="{StaticResource Select}" /></Trigger>
+                                    </ControlTemplate.Triggers>
+                                </ControlTemplate>
+                            </Setter.Value>
+                        </Setter>
+                    </Style>
+                </ListBox.ItemContainerStyle>
+            </ListBox>
+        </DockPanel>
+
+        <!-- Side strip: toggles the Files and Snippets panels; also a drop target -->
         <Border Grid.Column="3" Background="{StaticResource Panel}" BorderBrush="{StaticResource Border}" BorderThickness="1,0,0,0"
                 AllowDrop="True" Drop="OnFilesDrop" DragOver="OnFilesDragOver">
-            <ToggleButton x:Name="FilesToggle" VerticalAlignment="Top" Height="64" Background="Transparent" BorderThickness="0"
+            <StackPanel VerticalAlignment="Top">
+            <ToggleButton x:Name="FilesToggle" Height="64" Background="Transparent" BorderThickness="0"
                           Foreground="{StaticResource Muted}" ToolTip="Files (SFTP, Ctrl+Shift+F)" AutomationProperties.Name="Toggle files panel"
                           Checked="OnFilesToggled" Unchecked="OnFilesToggled">
                 <TextBlock Text="Files" FontSize="11">
                     <TextBlock.LayoutTransform><RotateTransform Angle="90" /></TextBlock.LayoutTransform>
                 </TextBlock>
             </ToggleButton>
+            <ToggleButton x:Name="SnippetsToggle" Height="74" Background="Transparent" BorderThickness="0"
+                          Foreground="{StaticResource Muted}" ToolTip="Snippets (Ctrl+Shift+S)" AutomationProperties.Name="Toggle snippets panel"
+                          Checked="OnSnippetsToggled" Unchecked="OnSnippetsToggled">
+                <TextBlock Text="Snippets" FontSize="11">
+                    <TextBlock.LayoutTransform><RotateTransform Angle="90" /></TextBlock.LayoutTransform>
+                </TextBlock>
+            </ToggleButton>
+            </StackPanel>
         </Border>
     </Grid>
 </UserControl>

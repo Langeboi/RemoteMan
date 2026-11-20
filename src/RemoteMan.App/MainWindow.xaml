@@ -70,6 +70,10 @@
                     <MenuItem Header="_File">
                         <MenuItem Header="Data sources…" Click="OnDataSources" />
                         <Separator />
+                        <MenuItem Header="_Import…" Click="OnImport" />
+                        <MenuItem Header="_Export and backup…" Click="OnExportBackup" />
+                        <MenuItem Header="_Restore from backup…" Click="OnRestore" />
+                        <Separator />
                         <MenuItem Header="E_xit" Click="OnExit" />
                     </MenuItem>
                     <MenuItem Header="_Edit">
