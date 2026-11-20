@@ -131,7 +131,9 @@ public sealed class EntryStore : IAsyncDisposable
     public async Task<Entry> SaveAsync(Entry entry, CancellationToken ct = default)
     {
         EnsureOnline();
-        long? expected = _entries.TryGetValue(entry.Id, out var existing) ? existing.Revision : null;
+        // Check against the revision the caller started editing from, not our live copy:
+        // the change feed may already have pulled someone else's newer save into _entries.
+        long? expected = _entries.ContainsKey(entry.Id) ? entry.Revision : null;
         try
         {
             var saved = await _source.SaveAsync(entry, User, expected, ct);
