@@ -22,13 +22,20 @@ public sealed class RedundantDataSource : IDataSource
     {
         if (members.Count == 0) throw new ArgumentException("At least one data source is required.");
         _members = members;
-        foreach (var m in members) m.Changed += (s, e) => { if (ReferenceEquals(s, Active)) Changed?.Invoke(this, e); };
+        foreach (var m in members)
+        {
+            m.Changed += (s, e) => { if (ReferenceEquals(s, Active)) Changed?.Invoke(this, e); };
+            m.ConnectionChanged += (s, up) => { if (ReferenceEquals(s, Active)) ConnectionChanged?.Invoke(this, up); };
+        }
     }
 
     public IDataSource Active => _members[_active];
     public string DisplayName => _members.Count == 1 ? Active.DisplayName : $"{Active.DisplayName} (+{_members.Count - 1} standby)";
     public DataSourceKind Kind => Active.Kind;
     public bool SupportsPresence => Active.SupportsPresence;
+    public bool IsConnected => Active.IsConnected;
+    public string? DatabaseUser => Active.DatabaseUser;
+    public event EventHandler<bool>? ConnectionChanged;
 
     public event EventHandler<ChangeSignal>? Changed;
     public event EventHandler<IDataSource>? FailedOver;
@@ -67,6 +74,7 @@ public sealed class RedundantDataSource : IDataSource
         }
         catch { /* the next Run attempt will move on again */ }
         FailedOver?.Invoke(this, Active);
+        ConnectionChanged?.Invoke(this, Active.IsConnected);
         Changed?.Invoke(this, new ChangeSignal(ChangeSignalKind.Entries));
     }
 

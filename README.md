@@ -21,10 +21,24 @@ WebView2 runtime ships with Windows 11 and current Windows 10.
   (`ssh host`, `rdp://host:3390`, `https://…`).
 - Several hosts per entry: primary first, then fallbacks, each probed with a 2 s TCP check.
 - **Ctrl+click** a credential while a connection is selected to link it.
+- Login per entry or folder: none, inherited from the folder, a saved credential, your Windows login, or typed
+  into the entry. Credential types: user name + password (+ domain), SSH key (stored, generated, or a key file
+  on disk), client certificate (.pfx), secret / API key; "ask for the password when connecting" is optional.
+- Right-click menu: connect / connect with (mstsc, another credential, Windows login, admin session), edit,
+  duplicate, move to, favorites, copy user / password / both / host, link credential, open with (mstsc,
+  .rdp file, WinSCP, ping), properties and history, delete. Drag entries onto folders to move them.
+- Duplicate (Ctrl+D) opens the editor on the copy so you change what differs before saving.
+- Copy user name (Ctrl+Shift+U), password (Ctrl+Shift+P) or both (Ctrl+Shift+B: paste once for the user
+  name, again for the password). Passwords stay out of clipboard history and are cleared after 30 s.
 - RDP embedded (Windows' own mstscax control), resizes with the tab, no certificate prompts.
+- Many RDP sessions stay light: the client offers the RDP 8+ graphics pipeline so servers with H.264/AVC
+  enabled stream video-coded frames that Windows decodes on the GPU; background tabs are hidden at the
+  window level and drop their mouse hook.
 - SSH in an xterm.js terminal: host keys accepted automatically (trust on first use, changes logged),
   modern and legacy algorithms, password / keyboard-interactive / key auth (OpenSSH, PEM, PuTTY .ppk).
-- Web in embedded Chromium (WebView2) with certificate errors skipped and login auto-fill, or opened
+- Web in embedded Chromium (WebView2) with certificate errors skipped and automatic login (finds the user
+  and password boxes, fills them, presses login; handles late-loading and two-step login pages, with
+  optional CSS selectors per entry), or opened
   in Edge, Chrome or Firefox.
 - Copy on select in SSH, RDP and web tabs (no Ctrl+C needed); right click pastes in SSH.
 - RDP file transfer over the RDP clipboard: copy files on one side, paste on the other, or drop files on
@@ -34,5 +48,12 @@ WebView2 runtime ships with Windows 11 and current Windows 10.
 - VNC through an installed viewer (TigerVNC, TightVNC, RealVNC, UltraVNC).
 - Data sources: local SQLite (default), or shared PostgreSQL, SQL Server or MySQL/MariaDB with
   multi-server failover, live updates and presence (who is viewing, editing or connected).
+- Users are the database login (local files: your Windows account). Every entry records when it was
+  created and last modified, and by whom (shown in the properties pane).
+- Optional single sign-on: a shared database can use your Windows login (SQL Server integrated security,
+  PostgreSQL/MySQL Kerberos), and RDP and web entries can log in as "(my Windows login)".
+- Offline mode: if the database drops, the Q turns red, entries keep working from memory (or from an
+  encrypted local cache at startup), edits wait, and RemoteMan retries every 15 s. When the database is
+  back the Q turns green and everything missed shows up live.
 
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the design.

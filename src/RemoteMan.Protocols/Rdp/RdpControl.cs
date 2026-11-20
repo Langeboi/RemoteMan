@@ -48,6 +48,8 @@ public sealed class RdpControl : AxHost
         var adv = ocx.AdvancedSettings9;
         adv.RDPPort = endpoint.Port;
         if (!string.IsNullOrEmpty(cred.Password)) adv.ClearTextPassword = cred.Password;
+        // CredSSP (NLA). With no password set, CredSSP signs in with the current Windows logon when
+        // the "Allow delegating default credentials" policy covers TERMSRV/<host>; otherwise Windows asks once.
         adv.EnableCredSspSupport = true;
         // 0 = connect without warning if server authentication fails: no certificate prompt.
         adv.AuthenticationLevel = s.IgnoreCertificateErrors ? 0 : 2;
@@ -58,6 +60,20 @@ public sealed class RdpControl : AxHost
         adv.EnableAutoReconnect = true;
         adv.BitmapPersistence = 1;
         adv.Compress = 1;
+
+        // Graphics pipeline. With 32-bit colour and connection-type auto-detect the client offers
+        // RDP 8+ GFX, so a server that has H.264/AVC enabled streams video-coded frames, which
+        // Windows decodes on the GPU (Media Foundation). That is far cheaper on the CPU than
+        // classic bitmap updates, and it matters most with many sessions open.
+        try
+        {
+            adv.BandwidthDetection = true;
+            adv.NetworkConnectionType = 7;  // CONNECTION_TYPE_AUTODETECT
+        }
+        catch (COMException) { /* very old mstscax: classic graphics */ }
+        // Composition, font smoothing on; wallpaper and animations off (they only cost bandwidth).
+        adv.PerformanceFlags = 0x100 | 0x80 | 0x01 | 0x04;
+        adv.GrabFocusOnConnect = false;
 
         if (s.UseRdGateway && !string.IsNullOrEmpty(s.GatewayHost))
         {
@@ -72,6 +88,20 @@ public sealed class RdpControl : AxHost
         ocx.Connect();
     }
 
+    /// <summary>
+    /// Background tabs: hide the control's window so Windows stops drawing it, and skip
+    /// resize work until the tab is shown again.
+    /// </summary>
+    public void SetForeground(bool foreground)
+    {
+        _foreground = foreground;
+        Visible = foreground;
+        if (foreground && _connected && _sizeChangedWhileHidden) { _sizeChangedWhileHidden = false; _resizeDebounce.Start(); }
+    }
+
+    private bool _foreground = true;
+    private bool _sizeChangedWhileHidden;
+
     public void Disconnect()
     {
         try { if (Ocx.Connected != 0) Ocx.Disconnect(); } catch (COMException) { }
@@ -80,7 +110,9 @@ public sealed class RdpControl : AxHost
     protected override void OnResize(EventArgs e)
     {
         base.OnResize(e);
-        if (_connected) { _resizeDebounce.Stop(); _resizeDebounce.Start(); }
+        if (!_connected) return;
+        if (!_foreground) { _sizeChangedWhileHidden = true; return; }
+        _resizeDebounce.Stop(); _resizeDebounce.Start();
     }
 
     /// <summary>Dynamic resolution: resize the remote desktop to the tab (Win 8.1+ hosts).</summary>

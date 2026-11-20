@@ -26,7 +26,7 @@
             <StackPanel Grid.Column="1" Margin="12,10">
                 <Grid>
                     <Grid.ColumnDefinitions><ColumnDefinition Width="120" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
-                    <Grid.RowDefinitions><RowDefinition /><RowDefinition /><RowDefinition Height="Auto" /><RowDefinition /></Grid.RowDefinitions>
+                    <Grid.RowDefinitions><RowDefinition /><RowDefinition /><RowDefinition Height="Auto" /><RowDefinition /><RowDefinition /></Grid.RowDefinitions>
                     <TextBlock Text="Name" Style="{StaticResource Muted}" VerticalAlignment="Center" />
                     <TextBox x:Name="NameBox" Grid.Column="1" Margin="0,2" />
                     <TextBlock Grid.Row="1" Text="Type" Style="{StaticResource Muted}" VerticalAlignment="Center" />
@@ -36,6 +36,8 @@
                              VerticalContentAlignment="Top" FontFamily="{StaticResource MonoFont}" FontSize="11" />
                     <TextBlock Grid.Row="3" Text="Vault passphrase" Style="{StaticResource Muted}" VerticalAlignment="Center" />
                     <PasswordBox x:Name="VaultBox" Grid.Row="3" Grid.Column="1" Margin="0,2" ToolTip="Shared by everyone on this data source; encrypts passwords and keys" />
+                    <CheckBox x:Name="SsoBox" Grid.Row="4" Grid.Column="1" Margin="0,6,0,2" Content="Use my Windows login (SSO)"
+                              ToolTip="Sign in to the database as the current Windows user (Kerberos/NTLM). User and password in the server lines are ignored." />
                 </Grid>
                 <TextBlock x:Name="Hint" Style="{StaticResource Muted}" TextWrapping="Wrap" Margin="120,8,0,0" FontSize="11" />
             </StackPanel>

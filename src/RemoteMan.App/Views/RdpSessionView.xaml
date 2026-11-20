@@ -24,5 +24,20 @@
                 </Button>
             </StackPanel>
         </Border>
+
+        <!-- A Popup is its own window, so it shows on top of the RDP control (WPF can't draw over it otherwise). -->
+        <Popup x:Name="Notice" PlacementTarget="{Binding ElementName=Host}" Placement="Relative" AllowsTransparency="False"
+               StaysOpen="True" PopupAnimation="None">
+            <Border Background="{StaticResource Panel}" BorderBrush="{StaticResource Accent}" BorderThickness="1" Padding="12,8" MaxWidth="460">
+                <DockPanel>
+                    <Button DockPanel.Dock="Right" Style="{StaticResource FlatButton}" Content="✕" Width="22" Height="22" Padding="0"
+                            VerticalAlignment="Top" Margin="10,0,0,0" Click="OnCloseNotice" AutomationProperties.Name="Close" />
+                    <StackPanel>
+                        <TextBlock x:Name="NoticeTitle" FontWeight="SemiBold" TextWrapping="Wrap" />
+                        <TextBlock x:Name="NoticeText" Style="{StaticResource Muted}" TextWrapping="Wrap" Margin="0,4,0,0" />
+                    </StackPanel>
+                </DockPanel>
+            </Border>
+        </Popup>
     </Grid>
 </UserControl>

@@ -13,6 +13,13 @@ public interface IDataSource : IAsyncDisposable
     DataSourceKind Kind { get; }
     bool SupportsPresence { get; }
 
+    /// <summary>The account the server says we are logged in as (set by InitializeAsync); null for local files.</summary>
+    string? DatabaseUser { get; }
+
+    /// <summary>Whether the last contact with the server succeeded (drives the status indicator).</summary>
+    bool IsConnected { get; }
+    event EventHandler<bool>? ConnectionChanged;
+
     Task InitializeAsync(CancellationToken ct = default);
 
     Task<IReadOnlyList<Entry>> LoadAllAsync(CancellationToken ct = default);

@@ -40,6 +40,14 @@ public sealed class PostgresDataSource : SqlDataSource
         "INSERT INTO remoteman_meta (id, rev) VALUES (1, 0) ON CONFLICT (id) DO NOTHING",
     ];
 
+    protected override IEnumerable<(string, bool)> MigrationStatements =>
+    [
+        ("ALTER TABLE remoteman_entries ADD COLUMN IF NOT EXISTS created_at BIGINT NULL", false),
+        ("ALTER TABLE remoteman_entries ADD COLUMN IF NOT EXISTS created_by VARCHAR(200) NULL", false),
+    ];
+
+    protected override string? CurrentUserSql => "SELECT session_user";
+
     protected override string NextRevisionSql => "UPDATE remoteman_meta SET rev = rev + 1 WHERE id = 1 RETURNING rev";
     protected override string? AfterEntryWriteSql => $"SELECT pg_notify('{Channel}', 'e:' || @rev::text)";
     protected override string? AfterPresenceWriteSql => $"SELECT pg_notify('{Channel}', 'p')";
@@ -70,12 +78,14 @@ public sealed class PostgresDataSource : SqlDataSource
                 };
                 await using (var cmd = new NpgsqlCommand($"LISTEN {Channel}", conn)) await cmd.ExecuteNonQueryAsync(ct);
                 // Catch up on anything that happened while we were not listening.
+                SetConnected(true);
                 RaiseChanged(new ChangeSignal(ChangeSignalKind.Entries));
                 while (!ct.IsCancellationRequested) await conn.WaitAsync(ct);
             }
             catch (OperationCanceledException) { return; }
             catch (Exception)
             {
+                SetConnected(false);
                 try { await Task.Delay(2000, ct); } catch (OperationCanceledException) { return; }
             }
         }

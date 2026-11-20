@@ -46,5 +46,13 @@ public sealed class SqlServerDataSource : SqlDataSource
         "IF NOT EXISTS (SELECT 1 FROM dbo.remoteman_meta WHERE id = 1) INSERT INTO dbo.remoteman_meta (id, rev) VALUES (1, 0)",
     ];
 
+    protected override IEnumerable<(string, bool)> MigrationStatements =>
+    [
+        ("IF COL_LENGTH('dbo.remoteman_entries', 'created_at') IS NULL ALTER TABLE dbo.remoteman_entries ADD created_at BIGINT NULL, created_by NVARCHAR(200) NULL", false),
+    ];
+
+    /// <summary>DOMAIN\user with Windows authentication, the SQL login name otherwise.</summary>
+    protected override string? CurrentUserSql => "SELECT SUSER_SNAME()";
+
     protected override string NextRevisionSql => "UPDATE dbo.remoteman_meta SET rev = rev + 1 OUTPUT inserted.rev WHERE id = 1";
 }

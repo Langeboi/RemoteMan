@@ -46,5 +46,11 @@ public sealed class SqliteDataSource : SqlDataSource
         "INSERT OR IGNORE INTO remoteman_meta (id, rev) VALUES (1, 0)",
     ];
 
+    protected override IEnumerable<(string, bool)> MigrationStatements =>
+    [
+        ("ALTER TABLE remoteman_entries ADD COLUMN created_at INTEGER NULL", true),
+        ("ALTER TABLE remoteman_entries ADD COLUMN created_by TEXT NULL", true),
+    ];
+
     protected override string NextRevisionSql => "UPDATE remoteman_meta SET rev = rev + 1 WHERE id = 1 RETURNING rev";
 }

@@ -54,7 +54,8 @@ public sealed class WebSessionViewModel(Entry e, HostEndpoint ep, ResolvedCreden
     {
         get
         {
-            if (!Uri.TryCreate(Settings.Url, UriKind.Absolute, out var u)) return Settings.Url;
+            var url = WebSettings.NormalizeUrl(Settings.Url);
+            if (!Uri.TryCreate(url, UriKind.Absolute, out var u)) return url;
             var b = new UriBuilder(u) { Host = Endpoint.Host };
             if (Endpoint.Port > 0 && Endpoint.Port != (u.Scheme == "https" ? 443 : 80)) b.Port = Endpoint.Port;
             return b.Uri.ToString();

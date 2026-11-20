@@ -14,7 +14,6 @@ public partial class WebSessionView : UserControl
 {
     private WebSessionViewModel? _vm;
     private bool _started;
-    private bool _filled;
 
     public WebSessionView()
     {
@@ -27,25 +26,49 @@ public partial class WebSessionView : UserControl
         if (_started || DataContext is not WebSessionViewModel vm) return;
         _started = true;
         _vm = vm;
-        await Web.EnsureCoreWebView2Async(await WebViewEnvironment.GetAsync());
+        var hosts = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { vm.Endpoint.Host };
+        if (Uri.TryCreate(vm.Settings.Url, UriKind.Absolute, out var entryUri)) hosts.Add(entryUri.Host);
+        foreach (var ep in vm.Entry.Endpoints) hosts.Add(ep.Host);
+        var sso = vm.Credential.UseWindowsLogin;
+        await Web.EnsureCoreWebView2Async(sso ? await WebViewEnvironment.GetSsoAsync(hosts) : await WebViewEnvironment.GetAsync());
         var core = Web.CoreWebView2;
 
         core.ServerCertificateErrorDetected += (_, a) =>
         {
             if (vm.Settings.IgnoreCertificateErrors) a.Action = CoreWebView2ServerCertificateErrorAction.AlwaysAllow;
         };
+        // Certificate credential: offer that client certificate when a site asks for one. WebView2 can
+        // only present certificates from the Windows store, so it is added to the user's store once.
+        if (vm.Credential.Certificate is { } pfx)
+        {
+            try
+            {
+                var thumb = ClientCertificates.EnsureInUserStore(pfx, vm.Credential.Password);
+                core.ClientCertificateRequested += (_, a) =>
+                {
+                    var match = a.MutuallyTrustedCertificates.FirstOrDefault(c =>
+                        string.Equals(c.ToX509Certificate2().Thumbprint, thumb, StringComparison.OrdinalIgnoreCase));
+                    if (match is null) return;
+                    a.SelectedCertificate = match;
+                    a.Handled = true;
+                };
+            }
+            catch (Exception ex) { vm.StatusText = $"Client certificate not usable: {ex.Message}"; }
+        }
+
         core.BasicAuthenticationRequested += (_, a) =>
         {
-            if (vm.Credential.UserName is { } u) { a.Response.UserName = u; a.Response.Password = vm.Credential.Password ?? ""; }
+            if (!sso && vm.Credential.UserName is { } u) { a.Response.UserName = u; a.Response.Password = vm.Credential.Password ?? ""; }
         };
         core.SourceChanged += (_, _) => Address.Text = core.Source;
         core.DocumentTitleChanged += (_, _) => vm.StatusText = core.DocumentTitle;
-        core.NavigationCompleted += async (_, _) =>
+        // Auto-login runs in every page of this tab, limited to the entry's own hosts.
+        if (!sso && vm.Settings.AutoFill && vm.Credential.Password is not null)
         {
-            if (_filled || !vm.Settings.AutoFill || vm.Credential.Password is null) return;
-            _filled = true;
-            await core.ExecuteScriptAsync(AutoFillScript.Build(vm.Credential.UserName, vm.Credential.Password));
-        };
+            var s = vm.Settings;
+            await core.AddScriptToExecuteOnDocumentCreatedAsync(AutoFillScript.Build(vm.Credential.UserName, vm.Credential.Password,
+                new AutoLoginOptions(hosts, s.AutoSubmit, Blank(s.UserFieldSelector), Blank(s.PasswordFieldSelector), Blank(s.SubmitSelector))));
+        }
         core.NewWindowRequested += (_, a) => { a.Handled = true; core.Navigate(a.Uri); };
 
         // Copy on select: the page reports selections, the host writes the Windows clipboard.
@@ -77,6 +100,8 @@ public partial class WebSessionView : UserControl
         }, true);
         """;
 
+    private static string? Blank(string? s) => string.IsNullOrWhiteSpace(s) ? null : s.Trim();
+
     private void OnBack(object sender, RoutedEventArgs e) { if (Web.CanGoBack) Web.GoBack(); }
     private void OnReload(object sender, RoutedEventArgs e) => Web.Reload();
 
@@ -87,11 +112,29 @@ public partial class WebSessionView : UserControl
         Web.CoreWebView2.Navigate(url);
     }
 
-    private void OnOpenIn(object sender, SelectionChangedEventArgs e)
+    private async void OnOpenIn(object sender, SelectionChangedEventArgs e)
     {
         if (OpenIn.SelectedItem is not ComboBoxItem { Tag: string tag } || _vm is null) return;
-        try { ExternalBrowser.Open(Web.Source?.ToString() ?? _vm.Url, Enum.Parse<BrowserKind>(tag), _vm.Settings.IgnoreCertificateErrors); }
-        catch (Exception ex) { MessageBox.Show(Window.GetWindow(this), ex.Message, "RemoteMan"); }
         OpenIn.SelectedIndex = 0;
+        var url = Web.Source?.ToString() ?? _vm.Url;
+        var kind = Enum.Parse<BrowserKind>(tag);
+        var owner = Window.GetWindow(this);
+        try { ExternalBrowser.Open(url, kind, _vm.Settings.IgnoreCertificateErrors); }
+        catch (BrowserNotInstalledException)
+        {
+            var name = BrowserInstaller.DisplayName(kind);
+            if (ChoiceDialog.Show(owner, $"{name} isn't installed", $"Install {name} on this PC and open this page in it?", [$"Install {name}", "Cancel"]) != 0) return;
+            _vm.StatusText = $"Installing {name}…";
+            var outcome = await BrowserInstaller.InstallAsync(kind);
+            _vm.StatusText = outcome switch
+            {
+                BrowserInstaller.Result.Installed => $"{name} installed",
+                BrowserInstaller.Result.DownloadPageOpened => $"Opened the {name} download page",
+                _ => $"Couldn't install {name}",
+            };
+            if (outcome == BrowserInstaller.Result.Installed)
+                try { ExternalBrowser.Open(url, kind, _vm.Settings.IgnoreCertificateErrors); } catch (Exception ex) { _vm.StatusText = ex.Message; }
+        }
+        catch (Exception ex) { ChoiceDialog.Show(owner, "Couldn't open the browser", ex.Message, ["OK"]); }
     }
 }

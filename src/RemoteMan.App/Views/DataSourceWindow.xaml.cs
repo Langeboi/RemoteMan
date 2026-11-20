@@ -37,6 +37,7 @@ public partial class DataSourceWindow : Window
         KindBox.SelectedItem = _current.Kind;
         ConnBox.Text = string.Join(Environment.NewLine, _current.ConnectionStrings);
         VaultBox.Password = Secrets.LoadVaultPassphrase(_current.Name) ?? "";
+        SsoBox.IsChecked = _current.UseWindowsLogin;
     }
 
     private void OnKindChanged(object sender, SelectionChangedEventArgs e)
@@ -50,6 +51,7 @@ public partial class DataSourceWindow : Window
         _current.Name = NameBox.Text.Trim();
         _current.Kind = (DataSourceKind)(KindBox.SelectedItem ?? DataSourceKind.Sqlite);
         _current.ConnectionStrings = ConnBox.Text.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
+        _current.UseWindowsLogin = SsoBox.IsChecked == true && _current.Kind != DataSourceKind.Sqlite;
         _current.UseSharedVaultKey = _current.Kind != DataSourceKind.Sqlite || VaultBox.Password.Length > 0;
         if (VaultBox.Password.Length > 0) Secrets.SaveVaultPassphrase(_current.Name, VaultBox.Password);
     }

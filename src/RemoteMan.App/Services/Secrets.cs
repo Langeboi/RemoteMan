@@ -43,13 +43,23 @@ public static class Secrets
         return new AesGcmSecretProtector(pass);
     }
 
-    /// <summary>Decrypts the credential linked to an entry (or the entry's own, for credential entries).</summary>
+    /// <summary>Decrypts the login for an entry, following "inherited" up the folders and
+    /// "saved" to the credential entry (credential entries resolve to themselves).</summary>
     public static ResolvedCredential Resolve(Entry entry, EntryStore store, ISecretProtector protector)
     {
-        var credEntry = entry.Kind == EntryKind.Credential ? entry : entry.CredentialId is { } id ? store.Get(id) : null;
-        var c = credEntry?.Credential;
-        if (c is null) return new ResolvedCredential(null, null, null, null, null);
+        var (source, holder) = store.ResolveLogin(entry);
+        if (source == LoginSource.WindowsLogin) return ResolvedCredential.WindowsLogin();
+        if (holder?.Credential is not { } c) return ResolvedCredential.None;
         string? Un(string? s) => string.IsNullOrEmpty(s) ? null : protector.Unprotect(s);
-        return new ResolvedCredential(c.UserName, c.Domain, Un(c.ProtectedPassword), Un(c.ProtectedPrivateKey), Un(c.ProtectedPassphrase));
+
+        var key = Un(c.ProtectedPrivateKey);
+        if (key is null && c.Type == CredentialType.SshKey && !string.IsNullOrWhiteSpace(c.PrivateKeyPath))
+        {
+            var path = Environment.ExpandEnvironmentVariables(c.PrivateKeyPath);
+            if (File.Exists(path)) key = File.ReadAllText(path);
+        }
+        var cert = c.Type == CredentialType.Certificate && Un(c.ProtectedCertificate) is { } b64 ? Convert.FromBase64String(b64) : null;
+        return new ResolvedCredential(c.UserName, c.Domain, Un(c.ProtectedPassword), key, Un(c.ProtectedPassphrase),
+            Certificate: cert, AskPassword: c.AskPassword && c.Type == CredentialType.Password);
     }
 }

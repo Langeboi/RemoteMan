@@ -49,9 +49,20 @@ public partial class RdpSessionView : UserControl
         // Copy on select needs clipboard redirection to bring the text back.
         if (vm.Settings.CopyOnSelect && vm.Settings.RedirectClipboard) _copy = new CopyOnSelect(_rdp);
 
+        // Only the tab you're looking at draws and listens to the mouse.
+        vm.PropertyChanged += (_, a) =>
+        {
+            if (a.PropertyName != nameof(SessionViewModel.IsActive) || _rdp is null) return;
+            _rdp.SetForeground(vm.IsActive);
+            if (_copy is not null) _copy.Enabled = vm.IsActive;
+            if (!vm.IsActive) Notice.IsOpen = false;
+        };
+
         try
         {
             vm.StatusText = $"RDP connecting to {vm.Endpoint}…";
+            if (vm.Credential.UseWindowsLogin && !SsoPolicy.AllowsDefaultCredentials(vm.Endpoint.Host))
+                vm.StatusText = SsoPolicy.Hint;
             _rdp.Connect(vm.Endpoint, vm.Credential, vm.Settings);
         }
         catch (Exception ex)
@@ -87,13 +98,65 @@ public partial class RdpSessionView : UserControl
         if (_vm is null) return;
         if (!_vm.Settings.RedirectClipboard)
         {
-            _vm.StatusText = "Turn on clipboard redirection for this entry to send files.";
+            ShowNotice("Files can't be sent from this entry",
+                "Clipboard redirection is off. Edit the entry, turn on \"Redirect clipboard\", and connect again.");
             return;
         }
+        var files = paths.ToArray();
+        if (files.Length == 0) return;
         var list = new StringCollection();
-        list.AddRange(paths.ToArray());
-        Clipboard.SetFileDropList(list);
+        list.AddRange(files);
+
+        // Same clipboard content Explorer puts there on Ctrl+C: the file list plus "this is a copy".
+        // The RDP client offers it to the remote side, where Explorer's Paste pulls the files across.
+        var data = new DataObject();
+        data.SetFileDropList(list);
+        data.SetData("Preferred DropEffect", new System.IO.MemoryStream(BitConverter.GetBytes(1))); // DROPEFFECT_COPY
+
+        // The RDP control and clipboard managers often hold the clipboard for a moment; retry instead of failing silently.
+        Exception? last = null;
+        for (var attempt = 0; attempt < 10; attempt++)
+        {
+            try { Clipboard.SetDataObject(data, copy: true); last = null; break; }
+            catch (System.Runtime.InteropServices.COMException ex) { last = ex; Thread.Sleep(50); }
+        }
+        if (last is not null)
+        {
+            ShowNotice("Couldn't put the files on the clipboard", last.Message);
+            return;
+        }
+
+        var what = files.Length == 1 ? System.IO.Path.GetFileName(files[0]) : $"{files.Length} files";
+        ShowNotice($"{what} ready to paste",
+            "Click into the remote session, open the folder you want them in, and press Ctrl+V (or right-click > Paste). " +
+            "If Paste is greyed out, the server blocks clipboard file copy (policy \"Do not allow Clipboard redirection\").");
+        _vm.StatusText = $"{what} on the clipboard: paste in a remote folder";
         _rdp?.Focus();
-        _vm.StatusText = $"{list.Count} file(s) ready: press Ctrl+V in a folder on the remote machine";
     }
+
+    private bool _noticeHooked;
+    private readonly System.Windows.Threading.DispatcherTimer _noticeTimer = new() { Interval = TimeSpan.FromSeconds(20) };
+
+    private void ShowNotice(string title, string text)
+    {
+        NoticeTitle.Text = title;
+        NoticeText.Text = text;
+        Notice.HorizontalOffset = 12;
+        Notice.VerticalOffset = 12;
+        Notice.IsOpen = true;
+        // Popups are topmost windows: hide this one when RemoteMan moves or loses focus.
+        if (Window.GetWindow(this) is { } w && !_noticeHooked)
+        {
+            _noticeHooked = true;
+            w.Deactivated += (_, _) => Notice.IsOpen = false;
+            w.LocationChanged += (_, _) => Notice.IsOpen = false;
+        }
+        _noticeTimer.Stop();
+        _noticeTimer.Tick -= OnNoticeTimeout;
+        _noticeTimer.Tick += OnNoticeTimeout;
+        _noticeTimer.Start();
+    }
+
+    private void OnNoticeTimeout(object? sender, EventArgs e) { _noticeTimer.Stop(); Notice.IsOpen = false; }
+    private void OnCloseNotice(object sender, RoutedEventArgs e) => OnNoticeTimeout(null, EventArgs.Empty);
 }

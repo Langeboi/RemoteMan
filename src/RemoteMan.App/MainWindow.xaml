@@ -30,13 +30,14 @@
                       Data="M0,0 L4,4 L8,0" Visibility="Collapsed" VerticalAlignment="Center" />
                 <Path x:Name="folder" Width="13" Height="11" Margin="0,0,6,0" Stretch="Uniform" Stroke="#9C9686" StrokeThickness="1.3"
                       Data="M0,1 H5 L6.5,2.5 H13 V11 H0 Z" Visibility="Collapsed" VerticalAlignment="Center" />
-                <Border x:Name="tag" Style="{StaticResource KindTag}" Margin="0,0,6,0">
-                    <TextBlock Text="{Binding KindTag}" Style="{StaticResource KindTagText}" />
-                </Border>
+                <Path x:Name="tag" Style="{StaticResource KindIcon}" Tag="{Binding KindTag}" Margin="0,0,6,0" />
                 <TextBlock x:Name="name" Text="{Binding Name}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center"
                            Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=TreeViewItem}}" />
             </DockPanel>
             <HierarchicalDataTemplate.Triggers>
+                <DataTrigger Binding="{Binding IsSelected}" Value="True">
+                    <Setter TargetName="tag" Property="Stroke" Value="{StaticResource TextStrong}" />
+                </DataTrigger>
                 <DataTrigger Binding="{Binding IsFolder}" Value="True">
                     <Setter TargetName="chevron" Property="Visibility" Value="Visible" />
                     <Setter TargetName="folder" Property="Visibility" Value="Visible" />
@@ -54,6 +55,9 @@
         <KeyBinding Key="F2" Command="{Binding EditCommand}" />
         <KeyBinding Key="Delete" Command="{Binding DeleteCommand}" />
         <KeyBinding Key="D" Modifiers="Control" Command="{Binding DuplicateCommand}" />
+        <KeyBinding Key="U" Modifiers="Control+Shift" Command="{Binding CopyUserNameCommand}" />
+        <KeyBinding Key="P" Modifiers="Control+Shift" Command="{Binding CopyPasswordCommand}" />
+        <KeyBinding Key="B" Modifiers="Control+Shift" Command="{Binding CopyBothCommand}" />
         <KeyBinding Key="W" Modifiers="Control" Command="{Binding CloseSessionCommand}" CommandParameter="{Binding ActiveSession}" />
     </Window.InputBindings>
 
@@ -77,8 +81,12 @@
                         <MenuItem Header="New folder" Command="{Binding NewEntryCommand}" CommandParameter="Folder" />
                         <Separator />
                         <MenuItem Header="Edit" InputGestureText="F2" Command="{Binding EditCommand}" />
-                        <MenuItem Header="Duplicate" InputGestureText="Ctrl+D" Command="{Binding DuplicateCommand}" />
+                        <MenuItem Header="Duplicate…" InputGestureText="Ctrl+D" Command="{Binding DuplicateCommand}" />
                         <MenuItem Header="Delete" InputGestureText="Del" Command="{Binding DeleteCommand}" />
+                        <Separator />
+                        <MenuItem Header="Copy user name" InputGestureText="Ctrl+Shift+U" Command="{Binding CopyUserNameCommand}" />
+                        <MenuItem Header="Copy password" InputGestureText="Ctrl+Shift+P" Command="{Binding CopyPasswordCommand}" />
+                        <MenuItem Header="Copy both (paste twice)" InputGestureText="Ctrl+Shift+B" Command="{Binding CopyBothCommand}" />
                     </MenuItem>
                     <MenuItem Header="_Session">
                         <MenuItem Header="Connect" InputGestureText="Enter" Command="{Binding ConnectCommand}" />
@@ -112,16 +120,26 @@
         <Border DockPanel.Dock="Bottom" Height="22" Background="{StaticResource Header}" BorderBrush="{StaticResource Border}" BorderThickness="0,1,0,0">
             <DockPanel Margin="8,0">
                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                    <Rectangle Width="6" Height="6" Margin="0,0,5,0">
-                        <Rectangle.Style>
-                            <Style TargetType="Rectangle">
-                                <Setter Property="Fill" Value="{StaticResource Warn}" />
-                                <Style.Triggers><DataTrigger Binding="{Binding DataSourceOk}" Value="True"><Setter Property="Fill" Value="{StaticResource Ok}" /></DataTrigger></Style.Triggers>
+                    <!-- Shared data source: a small "Q", green when connected, red when not. Hidden for local. -->
+                    <Border Width="14" Height="14" BorderThickness="1" Margin="0,0,8,0" ToolTip="{Binding DataSourceText}"
+                            Visibility="{Binding IsSharedSource, Converter={StaticResource BoolVis}}"
+                            AutomationProperties.Name="{Binding DataSourceText}">
+                        <Border.Style>
+                            <Style TargetType="Border">
+                                <Setter Property="BorderBrush" Value="{StaticResource Bad}" />
+                                <Setter Property="TextElement.Foreground" Value="{StaticResource Bad}" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding DataSourceOk}" Value="True">
+                                        <Setter Property="BorderBrush" Value="{StaticResource Ok}" />
+                                        <Setter Property="TextElement.Foreground" Value="{StaticResource Ok}" />
+                                    </DataTrigger>
+                                </Style.Triggers>
                             </Style>
-                        </Rectangle.Style>
-                    </Rectangle>
-                    <TextBlock Text="{Binding DataSourceText}" Style="{StaticResource Muted}" FontSize="11" />
-                    <TextBlock Text="{Binding OnlineText}" Style="{StaticResource Muted}" FontSize="11" Margin="14,0,0,0" />
+                        </Border.Style>
+                        <TextBlock Text="Q" FontSize="9" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                   Foreground="{Binding BorderBrush, RelativeSource={RelativeSource AncestorType=Border}}" />
+                    </Border>
+                    <TextBlock Text="{Binding OnlineText}" Style="{StaticResource Muted}" FontSize="11" />
                 </StackPanel>
                 <TextBlock DockPanel.Dock="Right" Text="{Binding ActiveSession.StatusText}" Style="{StaticResource Muted}" FontSize="11" VerticalAlignment="Center" />
                 <TextBlock Text="{Binding Message}" Foreground="{StaticResource Presence}" FontSize="11" Margin="14,0" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
@@ -155,16 +173,11 @@
                           Background="Transparent" BorderThickness="0" Padding="0,2"
                           VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling"
                           SelectedItemChanged="OnTreeSelectionChanged" PreviewMouseLeftButtonDown="OnTreeMouseDown"
-                          MouseDoubleClick="OnTreeDoubleClick" KeyDown="OnTreeKeyDown">
-                    <TreeView.ContextMenu>
-                        <ContextMenu>
-                            <MenuItem Header="Connect" Command="{Binding ConnectCommand}" />
-                            <MenuItem Header="Edit" Command="{Binding EditCommand}" />
-                            <MenuItem Header="Duplicate" Command="{Binding DuplicateCommand}" />
-                            <Separator />
-                            <MenuItem Header="Delete" Command="{Binding DeleteCommand}" />
-                        </ContextMenu>
-                    </TreeView.ContextMenu>
+                          PreviewMouseMove="OnTreeMouseMove" AllowDrop="True" DragOver="OnTreeDragOver" DragLeave="OnTreeDragLeave" Drop="OnTreeDrop"
+                          MouseDoubleClick="OnTreeDoubleClick" KeyDown="OnTreeKeyDown"
+                          PreviewMouseRightButtonDown="OnTreeRightButtonDown" ContextMenuOpening="OnTreeContextMenuOpening">
+                    <!-- Filled per entry when it opens (Views/EntryMenu.cs) -->
+                    <TreeView.ContextMenu><ContextMenu /></TreeView.ContextMenu>
                 </TreeView>
                 <GridSplitter Grid.Row="2" HorizontalAlignment="Stretch" Height="1" />
 
@@ -176,7 +189,7 @@
                         </Border>
                         <StackPanel Margin="8,6,8,8">
                             <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
-                                <Border Style="{StaticResource KindTag}" Margin="0,0,6,0"><TextBlock Text="{Binding SelectedKindTag}" Style="{StaticResource KindTagText}" /></Border>
+                                <Path Style="{StaticResource KindIcon}" Tag="{Binding SelectedKindTag}" Margin="0,0,6,0" />
                                 <TextBlock Text="{Binding SelectedName}" FontWeight="SemiBold" Foreground="#E4E6E9" TextTrimming="CharacterEllipsis" />
                             </StackPanel>
                             <ItemsControl ItemsSource="{Binding Properties}">
@@ -208,7 +221,7 @@
                         <ListBox.ItemTemplate>
                             <DataTemplate>
                                 <StackPanel Orientation="Horizontal" MouseDown="OnTabMouseDown">
-                                    <Border Style="{StaticResource KindTag}" Margin="0,0,6,0"><TextBlock Text="{Binding KindTag}" Style="{StaticResource KindTagText}" /></Border>
+                                    <Path Style="{StaticResource KindIcon}" Tag="{Binding KindTag}" Margin="0,0,6,0" />
                                     <TextBlock Text="{Binding Title}" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" VerticalAlignment="Center" />
                                     <Button Style="{StaticResource FlatButton}" Padding="6,0" MinHeight="18" Margin="4,0,-6,0" Foreground="{StaticResource Faint}"
                                             Content="×" ToolTip="Close (Ctrl+W)" AutomationProperties.Name="Close tab"
