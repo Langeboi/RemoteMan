@@ -3,6 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="clr-namespace:RemoteMan.App.ViewModels"
         xmlns:views="clr-namespace:RemoteMan.App.Views"
+        xmlns:updates="clr-namespace:RemoteMan.App.Updates"
         Title="RemoteMan" Width="1440" Height="900" MinWidth="800" MinHeight="500"
         Style="{StaticResource RemoteManWindow}" WindowStartupLocation="CenterScreen">
 
@@ -84,6 +85,13 @@
                         <MenuItem Header="Connect" InputGestureText="Enter" Command="{Binding ConnectCommand}" />
                         <MenuItem Header="Close tab" InputGestureText="Ctrl+W" Command="{Binding CloseSessionCommand}" CommandParameter="{Binding ActiveSession}" />
                     </MenuItem>
+                    <MenuItem Header="_Help" DataContext="{x:Static updates:UpdateService.Instance}">
+                        <MenuItem Header="Check for updates" Command="{Binding CheckNowCommand}" />
+                        <MenuItem Header="Check automatically" IsCheckable="True" IsChecked="{Binding AutoCheck}" />
+                        <MenuItem Header="Release notes" Command="{Binding OpenReleaseNotesCommand}" />
+                        <Separator />
+                        <MenuItem Header="{Binding CurrentVersion}" HeaderStringFormat="RemoteMan {0}" IsEnabled="False" />
+                    </MenuItem>
                 </Menu>
                 <Border DockPanel.Dock="Right" Width="340" Height="22" VerticalAlignment="Center" Background="{StaticResource Bg}"
                         BorderBrush="{StaticResource InputBorder}" BorderThickness="1">
@@ -107,6 +115,9 @@
                 </Border>
             </DockPanel>
         </Border>
+
+        <!-- Update banner (hidden unless there is an update to show) -->
+        <updates:UpdateBanner DockPanel.Dock="Top" />
 
         <!-- Status bar -->
         <Border DockPanel.Dock="Bottom" Height="22" Background="{StaticResource Header}" BorderBrush="{StaticResource Border}" BorderThickness="0,1,0,0">

@@ -11,6 +11,10 @@
     <!-- Faster cold start: ReadyToRun on publish. -->
     <PublishReadyToRun>true</PublishReadyToRun>
     <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+    <!-- Custom Main so Velopack can run before WPF starts (see Program.cs). -->
+    <StartupObject>RemoteMan.App.Program</StartupObject>
+    <!-- Release builds get the version from the git tag (see .github/workflows/release.yml). -->
+    <Version>0.1.0</Version>
   </PropertyGroup>
   <!-- WPF app that also hosts a WinForms control: keep WinForms out of the global usings. -->
   <ItemGroup>
@@ -26,6 +30,7 @@
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.3.2" />
     <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.2903.40" />
     <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="8.0.0" />
+    <PackageReference Include="Velopack" Version="1.2.161" />
   </ItemGroup>
   <ItemGroup>
     <Content Include="Assets\terminal\**\*" CopyToOutputDirectory="PreserveNewest" />

@@ -35,4 +35,24 @@ WebView2 runtime ships with Windows 11 and current Windows 10.
 - Data sources: local SQLite (default), or shared PostgreSQL, SQL Server or MySQL/MariaDB with
   multi-server failover, live updates and presence (who is viewing, editing or connected).
 
+## Updates
+
+Install RemoteMan with `RemoteMan-win-Setup.exe` from the [latest release](https://github.com/Langeboi/RemoteMan/releases/latest).
+The installed app checks GitHub Releases 15 seconds after start and every 4 hours after that. When a new
+version exists, a banner under the menu bar offers **Update**; it downloads in the background (only the
+changes, when a delta is available) and then offers **Restart now**. Choosing **On next launch** applies it the next
+time RemoteMan starts. **Help > Check for updates** checks on demand, and **Help > Check automatically**
+turns the background checks off. A copy run from the build folder isn't installed and doesn't self-update.
+
+To publish a release, push a version tag:
+
+```
+git tag v0.2.0
+git push origin v0.2.0
+```
+
+The `release` workflow builds the installer and update packages with [Velopack](https://velopack.io),
+writes release notes from the commits since the previous tag, and publishes the GitHub release. A tag with
+a suffix such as `v0.2.0-beta.1` becomes a prerelease, which installed copies skip.
+
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the design.

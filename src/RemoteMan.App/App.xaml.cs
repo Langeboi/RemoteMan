@@ -1,5 +1,6 @@
 using System.Windows;
 using RemoteMan.App.Services;
+using RemoteMan.App.Updates;
 
 namespace RemoteMan.App;
 
@@ -14,5 +15,6 @@ public partial class App : Application
         var settings = AppSettings.Load();
         MainWindow = new MainWindow(settings);
         MainWindow.Show();
+        UpdateService.Instance.Start();
     }
 }

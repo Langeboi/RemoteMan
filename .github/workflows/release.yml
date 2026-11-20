@@ -1,0 +1,81 @@
+name: release
+
+# Push a version tag (for example `git tag v0.2.0 && git push origin v0.2.0`) to build an installer
+# and publish it as a GitHub release. Installed copies of RemoteMan pick it up from there.
+# A tag with a suffix (v0.2.0-beta.1) is published as a prerelease, which installed copies skip
+# unless prereleases are turned on.
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: windows-latest
+    env:
+      VPK_VERSION: 1.2.161
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Read version from tag
+        shell: pwsh
+        run: |
+          $version = '${{ github.ref_name }}'.TrimStart('v')
+          if ($version -notmatch '^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$') { throw "Tag ${{ github.ref_name }} is not vMAJOR.MINOR.PATCH" }
+          "VERSION=$version" >> $env:GITHUB_ENV
+          if ($version.Contains('-')) { "PRERELEASE=--pre" >> $env:GITHUB_ENV } else { "PRERELEASE=" >> $env:GITHUB_ENV }
+
+      - name: Release notes from commits since the previous tag
+        shell: pwsh
+        run: |
+          $previous = git describe --tags --abbrev=0 '${{ github.ref_name }}^' 2>$null
+          $range = if ($previous) { "$previous..${{ github.ref_name }}" } else { '${{ github.ref_name }}' }
+          $lines = git log $range --no-merges --pretty=format:'- %s'
+          "## What's new`n`n$($lines -join "`n")" | Set-Content -Encoding utf8 release-notes.md
+
+      - run: dotnet test tests/RemoteMan.Tests -c Release
+
+      - name: Publish app
+        run: dotnet publish src/RemoteMan.App -c Release -r win-x64 --self-contained false -p:Version=${{ env.VERSION }} -o publish
+
+      - run: dotnet tool install -g vpk --version ${{ env.VPK_VERSION }}
+
+      # The previous release lets vpk build a small delta package, so most updates download only what changed.
+      - name: Fetch previous release for delta updates
+        continue-on-error: true
+        run: vpk download github --repoUrl ${{ github.server_url }}/${{ github.repository }} --token ${{ secrets.GITHUB_TOKEN }} ${{ env.PRERELEASE }}
+
+      - name: Build installer and update packages
+        run: >
+          vpk pack
+          --packId RemoteMan
+          --packTitle RemoteMan
+          --packAuthors "RemoteMan"
+          --packVersion ${{ env.VERSION }}
+          --packDir publish
+          --mainExe RemoteMan.exe
+          --framework net8.0-x64-desktop
+          --releaseNotes release-notes.md
+
+      - name: Publish GitHub release
+        run: >
+          vpk upload github
+          --repoUrl ${{ github.server_url }}/${{ github.repository }}
+          --token ${{ secrets.GITHUB_TOKEN }}
+          --tag ${{ github.ref_name }}
+          --releaseName "RemoteMan ${{ env.VERSION }}"
+          --publish
+          ${{ env.PRERELEASE }}
