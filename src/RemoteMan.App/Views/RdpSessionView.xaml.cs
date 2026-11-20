@@ -41,6 +41,7 @@ public partial class RdpSessionView : UserControl
         _rdp.Disconnected += reason =>
         {
             if (_rdp is null) return; // tab is closing
+            vm.ReportProblem(RemoteMan.Core.Networking.ConnectionProblem.FromRdpDisconnect(reason, _rdp.DescribeDisconnect(reason)));
             vm.StatusText = $"RDP disconnected (code {reason})";
             Host.Visibility = Visibility.Collapsed;
             State.Text = $"Disconnected from {vm.Endpoint} (code {reason}).";
@@ -78,6 +79,7 @@ public partial class RdpSessionView : UserControl
         {
             Host.Visibility = Visibility.Collapsed;
             State.Text = $"Could not start RDP: {ex.Message}";
+            vm.ReportProblem(RemoteMan.Core.Networking.ConnectionProblem.FromException(ex, RemoteMan.Core.Model.EntryKind.Rdp));
         }
     }
 

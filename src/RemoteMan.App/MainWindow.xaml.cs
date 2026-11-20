@@ -45,6 +45,7 @@ public partial class MainWindow : Window
         _vm.ZabbixSettingsDialog = () =>
             new ZabbixSettingsWindow(_settings, _vm.Store, _vm.Protector) { Owner = this }.ShowDialog() == true;
         DataContext = _vm;
+        SetUpNotices();
 
         _ai = new AiAssistantViewModel(settings, () => _vm.ActiveSession) { StatusMessage = m => _vm.Message = m };
         AiButton.DataContext = _ai;
@@ -57,6 +58,43 @@ public partial class MainWindow : Window
         PreviewKeyDown += OnWindowKeyDown;
         StateChanged += (_, _) => MaxGlyph.Data = Geometry.Parse(WindowState == WindowState.Maximized
             ? "M2.5,0.5 H9.5 V7.5 M0.5,2.5 H7.5 V9.5 H0.5 Z" : "M0.5,0.5 H9.5 V9.5 H0.5 Z");
+    }
+
+    // ---------------- connection notices ----------------
+
+    /// <summary>Bottom-right of the window, above the status bar; follows the window and hides while it's in the background.</summary>
+    private void SetUpNotices()
+    {
+        NoticePopup.PlacementTarget = Root;
+        NoticePopup.CustomPopupPlacementCallback = (popup, target, _) =>
+            [new System.Windows.Controls.Primitives.CustomPopupPlacement(new Point(target.Width - popup.Width - 12, target.Height - popup.Height - 30),
+                System.Windows.Controls.Primitives.PopupPrimaryAxis.None)];
+        void Nudge()
+        {
+            if (!NoticePopup.IsOpen) return;
+            NoticePopup.HorizontalOffset += 0.1;
+            NoticePopup.HorizontalOffset -= 0.1;
+        }
+        LocationChanged += (_, _) => Nudge();
+        SizeChanged += (_, _) => Nudge();
+        StateChanged += (_, _) => Nudge();
+        _vm.Notices.CollectionChanged += (_, _) => Dispatcher.BeginInvoke(Nudge, System.Windows.Threading.DispatcherPriority.Loaded);
+        // A popup floats above other apps; show it only while RemoteMan is the active window.
+        void Update() => NoticePopup.IsOpen = _vm.HasNotices && IsActive && WindowState != WindowState.Minimized;
+        _vm.PropertyChanged += (_, a) => { if (a.PropertyName == nameof(MainViewModel.HasNotices)) Update(); };
+        Deactivated += (_, _) => Update();
+        Activated += (_, _) => Update();
+        StateChanged += (_, _) => Update();
+    }
+
+    private void OnNoticeEnter(object sender, MouseEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.DataContext is Notice n) { n.IsHovered = true; n.IsFaded = false; }
+    }
+
+    private void OnNoticeLeave(object sender, MouseEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.DataContext is Notice n) { n.IsHovered = false; n.Shown = DateTimeOffset.Now; }
     }
 
     // ---------------- title bar ----------------

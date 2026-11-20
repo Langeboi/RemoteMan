@@ -64,7 +64,7 @@ public partial class EntryEditorWindow : Window
         _zabbixHostId = entry.ZabbixHostId;
 
         var connectable = entry.IsConnectable;
-        Show(HostsGroup, connectable);
+        Show(HostsGroup, connectable && kind != EntryKind.Serial);
         Show(UrlLabel, kind == EntryKind.Web); Show(UrlBox, kind == EntryKind.Web);
         var hasLogin = connectable || kind == EntryKind.Folder;
         Show(CredLabel, hasLogin); Show(LoginBox, hasLogin);
@@ -72,6 +72,26 @@ public partial class EntryEditorWindow : Window
         Show(SshGroup, kind == EntryKind.Ssh);
         Show(WebGroup, kind == EntryKind.Web);
         Show(VncGroup, kind == EntryKind.Vnc);
+        Show(SerialGroup, kind == EntryKind.Serial);
+        Show(FtpGroup, kind == EntryKind.Ftp);
+        Show(ProxmoxGroup, kind == EntryKind.Proxmox);
+        Show(PsGroup, kind == EntryKind.PowerShell);
+
+        var serial = entry.Serial ?? new SerialSettings();
+        var ports = RemoteMan.Protocols.Terminal.SerialChannel.PortNames().ToList();
+        if (!ports.Contains(serial.PortName)) ports.Insert(0, serial.PortName);
+        SerialPortBox.ItemsSource = ports; SerialPortBox.Text = serial.PortName;
+        SerialBaudBox.ItemsSource = new[] { "1200", "2400", "4800", "9600", "19200", "38400", "57600", "115200" }; SerialBaudBox.Text = serial.BaudRate.ToString();
+        SerialDataBox.ItemsSource = new[] { 8, 7, 6, 5 }; SerialDataBox.SelectedItem = serial.DataBits;
+        SerialParityBox.ItemsSource = new[] { "None", "Even", "Odd", "Mark", "Space" }; SerialParityBox.SelectedItem = serial.Parity;
+        SerialStopBox.ItemsSource = new[] { "One", "OnePointFive", "Two" }; SerialStopBox.SelectedItem = serial.StopBits;
+        SerialFlowBox.ItemsSource = new[] { "None", "XOnXOff", "RequestToSend" }; SerialFlowBox.SelectedItem = serial.FlowControl;
+        var ftp = entry.Ftp ?? new FtpSettings();
+        FtpTls.IsChecked = ftp.UseTls; FtpIgnoreCert.IsChecked = ftp.IgnoreCertificateErrors; FtpStart.Text = ftp.StartFolder;
+        var pve = entry.Proxmox ?? new ProxmoxSettings();
+        PveNode.Text = pve.Node; PveVmId.Text = pve.VmId.ToString(); PveContainer.IsChecked = pve.Container; PveIgnoreCert.IsChecked = pve.IgnoreCertificateErrors;
+        var ps = entry.PowerShell ?? new PowerShellSettings();
+        PsSsl.IsChecked = ps.UseSsl; PsConfig.Text = ps.ConfigurationName;
         if (kind == EntryKind.Web) HostsGroup.Header = "Fallback hosts (optional; the URL's host is used when empty)";
 
         foreach (var h in entry.Endpoints) _hosts.Add(new HostRow { Host = h.Host, Port = h.Port > 0 ? h.Port.ToString() : "" });
@@ -92,13 +112,13 @@ public partial class EntryEditorWindow : Window
             new(LoginSource.Saved, "Saved credential"),
         };
         // Single sign-on: RDP (CredSSP default credentials) and web (Kerberos/NTLM, Entra ID); folders pass it on.
-        if (kind is EntryKind.Rdp or EntryKind.Web or EntryKind.Folder || entry.Login == LoginSource.WindowsLogin)
+        if (kind is EntryKind.Rdp or EntryKind.Web or EntryKind.Folder or EntryKind.PowerShell || entry.Login == LoginSource.WindowsLogin)
             logins.Add(new(LoginSource.WindowsLogin, "My Windows login (SSO)"));
         logins.Add(new(LoginSource.Embedded, "Typed in this entry"));
         LoginBox.ItemsSource = logins;
         LoginBox.SelectedItem = logins.FirstOrDefault(l => l.Source == entry.Login) ?? logins[0];
 
-        var c = entry.Credential ?? new CredentialData { Type = kind == EntryKind.Ssh ? CredentialType.SshKey : CredentialType.Password };
+        var c = entry.Credential ?? new CredentialData { Type = kind is EntryKind.Ssh or EntryKind.Sftp ? CredentialType.SshKey : CredentialType.Password };
         UserBox.Text = c.UserName;
         DomainBox.Text = c.Domain;
         KeyPathBox.Text = c.PrivateKeyPath;
@@ -429,6 +449,38 @@ public partial class EntryEditorWindow : Window
             case EntryKind.Credential:
                 _e.Credential ??= new();
                 ReadCredential(_e.Credential);
+                break;
+            case EntryKind.Serial:
+                _e.Serial ??= new();
+                _e.Ssh ??= new();
+                _e.Serial.PortName = string.IsNullOrWhiteSpace(SerialPortBox.Text) ? "COM1" : SerialPortBox.Text.Trim().ToUpperInvariant();
+                _e.Serial.BaudRate = int.TryParse(SerialBaudBox.Text, out var baud) && baud > 0 ? baud : 9600;
+                _e.Serial.DataBits = SerialDataBox.SelectedItem as int? ?? 8;
+                _e.Serial.Parity = SerialParityBox.SelectedItem as string ?? "None";
+                _e.Serial.StopBits = SerialStopBox.SelectedItem as string ?? "One";
+                _e.Serial.FlowControl = SerialFlowBox.SelectedItem as string ?? "None";
+                break;
+            case EntryKind.Ftp:
+                _e.Ftp ??= new();
+                _e.Ftp.UseTls = FtpTls.IsChecked == true;
+                _e.Ftp.IgnoreCertificateErrors = FtpIgnoreCert.IsChecked == true;
+                _e.Ftp.StartFolder = string.IsNullOrWhiteSpace(FtpStart.Text) ? null : FtpStart.Text.Trim();
+                break;
+            case EntryKind.Proxmox:
+                _e.Proxmox ??= new();
+                _e.Proxmox.Node = string.IsNullOrWhiteSpace(PveNode.Text) ? "pve" : PveNode.Text.Trim();
+                if (!int.TryParse(PveVmId.Text, out var vmid) || vmid <= 0) { PveVmId.Focus(); return; }
+                _e.Proxmox.VmId = vmid;
+                _e.Proxmox.Container = PveContainer.IsChecked == true;
+                _e.Proxmox.IgnoreCertificateErrors = PveIgnoreCert.IsChecked == true;
+                break;
+            case EntryKind.PowerShell:
+                _e.PowerShell ??= new();
+                _e.PowerShell.UseSsl = PsSsl.IsChecked == true;
+                _e.PowerShell.ConfigurationName = string.IsNullOrWhiteSpace(PsConfig.Text) ? null : PsConfig.Text.Trim();
+                break;
+            case EntryKind.Telnet or EntryKind.Sftp:
+                _e.Ssh ??= new();
                 break;
         }
         DialogResult = true;

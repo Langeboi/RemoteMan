@@ -1,0 +1,96 @@
+<UserControl x:Class="RemoteMan.App.Views.FilesSessionView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             Background="{StaticResource Work}">
+    <UserControl.Resources>
+        <Style x:Key="FileRow" TargetType="ListViewItem">
+            <Setter Property="Height" Value="22" />
+            <Setter Property="Foreground" Value="{StaticResource Text}" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ListViewItem">
+                        <Border x:Name="b" Background="Transparent" Padding="8,0" CornerRadius="{StaticResource Radius}">
+                            <DockPanel>
+                                <TextBlock DockPanel.Dock="Right" Text="{Binding SizeText}" Style="{StaticResource MutedText}" FontSize="11" VerticalAlignment="Center" Width="70" TextAlignment="Right" />
+                                <TextBlock DockPanel.Dock="Right" Text="{Binding ModifiedText}" Style="{StaticResource MutedText}" FontSize="11" VerticalAlignment="Center" Width="120" />
+                                <Path x:Name="icon" Width="16" Height="16" Margin="0,0,8,0" Stretch="None" StrokeThickness="1.2" Stroke="{StaticResource Faint}"
+                                      Data="M3.5,1.5 h6 l3,3 v10 h-9 z M9.5,1.5 v3 h3" VerticalAlignment="Center" />
+                                <TextBlock Text="{Binding Name}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                            </DockPanel>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <DataTrigger Binding="{Binding IsDirectory}" Value="True">
+                                <Setter TargetName="icon" Property="Data" Value="M1.5,3.5 h4.5 l1.5,1.5 h7 v8 h-13 z" />
+                                <Setter TargetName="icon" Property="Stroke" Value="{StaticResource FolderIcon}" />
+                            </DataTrigger>
+                            <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="b" Property="Background" Value="{StaticResource Hover}" /></Trigger>
+                            <Trigger Property="IsSelected" Value="True"><Setter TargetName="b" Property="Background" Value="{StaticResource Select}" /></Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </UserControl.Resources>
+    <DockPanel>
+        <!-- Transfer status -->
+        <Border DockPanel.Dock="Bottom" Background="{StaticResource Panel}" BorderBrush="{StaticResource Border}" BorderThickness="0,1,0,0" Padding="8,4">
+            <DockPanel>
+                <Button x:Name="CancelButton" DockPanel.Dock="Right" Content="Cancel" Click="OnCancel" Visibility="Collapsed" />
+                <StackPanel>
+                    <TextBlock x:Name="TransferText" Style="{StaticResource MutedText}" FontSize="11" TextTrimming="CharacterEllipsis"
+                               Text="Drag files between the two sides, or from Explorer onto the remote side." />
+                    <ProgressBar x:Name="TransferBar" Height="2" Margin="0,3,0,0" Visibility="Collapsed" Background="Transparent" BorderThickness="0" Foreground="{StaticResource Accent}" />
+                </StackPanel>
+            </DockPanel>
+        </Border>
+        <Grid>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+
+            <!-- This PC -->
+            <DockPanel Background="{StaticResource Panel}">
+                <Border DockPanel.Dock="Top" Height="30" BorderBrush="{StaticResource Border}" BorderThickness="0,0,0,1" Padding="4,0">
+                    <DockPanel>
+                        <TextBlock DockPanel.Dock="Left" Text="This PC" Style="{StaticResource PaneTitle}" Margin="4,0,8,0" />
+                        <Button DockPanel.Dock="Left" Style="{StaticResource FlatButton}" Content="↑" ToolTip="Parent folder" AutomationProperties.Name="Local parent folder" Click="OnLocalUp" />
+                        <Button DockPanel.Dock="Right" Style="{StaticResource FlatButton}" Content="⟳" ToolTip="Refresh" AutomationProperties.Name="Refresh local" Click="OnLocalRefresh" />
+                        <TextBox x:Name="LocalPath" FontFamily="{StaticResource MonoFont}" FontSize="11" VerticalAlignment="Center" KeyDown="OnLocalPathKey"
+                                 AutomationProperties.Name="Local folder" />
+                    </DockPanel>
+                </Border>
+                <ListView x:Name="LocalList" Background="Transparent" BorderThickness="0" SelectionMode="Extended" ItemContainerStyle="{StaticResource FileRow}"
+                          MouseDoubleClick="OnLocalOpen" KeyDown="OnLocalKey" PreviewMouseLeftButtonDown="OnDragStart" PreviewMouseMove="OnDragMove"
+                          AllowDrop="True" Drop="OnLocalDrop" DragOver="OnDragOverList" />
+            </DockPanel>
+
+            <!-- Middle buttons -->
+            <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="6,0">
+                <Button Content="→" ToolTip="Upload the selected files" AutomationProperties.Name="Upload" Click="OnUpload" Width="34" Margin="0,0,0,6" />
+                <Button Content="←" ToolTip="Download the selected files" AutomationProperties.Name="Download" Click="OnDownload" Width="34" />
+            </StackPanel>
+
+            <!-- Remote -->
+            <DockPanel Grid.Column="2" Background="{StaticResource Panel}">
+                <Border DockPanel.Dock="Top" Height="30" BorderBrush="{StaticResource Border}" BorderThickness="0,0,0,1" Padding="4,0">
+                    <DockPanel>
+                        <TextBlock x:Name="RemoteTitle" DockPanel.Dock="Left" Text="Server" Style="{StaticResource PaneTitle}" Margin="4,0,8,0" />
+                        <Button DockPanel.Dock="Left" Style="{StaticResource FlatButton}" Content="↑" ToolTip="Parent folder" AutomationProperties.Name="Remote parent folder" Click="OnRemoteUp" />
+                        <Button DockPanel.Dock="Right" Style="{StaticResource FlatButton}" Content="⋯" ToolTip="More" AutomationProperties.Name="More remote actions" Click="OnRemoteMore" />
+                        <Button DockPanel.Dock="Right" Style="{StaticResource FlatButton}" Content="⟳" ToolTip="Refresh" AutomationProperties.Name="Refresh remote" Click="OnRemoteRefresh" />
+                        <TextBox x:Name="RemotePath" FontFamily="{StaticResource MonoFont}" FontSize="11" VerticalAlignment="Center" KeyDown="OnRemotePathKey"
+                                 AutomationProperties.Name="Remote folder" />
+                    </DockPanel>
+                </Border>
+                <Grid>
+                    <ListView x:Name="RemoteList" Background="Transparent" BorderThickness="0" SelectionMode="Extended" ItemContainerStyle="{StaticResource FileRow}"
+                              MouseDoubleClick="OnRemoteOpen" KeyDown="OnRemoteKey" PreviewMouseLeftButtonDown="OnDragStart" PreviewMouseMove="OnDragMove"
+                              AllowDrop="True" Drop="OnRemoteDrop" DragOver="OnDragOverList" />
+                    <TextBlock x:Name="RemoteState" Style="{StaticResource MutedText}" HorizontalAlignment="Center" VerticalAlignment="Center" TextWrapping="Wrap" Margin="20" />
+                </Grid>
+            </DockPanel>
+        </Grid>
+    </DockPanel>
+</UserControl>

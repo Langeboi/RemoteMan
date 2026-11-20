@@ -31,4 +31,12 @@ public static class PasswordPrompt
         w.ShowDialog();
         return result;
     }
+
+    /// <summary>Asks for one line of text in the app's own dialog. Null when cancelled.</summary>
+    public static string? AskText(Window? owner, string title, string label)
+    {
+        var box = new TextBox { MinWidth = 320, Margin = new Thickness(0, 8, 0, 0) };
+        box.Loaded += (_, _) => box.Focus();
+        return ChoiceDialog.Show(owner, title, label, ["OK", "Cancel"], extra: box) == 0 ? box.Text : null;
+    }
 }

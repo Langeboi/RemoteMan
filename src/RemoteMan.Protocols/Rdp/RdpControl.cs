@@ -103,6 +103,20 @@ public sealed class RdpControl : AxHost
     private bool _foreground = true;
     private bool _sizeChangedWhileHidden;
 
+    /// <summary>The control's own text for a disconnect reason (null when it has none).</summary>
+    public string? DescribeDisconnect(int reason)
+    {
+        if (_closing || IsDisposed || GetOcx() is not { } ocx) return null;
+        try
+        {
+            dynamic d = ocx;
+            uint ext = 0;
+            try { ext = (uint)d.ExtendedDisconnectReason; } catch (Exception) { }
+            return (string?)d.GetErrorDescription((uint)reason, ext);
+        }
+        catch (Exception) { return null; }
+    }
+
     /// <summary>Safe at any time, including before the control exists and while the tab is closing.</summary>
     public void Disconnect()
     {

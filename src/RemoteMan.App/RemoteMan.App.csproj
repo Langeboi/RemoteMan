@@ -41,10 +41,11 @@
   <PropertyGroup>
     <XtermVendorDir>$(MSBuildProjectDirectory)\Assets\terminal\vendor</XtermVendorDir>
   </PropertyGroup>
-  <Target Name="FetchXterm" BeforeTargets="BeforeBuild" Condition="!Exists('$(XtermVendorDir)\xterm.js')">
+  <Target Name="FetchXterm" BeforeTargets="BeforeBuild" Condition="!Exists('$(XtermVendorDir)\xterm.js') Or !Exists('$(XtermVendorDir)\addon-search.js')">
     <DownloadFile SourceUrl="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/lib/xterm.js" DestinationFolder="$(XtermVendorDir)" />
     <DownloadFile SourceUrl="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/css/xterm.css" DestinationFolder="$(XtermVendorDir)" />
     <DownloadFile SourceUrl="https://cdn.jsdelivr.net/npm/@xterm/addon-fit@0.10.0/lib/addon-fit.js" DestinationFolder="$(XtermVendorDir)" />
+    <DownloadFile SourceUrl="https://cdn.jsdelivr.net/npm/@xterm/addon-search@0.15.0/lib/addon-search.js" DestinationFolder="$(XtermVendorDir)" />
     <ItemGroup>
       <Content Include="Assets\terminal\vendor\*" CopyToOutputDirectory="PreserveNewest" />
     </ItemGroup>

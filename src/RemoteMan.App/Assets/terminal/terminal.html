@@ -4,42 +4,127 @@
 <meta charset="utf-8">
 <link rel="stylesheet" href="vendor/xterm.css">
 <style>
-  html, body { margin: 0; height: 100%; background: #141517; overflow: hidden; }
+  html, body { margin: 0; height: 100%; background: var(--bg, #141517); overflow: hidden; font: 12px "Segoe UI", sans-serif; }
   #t { position: absolute; inset: 6px 4px 4px 8px; }
   .xterm-viewport::-webkit-scrollbar { width: 8px; }
   .xterm-viewport::-webkit-scrollbar-thumb { background: #34373C; }
+  /* Find bar (Ctrl+Shift+F): top right, over the terminal */
+  #find { position: absolute; top: 6px; right: 14px; display: none; gap: 4px; align-items: center; z-index: 5;
+          background: #1A1D20; border: 1px solid #353B42; padding: 4px; box-shadow: 0 4px 14px rgba(0,0,0,.45); }
+  #find.on { display: flex; }
+  #find input { width: 200px; height: 22px; background: #131619; border: 1px solid #2E343A; color: #E3E6EA; padding: 0 6px; font: inherit; outline: none; }
+  #find input:focus { border-color: #3FB8A4; }
+  #find button { all: unset; color: #9AA3AD; padding: 2px 6px; cursor: pointer; }
+  #find button:hover { color: #E3E6EA; background: #22282D; }
+  #find .n { color: #7D8690; min-width: 46px; text-align: right; }
+  #zoom { position: absolute; bottom: 10px; right: 16px; background: #1A1D20; border: 1px solid #353B42; color: #C9CED4; padding: 3px 8px; display: none; }
 </style>
 </head>
 <body>
 <div id="t"></div>
+<div id="find" role="search">
+  <input id="q" placeholder="Find in scrollback" aria-label="Find in scrollback" spellcheck="false">
+  <span class="n" id="n"></span>
+  <button id="prev" title="Previous (Shift+Enter)" aria-label="Previous match">↑</button>
+  <button id="next" title="Next (Enter)" aria-label="Next match">↓</button>
+  <button id="close" title="Close (Esc)" aria-label="Close find">✕</button>
+</div>
+<div id="zoom"></div>
 <script src="vendor/xterm.js"></script>
 <script src="vendor/addon-fit.js"></script>
+<script src="vendor/addon-search.js"></script>
 <script>
   const host = window.chrome.webview;
+  const THEMES = {
+    'RemoteMan': { background: '#141517', foreground: '#C9CDD3', cursor: '#C9CDD3', selectionBackground: '#33414F',
+      black: '#1B1D20', red: '#C46A6A', green: '#8FB08F', yellow: '#C2B48A', blue: '#8FA7C4', magenta: '#A991B5', cyan: '#86AFAF', white: '#C9CDD3',
+      brightBlack: '#6E737B', brightRed: '#D88484', brightGreen: '#A6C4A6', brightYellow: '#D6C89E', brightBlue: '#A9BED6', brightMagenta: '#BFA8CA', brightCyan: '#9FC4C4', brightWhite: '#EEF0F2' },
+    'Solarized Dark': { background: '#002B36', foreground: '#93A1A1', cursor: '#93A1A1', selectionBackground: '#274642',
+      black: '#073642', red: '#DC322F', green: '#859900', yellow: '#B58900', blue: '#268BD2', magenta: '#D33682', cyan: '#2AA198', white: '#EEE8D5',
+      brightBlack: '#586E75', brightRed: '#CB4B16', brightGreen: '#93A1A1', brightYellow: '#839496', brightBlue: '#839496', brightMagenta: '#6C71C4', brightCyan: '#93A1A1', brightWhite: '#FDF6E3' },
+    'Dracula': { background: '#282A36', foreground: '#F8F8F2', cursor: '#F8F8F2', selectionBackground: '#44475A',
+      black: '#21222C', red: '#FF5555', green: '#50FA7B', yellow: '#F1FA8C', blue: '#BD93F9', magenta: '#FF79C6', cyan: '#8BE9FD', white: '#F8F8F2',
+      brightBlack: '#6272A4', brightRed: '#FF6E6E', brightGreen: '#69FF94', brightYellow: '#FFFFA5', brightBlue: '#D6ACFF', brightMagenta: '#FF92DF', brightCyan: '#A4FFFF', brightWhite: '#FFFFFF' },
+    'One Dark': { background: '#282C34', foreground: '#ABB2BF', cursor: '#528BFF', selectionBackground: '#3E4451',
+      black: '#282C34', red: '#E06C75', green: '#98C379', yellow: '#E5C07B', blue: '#61AFEF', magenta: '#C678DD', cyan: '#56B6C2', white: '#ABB2BF',
+      brightBlack: '#5C6370', brightRed: '#E06C75', brightGreen: '#98C379', brightYellow: '#E5C07B', brightBlue: '#61AFEF', brightMagenta: '#C678DD', brightCyan: '#56B6C2', brightWhite: '#FFFFFF' },
+    'Nord': { background: '#2E3440', foreground: '#D8DEE9', cursor: '#D8DEE9', selectionBackground: '#434C5E',
+      black: '#3B4252', red: '#BF616A', green: '#A3BE8C', yellow: '#EBCB8B', blue: '#81A1C1', magenta: '#B48EAD', cyan: '#88C0D0', white: '#E5E9F0',
+      brightBlack: '#4C566A', brightRed: '#BF616A', brightGreen: '#A3BE8C', brightYellow: '#EBCB8B', brightBlue: '#81A1C1', brightMagenta: '#B48EAD', brightCyan: '#8FBCBB', brightWhite: '#ECEFF4' },
+    'Gruvbox': { background: '#282828', foreground: '#EBDBB2', cursor: '#EBDBB2', selectionBackground: '#504945',
+      black: '#282828', red: '#CC241D', green: '#98971A', yellow: '#D79921', blue: '#458588', magenta: '#B16286', cyan: '#689D6A', white: '#A89984',
+      brightBlack: '#928374', brightRed: '#FB4934', brightGreen: '#B8BB26', brightYellow: '#FABD2F', brightBlue: '#83A598', brightMagenta: '#D3869B', brightCyan: '#8EC07C', brightWhite: '#EBDBB2' },
+    'Light': { background: '#F7F7F5', foreground: '#2B2F33', cursor: '#2B2F33', selectionBackground: '#C9DDF2',
+      black: '#2B2F33', red: '#B5302A', green: '#3C7A2E', yellow: '#8A6A00', blue: '#2560A8', magenta: '#8A3E91', cyan: '#1F7A80', white: '#BFC3C7',
+      brightBlack: '#6B7177', brightRed: '#D0453E', brightGreen: '#4E9440', brightYellow: '#A88300', brightBlue: '#3576C4', brightMagenta: '#A452AB', brightCyan: '#2B939A', brightWhite: '#FFFFFF' },
+  };
+
   const term = new Terminal({
     fontFamily: "'Cascadia Mono', Consolas, monospace",
     fontSize: 13,
     cursorBlink: true,
     scrollback: 10000,
     allowProposedApi: true,
-    theme: {
-      background: '#141517', foreground: '#C9CDD3', cursor: '#C9CDD3', selectionBackground: '#33414F',
-      black: '#1B1D20', red: '#C46A6A', green: '#8FB08F', yellow: '#C2B48A', blue: '#8FA7C4', magenta: '#A991B5', cyan: '#86AFAF', white: '#C9CDD3',
-      brightBlack: '#6E737B', brightRed: '#D88484', brightGreen: '#A6C4A6', brightYellow: '#D6C89E', brightBlue: '#A9BED6', brightMagenta: '#BFA8CA', brightCyan: '#9FC4C4', brightWhite: '#EEF0F2'
-    }
+    theme: THEMES['RemoteMan'],
   });
   const fit = new FitAddon.FitAddon();
   term.loadAddon(fit);
+  const search = new SearchAddon.SearchAddon();
+  term.loadAddon(search);
   term.open(document.getElementById('t'));
   fit.fit();
+
+  function applyLook(p) {
+    const theme = THEMES[p.theme] || THEMES['RemoteMan'];
+    term.options.theme = theme;
+    document.body.style.setProperty('--bg', theme.background);
+    if (p.fontFamily) term.options.fontFamily = `'${p.fontFamily}', Consolas, monospace`;
+    if (p.fontSize) term.options.fontSize = p.fontSize;
+    if (p.scrollback) term.options.scrollback = p.scrollback;
+    fit.fit();
+  }
+
+  // Ctrl+wheel: font size, saved for every terminal.
+  let zoomTimer;
+  document.addEventListener('wheel', (e) => {
+    if (!e.ctrlKey) return;
+    e.preventDefault();
+    const size = Math.min(28, Math.max(8, term.options.fontSize + (e.deltaY < 0 ? 1 : -1)));
+    if (size === term.options.fontSize) return;
+    term.options.fontSize = size;
+    fit.fit();
+    const z = document.getElementById('zoom');
+    z.textContent = size + ' pt'; z.style.display = 'block';
+    clearTimeout(zoomTimer);
+    zoomTimer = setTimeout(() => { z.style.display = 'none'; host.postMessage({ t: 'prefs', d: { fontSize: size } }); }, 600);
+  }, { passive: false });
+
+  // Find (Ctrl+Shift+F)
+  const findBar = document.getElementById('find'), q = document.getElementById('q'), n = document.getElementById('n');
+  const opts = { decorations: { matchBackground: '#5C4A1A', activeMatchBackground: '#B5862A', matchOverviewRuler: '#B5862A', activeMatchColorOverviewRuler: '#F0C060' } };
+  search.onDidChangeResults?.(r => { n.textContent = r.resultCount ? `${r.resultIndex + 1}/${r.resultCount}` : (q.value ? 'none' : ''); });
+  function openFind() { findBar.classList.add('on'); const sel = term.getSelection(); if (sel && !sel.includes('\n')) q.value = sel; q.select(); q.focus(); if (q.value) search.findNext(q.value, opts); }
+  function closeFind() { findBar.classList.remove('on'); search.clearDecorations(); n.textContent = ''; term.focus(); }
+  q.addEventListener('input', () => { if (q.value) search.findNext(q.value, { ...opts, incremental: true }); else { search.clearDecorations(); n.textContent = ''; } });
+  q.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); e.shiftKey ? search.findPrevious(q.value, opts) : search.findNext(q.value, opts); }
+    else if (e.key === 'Escape') { e.preventDefault(); closeFind(); }
+  });
+  document.getElementById('next').onclick = () => search.findNext(q.value, opts);
+  document.getElementById('prev').onclick = () => search.findPrevious(q.value, opts);
+  document.getElementById('close').onclick = closeFind;
+  term.attachCustomKeyEventHandler((e) => {
+    if (e.type === 'keydown' && e.ctrlKey && e.shiftKey && (e.key === 'F' || e.key === 'f')) { openFind(); return false; }
+    return true;
+  });
 
   // Copy on select (mouse up after a drag or double-click), paste on right click, like PuTTY.
   // The host owns the Windows clipboard, so this works without page clipboard permissions.
   let copyOnSelect = true;
-  document.addEventListener('mouseup', () => {
+  document.getElementById('t').addEventListener('mouseup', () => {
     if (copyOnSelect && term.hasSelection()) host.postMessage({ t: 'copy', d: term.getSelection() });
   });
-  document.addEventListener('contextmenu', (e) => { e.preventDefault(); host.postMessage({ t: 'paste' }); });
+  document.getElementById('t').addEventListener('contextmenu', (e) => { e.preventDefault(); host.postMessage({ t: 'paste' }); });
 
   // Drop files on the terminal to upload them over SFTP into the folder shown in the Files panel.
   document.addEventListener('dragover', (e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; });
@@ -58,6 +143,9 @@
     else if (m.t === 'info') term.write('\x1b[38;2;156;162;169m' + m.d + '\x1b[0m\r\n');
     else if (m.t === 'focus') term.focus();
     else if (m.t === 'config') copyOnSelect = m.copyOnSelect;
+    else if (m.t === 'look') applyLook(m.d);
+    else if (m.t === 'find') openFind();
+    else if (m.t === 'clear') term.clear();
   });
 
   host.postMessage({ t: 'ready', cols: term.cols, rows: term.rows });

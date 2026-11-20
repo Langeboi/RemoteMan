@@ -83,6 +83,44 @@ public partial class WebSessionView : UserControl
         }
         vm.Disposed += (_, _) => Web.Dispose();
 
+        // A page that doesn't load at all gets a notice saying why (once per tab).
+        var reported = false;
+        core.NavigationCompleted += (_, a) =>
+        {
+            if (a.IsSuccess || reported || a.WebErrorStatus == CoreWebView2WebErrorStatus.OperationCanceled) return;
+            reported = true;
+            var why = a.WebErrorStatus switch
+            {
+                CoreWebView2WebErrorStatus.HostNameNotResolved => new RemoteMan.Core.Networking.ConnectionProblem("Name not found", "DNS couldn't find the site.", "Check the address, or your DNS / VPN.", a.WebErrorStatus.ToString()),
+                CoreWebView2WebErrorStatus.Timeout or CoreWebView2WebErrorStatus.ServerUnreachable or CoreWebView2WebErrorStatus.CannotConnect
+                    => new("Host didn't answer", "The site didn't respond.", "The server may be down, or a firewall or VPN is blocking it.", a.WebErrorStatus.ToString()),
+                CoreWebView2WebErrorStatus.CertificateCommonNameIsIncorrect or CoreWebView2WebErrorStatus.CertificateExpired
+                    or CoreWebView2WebErrorStatus.ClientCertificateContainsErrors or CoreWebView2WebErrorStatus.CertificateRevoked or CoreWebView2WebErrorStatus.CertificateIsInvalid
+                    => new("Certificate problem", "The site's certificate isn't trusted.", "Turn on \"Ignore certificate errors\" on the entry if you trust this site.", a.WebErrorStatus.ToString()),
+                _ => new("Page didn't load", $"The page failed to load ({a.WebErrorStatus}).", null, a.WebErrorStatus.ToString()),
+            };
+            vm.ReportProblem(why);
+        };
+
+        // Proxmox console: sign in through the API and hand the ticket to the page as its cookie.
+        if (vm.Entry.Kind == RemoteMan.Core.Model.EntryKind.Proxmox)
+        {
+            try
+            {
+                vm.StatusText = "Signing in to Proxmox…";
+                var ticket = await RemoteMan.Protocols.Proxmox.ProxmoxConsole.GetTicketAsync(vm.Endpoint, vm.Credential, vm.Settings.IgnoreCertificateErrors);
+                var cookie = core.CookieManager.CreateCookie("PVEAuthCookie", Uri.EscapeDataString(ticket), vm.Endpoint.Host, "/");
+                cookie.IsSecure = true;
+                core.CookieManager.AddOrUpdateCookie(cookie);
+                vm.StatusText = "";
+            }
+            catch (Exception ex)
+            {
+                vm.StatusText = ex.Message;
+                vm.ReportProblem(RemoteMan.Core.Networking.ConnectionProblem.FromException(ex, RemoteMan.Core.Model.EntryKind.Proxmox));
+            }
+        }
+
         Address.Text = vm.Url;
         core.Navigate(vm.Url);
     }

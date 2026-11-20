@@ -101,7 +101,7 @@
                         <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
                         <ItemsControl.ItemTemplate>
                             <DataTemplate>
-                                <Border BorderThickness="1" Padding="5,0" Margin="0,0,4,4">
+                                <Border CornerRadius="{StaticResource Radius}" BorderThickness="1" Padding="5,0" Margin="0,0,4,4">
                                     <Border.Style>
                                         <Style TargetType="Border">
                                             <Setter Property="BorderBrush" Value="{StaticResource InputBorder}" />
@@ -200,7 +200,7 @@
                 AllowDrop="True" Drop="OnFilesDrop" DragOver="OnFilesDragOver">
             <StackPanel VerticalAlignment="Top">
             <ToggleButton x:Name="FilesToggle" Height="64" Background="Transparent" BorderThickness="0"
-                          Foreground="{StaticResource Muted}" ToolTip="Files (SFTP, Ctrl+Shift+F)" AutomationProperties.Name="Toggle files panel"
+                          Foreground="{StaticResource Muted}" ToolTip="Files (SFTP, Ctrl+Shift+E)" AutomationProperties.Name="Toggle files panel"
                           Checked="OnFilesToggled" Unchecked="OnFilesToggled">
                 <TextBlock Text="Files" FontSize="11">
                     <TextBlock.LayoutTransform><RotateTransform Angle="90" /></TextBlock.LayoutTransform>
@@ -213,6 +213,11 @@
                     <TextBlock.LayoutTransform><RotateTransform Angle="90" /></TextBlock.LayoutTransform>
                 </TextBlock>
             </ToggleButton>
+            <Button x:Name="LookButton" Height="22" Background="Transparent" BorderThickness="0" Padding="0" Margin="0,6,0,0"
+                    Foreground="{StaticResource Muted}" ToolTip="Terminal look: theme, font, size, scrollback. Find: Ctrl+Shift+F. Zoom: Ctrl+wheel."
+                    AutomationProperties.Name="Terminal look" Click="OnLook">
+                <TextBlock Text="Aa" FontSize="11" />
+            </Button>
             </StackPanel>
         </Border>
     </Grid>

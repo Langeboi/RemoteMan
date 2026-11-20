@@ -16,7 +16,7 @@ public sealed record SshHop(string Name, IReadOnlyList<HostEndpoint> Endpoints, 
 /// keyboard-interactive and public key auth (OpenSSH, PKCS#1/#8 PEM and PuTTY .ppk keys).
 /// Legacy algorithms are removed from the offer when the entry disables them.
 /// </summary>
-public sealed class SshSession : IDisposable
+public sealed class SshSession : RemoteMan.Protocols.Terminal.ITerminalChannel
 {
     private static readonly string[] LegacyKex = ["diffie-hellman-group1-sha1", "diffie-hellman-group-exchange-sha1", "diffie-hellman-group14-sha1"];
     private static readonly string[] LegacyCiphers = ["3des-cbc", "aes128-cbc", "aes192-cbc", "aes256-cbc", "blowfish-cbc", "twofish-cbc", "cast128-cbc", "arcfour", "arcfour128", "arcfour256"];

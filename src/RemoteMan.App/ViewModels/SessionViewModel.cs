@@ -33,6 +33,10 @@ public abstract partial class SessionViewModel : ObservableObject, IDisposable
     /// <summary>Shown in the status bar while this tab is active.</summary>
     [ObservableProperty] private string _statusText = "";
 
+    /// <summary>The connection failed or dropped for a reason worth explaining (shown as a notice).</summary>
+    public event Action<RemoteMan.Core.Networking.ConnectionProblem>? Failed;
+    public void ReportProblem(RemoteMan.Core.Networking.ConnectionProblem? p) { if (p is not null) Failed?.Invoke(p); }
+
     public event EventHandler? CloseRequested;
     public void RequestClose() => CloseRequested?.Invoke(this, EventArgs.Empty);
 
@@ -74,15 +78,26 @@ public sealed class RdpSessionViewModel(Entry e, HostEndpoint ep, ResolvedCreden
     public RdpSettings Settings => Entry.Rdp ?? new RdpSettings();
 }
 
+/// <summary>SFTP and FTP entries: a file browser tab.</summary>
+public sealed class FilesSessionViewModel(Entry e, HostEndpoint ep, ResolvedCredential c, bool fb) : SessionViewModel(e, ep, c, fb)
+{
+    public SshSettings Ssh => Entry.Ssh ?? new SshSettings();
+    public FtpSettings Ftp => Entry.Ftp ?? new FtpSettings();
+}
+
 public sealed class WebSessionViewModel(Entry e, HostEndpoint ep, ResolvedCredential c, bool fb) : SessionViewModel(e, ep, c, fb)
 {
-    public WebSettings Settings => Entry.Web ?? new WebSettings();
+    /// <summary>Proxmox console tabs have no web settings: no form filling, certificate errors per the entry.</summary>
+    public WebSettings Settings => Entry.Web ?? (Entry.Kind == EntryKind.Proxmox
+        ? new WebSettings { AutoFill = false, AutoSubmit = false, IgnoreCertificateErrors = Entry.Proxmox?.IgnoreCertificateErrors ?? true }
+        : new WebSettings());
 
     /// <summary>The entry URL, with its host swapped for the endpoint that answered (fallback support).</summary>
     public string Url
     {
         get
         {
+            if (Entry.Kind == EntryKind.Proxmox) return RemoteMan.Protocols.Proxmox.ProxmoxConsole.ConsoleUrl(Endpoint, Entry.Proxmox ?? new ProxmoxSettings());
             var url = WebSettings.NormalizeUrl(Settings.Url);
             if (!Uri.TryCreate(url, UriKind.Absolute, out var u)) return url;
             var b = new UriBuilder(u) { Host = Endpoint.Host };

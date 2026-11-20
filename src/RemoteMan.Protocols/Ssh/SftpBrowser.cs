@@ -17,10 +17,42 @@ public sealed record RemoteItem(string Name, string FullPath, bool IsDirectory, 
 public sealed record TransferProgress(string File, long Done, long Total);
 
 /// <summary>SFTP file browser and transfer engine for an SSH entry (files and whole folders, both ways).</summary>
-public sealed class SftpBrowser : IDisposable
+public sealed class SftpBrowser : RemoteMan.Protocols.Files.IRemoteFiles
 {
     private readonly SftpClient _sftp;
     private readonly SemaphoreSlim _gate = new(1, 1);
+
+    /// <summary>A file browser on its own SFTP connection (SFTP entries; SSH tabs reuse their session instead).</summary>
+    public static async Task<SftpBrowser> ConnectAsync(RemoteMan.Core.Model.HostEndpoint endpoint, ResolvedCredential cred,
+        RemoteMan.Core.Model.SshSettings settings, KnownHosts knownHosts, Action<string>? info, CancellationToken ct = default)
+    {
+        var ep = endpoint.Port > 0 ? endpoint : endpoint with { Port = 22 };
+        var sftp = new SftpClient(SshSession.BuildConnectionInfo(ep, cred, settings)) { OperationTimeout = TimeSpan.FromSeconds(30) };
+        sftp.HostKeyReceived += (_, e) =>
+        {
+            switch (knownHosts.Check(ep.Host, ep.Port, e.HostKeyName, e.FingerPrintSHA256))
+            {
+                case HostKeyVerdict.New:
+                    info?.Invoke($"Host key {e.HostKeyName} SHA256:{e.FingerPrintSHA256} accepted (first use, saved).");
+                    e.CanTrust = settings.AutoAcceptHostKey;
+                    break;
+                case HostKeyVerdict.Changed:
+                    info?.Invoke($"WARNING: host key for {ep} changed, now {e.HostKeyName} SHA256:{e.FingerPrintSHA256}.");
+                    e.CanTrust = settings.AutoAcceptHostKey;
+                    break;
+                default:
+                    e.CanTrust = true;
+                    break;
+            }
+        };
+        try { await sftp.ConnectAsync(ct); }
+        catch { sftp.Dispose(); throw; }
+        return new SftpBrowser(sftp);
+    }
+
+    public string Separator => "/";
+    string RemoteMan.Protocols.Files.IRemoteFiles.Parent(string path) => Parent(path);
+    string RemoteMan.Protocols.Files.IRemoteFiles.Combine(string dir, string name) => Combine(dir, name);
 
     internal SftpBrowser(SftpClient sftp)
     {

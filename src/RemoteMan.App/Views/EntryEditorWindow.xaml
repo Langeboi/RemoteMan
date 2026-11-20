@@ -21,7 +21,7 @@
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="RadioButton">
-                        <Border x:Name="b" Background="{StaticResource Panel}" BorderBrush="{StaticResource Border}" BorderThickness="1" Padding="10,4">
+                        <Border CornerRadius="{StaticResource Radius}" x:Name="b" Background="{StaticResource Panel}" BorderBrush="{StaticResource Border}" BorderThickness="1" Padding="10,4">
                             <ContentPresenter VerticalAlignment="Center" />
                         </Border>
                         <ControlTemplate.Triggers>
@@ -233,6 +233,70 @@
                         <Button DockPanel.Dock="Right" Content="Link to Zabbix host…" Margin="6,0,0,0" Click="OnZabbixLink" />
                         <TextBlock x:Name="ZabbixCurrent" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Foreground="{StaticResource Text}" />
                     </DockPanel>
+                </GroupBox>
+
+                <GroupBox x:Name="SerialGroup" Header="Serial port">
+                    <StackPanel>
+                        <DockPanel Margin="0,2">
+                            <TextBlock Text="Port" Width="90" Style="{StaticResource Label}" />
+                            <ComboBox x:Name="SerialPortBox" Width="160" HorizontalAlignment="Left" IsEditable="True" ToolTip="The COM port of the console cable (Device Manager lists it)" />
+                        </DockPanel>
+                        <DockPanel Margin="0,2">
+                            <TextBlock Text="Speed (baud)" Width="90" Style="{StaticResource Label}" />
+                            <ComboBox x:Name="SerialBaudBox" Width="160" HorizontalAlignment="Left" IsEditable="True" />
+                        </DockPanel>
+                        <DockPanel Margin="0,2">
+                            <TextBlock Text="Data bits" Width="90" Style="{StaticResource Label}" />
+                            <ComboBox x:Name="SerialDataBox" Width="70" HorizontalAlignment="Left" />
+                            <TextBlock Text="Parity" Style="{StaticResource Label}" Margin="12,0,6,0" />
+                            <ComboBox x:Name="SerialParityBox" Width="80" HorizontalAlignment="Left" />
+                            <TextBlock Text="Stop bits" Style="{StaticResource Label}" Margin="12,0,6,0" />
+                            <ComboBox x:Name="SerialStopBox" Width="70" HorizontalAlignment="Left" />
+                        </DockPanel>
+                        <DockPanel Margin="0,2">
+                            <TextBlock Text="Flow control" Width="90" Style="{StaticResource Label}" />
+                            <ComboBox x:Name="SerialFlowBox" Width="160" HorizontalAlignment="Left" />
+                        </DockPanel>
+                        <TextBlock Text="Most switches, routers and firewalls use 9600 8N1 without flow control; some newer ones use 115200." Style="{StaticResource MutedText}" FontSize="11" TextWrapping="Wrap" Margin="0,4,0,0" />
+                    </StackPanel>
+                </GroupBox>
+
+                <GroupBox x:Name="FtpGroup" Header="FTP options">
+                    <StackPanel>
+                        <CheckBox x:Name="FtpTls" Content="Use TLS (FTPS, explicit)" />
+                        <CheckBox x:Name="FtpIgnoreCert" Content="Ignore certificate errors" />
+                        <DockPanel Margin="0,4,0,0">
+                            <TextBlock Text="Start folder" Width="90" Style="{StaticResource Label}" />
+                            <TextBox x:Name="FtpStart" ToolTip="Empty = the server's default folder" />
+                        </DockPanel>
+                    </StackPanel>
+                </GroupBox>
+
+                <GroupBox x:Name="ProxmoxGroup" Header="Proxmox console">
+                    <StackPanel>
+                        <DockPanel Margin="0,2">
+                            <TextBlock Text="Node" Width="90" Style="{StaticResource Label}" />
+                            <TextBox x:Name="PveNode" Width="160" HorizontalAlignment="Left" ToolTip="The Proxmox node the guest runs on, for example pve" />
+                        </DockPanel>
+                        <DockPanel Margin="0,2">
+                            <TextBlock Text="VM / CT ID" Width="90" Style="{StaticResource Label}" />
+                            <TextBox x:Name="PveVmId" Width="80" HorizontalAlignment="Left" />
+                            <CheckBox x:Name="PveContainer" Content="Container (LXC)" Margin="12,0,0,0" VerticalAlignment="Center" />
+                        </DockPanel>
+                        <CheckBox x:Name="PveIgnoreCert" Content="Ignore certificate errors" />
+                        <TextBlock Text="Signs in with the entry's login (for example root@pam) and opens the console in a tab. The host is the Proxmox server, port 8006." Style="{StaticResource MutedText}" FontSize="11" TextWrapping="Wrap" Margin="0,4,0,0" />
+                    </StackPanel>
+                </GroupBox>
+
+                <GroupBox x:Name="PsGroup" Header="PowerShell remoting">
+                    <StackPanel>
+                        <CheckBox x:Name="PsSsl" Content="Use HTTPS (port 5986)" />
+                        <DockPanel Margin="0,4,0,0">
+                            <TextBlock Text="Configuration" Width="90" Style="{StaticResource Label}" />
+                            <TextBox x:Name="PsConfig" ToolTip="Optional session configuration (JEA endpoint), for example Microsoft.PowerShell" />
+                        </DockPanel>
+                        <TextBlock Text="Opens a PowerShell window with Enter-PSSession. WinRM must be enabled on the server (Enable-PSRemoting)." Style="{StaticResource MutedText}" FontSize="11" TextWrapping="Wrap" Margin="0,4,0,0" />
+                    </StackPanel>
                 </GroupBox>
 
                 <GroupBox x:Name="VncGroup" Header="VNC options">

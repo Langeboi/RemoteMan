@@ -30,6 +30,8 @@ public partial class SshSessionView : UserControl
     private static readonly KnownHosts KnownHosts = new(AppPaths.KnownHosts);
 
     private SshSession? _ssh;
+    /// <summary>What the terminal talks to: the SSH shell, Telnet or a serial port.</summary>
+    private RemoteMan.Protocols.Terminal.ITerminalChannel? _chan;
     private SftpBrowser? _sftp;
     private SshSessionViewModel? _vm;
     private readonly StringBuilder _pending = new();
@@ -45,7 +47,7 @@ public partial class SshSessionView : UserControl
         IsVisibleChanged += (_, e) => { if ((bool)e.NewValue) Post(new { t = "focus" }); };
         PreviewKeyDown += (_, e) =>
         {
-            if (e.Key == Key.F && Keyboard.Modifiers == (ModifierKeys.Control | ModifierKeys.Shift))
+            if (e.Key == Key.E && Keyboard.Modifiers == (ModifierKeys.Control | ModifierKeys.Shift) && FilesToggle.IsVisible)
             {
                 FilesToggle.IsChecked = FilesToggle.IsChecked != true;
                 e.Handled = true;
@@ -87,19 +89,24 @@ public partial class SshSessionView : UserControl
         {
             case "ready":
                 Post(new { t = "config", copyOnSelect = _vm?.Settings.CopyOnSelect ?? true });
+                PostLook();
+                TerminalPrefs.Changed += OnPrefsChanged;
                 await StartAsync((uint)m.GetProperty("cols").GetInt32(), (uint)m.GetProperty("rows").GetInt32());
                 break;
             case "data":
-                _ssh?.Send(m.GetProperty("d").GetString() ?? "");
+                _chan?.Send(m.GetProperty("d").GetString() ?? "");
                 break;
             case "resize":
-                _ssh?.Resize((uint)m.GetProperty("cols").GetInt32(), (uint)m.GetProperty("rows").GetInt32());
+                _chan?.Resize((uint)m.GetProperty("cols").GetInt32(), (uint)m.GetProperty("rows").GetInt32());
+                break;
+            case "prefs":
+                TerminalPrefs.Save(m.GetProperty("d").GetRawText());
                 break;
             case "copy":
                 if (m.GetProperty("d").GetString() is { Length: > 0 } text) TrySetClipboard(text);
                 break;
             case "paste":
-                if (Clipboard.ContainsText()) _ssh?.Send(Clipboard.GetText().Replace("\r\n", "\r").Replace('\n', '\r'));
+                if (Clipboard.ContainsText()) _chan?.Send(Clipboard.GetText().Replace("\r\n", "\r").Replace('\n', '\r'));
                 else if (Clipboard.ContainsFileDropList()) await UploadAsync(Clipboard.GetFileDropList().Cast<string>().ToList());
                 break;
             case "upload":
@@ -121,8 +128,17 @@ public partial class SshSessionView : UserControl
 
     private async Task StartAsync(uint cols, uint rows)
     {
-        if (_vm is null || _ssh is not null) return;
+        if (_vm is null || _chan is not null) return;
+        var kind = _vm.Entry.Kind;
+        if (kind != EntryKind.Ssh)
+        {
+            // Telnet and serial: same terminal, no SFTP panel.
+            FilesToggle.Visibility = Visibility.Collapsed;
+            await StartPlainAsync(kind, cols, rows);
+            return;
+        }
         _ssh = new SshSession();
+        _chan = _ssh;
         _ssh.Output += s => { lock (_pending) _pending.Append(s); _vm.Tail.Append(s); };
         _ssh.Info += s => Dispatcher.BeginInvoke(() => Post(new { t = "info", d = s }));
         _ssh.Closed += ex => Dispatcher.BeginInvoke(() =>
@@ -130,6 +146,7 @@ public partial class SshSessionView : UserControl
             Post(new { t = "info", d = ex is null ? "\r\n[session closed]" : $"\r\n[disconnected: {ex.Message}]" });
             _vm.StatusText = "SSH disconnected";
             _vm.Sender = null;
+            if (ex is not null) _vm.ReportProblem(RemoteMan.Core.Networking.ConnectionProblem.FromException(ex, EntryKind.Ssh));
         });
 
         var fb = _vm.UsedFallback ? " (fallback)" : "";
@@ -148,7 +165,7 @@ public partial class SshSessionView : UserControl
                 // Typed, not run: no trailing Enter. Multi-line text goes in a bracketed paste so a
                 // modern shell holds every line until the user presses Enter.
                 text = text.TrimEnd('\r', '\n').Replace("\r\n", "\r").Replace('\n', '\r');
-                _ssh?.Send(text.Contains('\r') ? "\x1b[200~" + text + "\x1b[201~" : text);
+                _chan?.Send(text.Contains('\r') ? "\x1b[200~" + text + "\x1b[201~" : text);
                 Post(new { t = "focus" });
             };
             _flush.Start();
@@ -157,7 +174,61 @@ public partial class SshSessionView : UserControl
         {
             Post(new { t = "info", d = $"Connection failed: {ex.Message}" });
             _vm.StatusText = "SSH failed";
+            _vm.ReportProblem(RemoteMan.Core.Networking.ConnectionProblem.FromException(ex, kind));
         }
+    }
+
+    /// <summary>Telnet or a serial console in the same terminal.</summary>
+    private async Task StartPlainAsync(EntryKind kind, uint cols, uint rows)
+    {
+        var vm = _vm!;
+        var label = kind == EntryKind.Serial ? "Serial" : "Telnet";
+        try
+        {
+            if (kind == EntryKind.Serial)
+            {
+                var s = vm.Entry.Serial ?? new SerialSettings();
+                var serial = new RemoteMan.Protocols.Terminal.SerialChannel();
+                Hook(serial, label);
+                Post(new { t = "info", d = $"Opening {s.PortName} at {s.BaudRate} baud…" });
+                serial.Open(s);
+                _chan = serial;
+                vm.StatusText = $"Serial {s.PortName}  {s.BaudRate} {s.DataBits}{s.Parity[0]}{(s.StopBits == "Two" ? 2 : 1)}";
+            }
+            else
+            {
+                var telnet = new RemoteMan.Protocols.Terminal.TelnetChannel();
+                Hook(telnet, label);
+                Post(new { t = "info", d = $"Connecting to {vm.Endpoint}…" });
+                await telnet.ConnectAsync(vm.Endpoint, vm.Credential, cols, rows);
+                _chan = telnet;
+                vm.StatusText = $"Telnet {vm.Endpoint}";
+            }
+            var chan = _chan;
+            vm.Sender = text => chan.Send(text);
+            vm.SendToTerminal = text => { _chan?.Send(text.TrimEnd('\r', '\n').Replace("\r\n", "\r").Replace('\n', '\r')); Post(new { t = "focus" }); };
+            _flush.Start();
+        }
+        catch (Exception ex)
+        {
+            Post(new { t = "info", d = $"Connection failed: {ex.Message}" });
+            vm.StatusText = $"{label} failed";
+            vm.ReportProblem(RemoteMan.Core.Networking.ConnectionProblem.FromException(ex, kind));
+        }
+    }
+
+    private void Hook(RemoteMan.Protocols.Terminal.ITerminalChannel c, string label)
+    {
+        c.Output += s => { lock (_pending) _pending.Append(s); _vm?.Tail.Append(s); };
+        c.Info += s => Dispatcher.BeginInvoke(() => Post(new { t = "info", d = s }));
+        c.Closed += ex => Dispatcher.BeginInvoke(() =>
+        {
+            Post(new { t = "info", d = ex is null ? "\r\n[session closed]" : $"\r\n[disconnected: {ex.Message}]" });
+            if (_vm is null) return;
+            _vm.StatusText = $"{label} disconnected";
+            _vm.Sender = null;
+            if (ex is not null) _vm.ReportProblem(RemoteMan.Core.Networking.ConnectionProblem.FromException(ex, _vm.Entry.Kind));
+        });
     }
 
     private void Flush()
@@ -584,8 +655,51 @@ public partial class SshSessionView : UserControl
         menu.IsOpen = true;
     }
 
+    // ---------------- terminal look ----------------
+
+    private void OnPrefsChanged() => Dispatcher.BeginInvoke(PostLook);
+
+    private void PostLook()
+    {
+        if (Web.CoreWebView2 is { } core) core.PostWebMessageAsJson("{\"t\":\"look\",\"d\":" + TerminalPrefs.Load().ToJsonString() + "}");
+    }
+
+    private void OnLook(object sender, RoutedEventArgs e)
+    {
+        var prefs = TerminalPrefs.Load();
+        var menu = new ContextMenu { PlacementTarget = LookButton, Placement = System.Windows.Controls.Primitives.PlacementMode.Left };
+        MenuItem Sub(string header, IEnumerable<(string Label, bool On, Action Click)> items)
+        {
+            var m = new MenuItem { Header = header };
+            foreach (var (label, on, click) in items)
+            {
+                var i = new MenuItem { Header = label, IsCheckable = true, IsChecked = on };
+                i.Click += (_, _) => click();
+                m.Items.Add(i);
+            }
+            return m;
+        }
+        var theme = prefs["theme"]?.ToString();
+        var font = prefs["fontFamily"]?.ToString();
+        var size = (int?)prefs["fontSize"] ?? 13;
+        var scroll = (int?)prefs["scrollback"] ?? 10000;
+        menu.Items.Add(Sub("Theme", TerminalPrefs.Themes.Select(t => (t, t == theme, (Action)(() => TerminalPrefs.Set("theme", t))))));
+        menu.Items.Add(Sub("Font", TerminalPrefs.Fonts.Select(f => (f, f == font, (Action)(() => TerminalPrefs.Set("fontFamily", f))))));
+        menu.Items.Add(Sub($"Font size ({size})", new[] { 10, 11, 12, 13, 14, 15, 16, 18, 20 }.Select(n => (n.ToString(), n == size, (Action)(() => TerminalPrefs.Set("fontSize", n))))));
+        menu.Items.Add(Sub("Scrollback", TerminalPrefs.Scrollbacks.Select(n => ($"{n:N0} lines", n == scroll, (Action)(() => TerminalPrefs.Set("scrollback", n))))));
+        menu.Items.Add(new Separator());
+        var find = new MenuItem { Header = "Find in scrollback", InputGestureText = "Ctrl+Shift+F" };
+        find.Click += (_, _) => Post(new { t = "find" });
+        menu.Items.Add(find);
+        var clear = new MenuItem { Header = "Clear scrollback" };
+        clear.Click += (_, _) => Post(new { t = "clear" });
+        menu.Items.Add(clear);
+        menu.IsOpen = true;
+    }
+
     private void Close()
     {
+        TerminalPrefs.Changed -= OnPrefsChanged;
         if (_vm is not null) _vm.Sender = null;
         if (_main is not null)
         {
@@ -598,7 +712,9 @@ public partial class SshSessionView : UserControl
         _sftp?.Dispose();
         _sftp = null;
         _ssh?.Dispose();
+        if (!ReferenceEquals(_chan, _ssh)) _chan?.Dispose();
         _ssh = null;
+        _chan = null;
         Web.Dispose();
     }
 }

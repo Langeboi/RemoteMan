@@ -345,6 +345,20 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
                 ? ep with { Port = url.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ? 80 : 443 } : ep);
 
         Message = $"Connecting to {e.Name}…";
+
+        // A serial console has no host to probe: open the COM port straight away.
+        if (e.Kind == EntryKind.Serial)
+        {
+            if (ResolveForConnect(e) is not { } serialCred) { Message = ""; return; }
+            var serial = new SshSessionViewModel(e, new HostEndpoint((e.Serial ?? new SerialSettings()).PortName), serialCred, false);
+            Message = "";
+            serial.CloseRequested += (_, _) => CloseSession(serial);
+            TrackFailures(serial);
+            AddSession(serial);
+            RememberRecent(e);
+            return;
+        }
+
         var resolver = new EndpointResolver { Timeout = TimeSpan.FromMilliseconds(_settings.FallbackTimeoutMs) };
 
         // Behind a jump host the target usually isn't reachable from here, so it isn't probed:
@@ -371,6 +385,7 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
             };
             Message = "";
             jumped.CloseRequested += (_, _) => CloseSession(jumped);
+            TrackFailures(jumped);
             Sessions.Add(jumped);
             ActiveSession = jumped;
             return;
@@ -380,8 +395,10 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
         if (!result.Success)
         {
             Message = $"{e.Name}: no host answered ({string.Join("; ", result.Attempts.Select(a => $"{a.Endpoint} {a.Error}"))})";
+            Notify(ConnectionProblem.FromAttempts(result.Attempts), e);
             return;
         }
+        if (result.UsedFallback) Notify(ConnectionProblem.Fallback(result.Attempts[0], result.Endpoint!), e);
 
         if (ResolveForConnect(e) is not { } cred) { Message = ""; return; }
         var endpoint = result.Endpoint!;
@@ -417,7 +434,9 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
 
         SessionViewModel? s = e.Kind switch
         {
-            EntryKind.Ssh => new SshSessionViewModel(e, endpoint, cred, result.UsedFallback),
+            EntryKind.Ssh or EntryKind.Telnet => new SshSessionViewModel(e, endpoint, cred, result.UsedFallback),
+            EntryKind.Sftp or EntryKind.Ftp => new FilesSessionViewModel(e, endpoint, cred, result.UsedFallback),
+            EntryKind.Proxmox => new WebSessionViewModel(e, endpoint, cred, result.UsedFallback),
             EntryKind.Rdp => new RdpSessionViewModel(e, endpoint, cred, result.UsedFallback),
             EntryKind.Web when (e.Web?.Browser ?? BrowserKind.Embedded) == BrowserKind.Embedded => new WebSessionViewModel(e, endpoint, cred, result.UsedFallback),
             _ => null,
@@ -429,16 +448,29 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
             try
             {
                 if (e.Kind == EntryKind.Vnc) RemoteMan.Protocols.Vnc.VncLauncher.Open(endpoint, e.Vnc ?? new VncSettings());
+                else if (e.Kind == EntryKind.PowerShell) RemoteMan.Protocols.Tools.PowerShellLauncher.Open(endpoint, cred, e.PowerShell ?? new PowerShellSettings());
+                else if (e.Kind == EntryKind.WinBox)
+                {
+                    var exe = RemoteMan.Protocols.Tools.WinBoxLauncher.FindExe();
+                    if (exe is null)
+                    {
+                        if (Choose?.Invoke("WinBox isn't on this PC", "Download WinBox from MikroTik (about 2 MB) and open the router in it?", ["Download WinBox", "Cancel"]) != 0) { Message = ""; return; }
+                        Message = "Downloading WinBox…";
+                        exe = await RemoteMan.Protocols.Tools.WinBoxLauncher.DownloadAsync();
+                    }
+                    RemoteMan.Protocols.Tools.WinBoxLauncher.Open(exe, endpoint, cred);
+                }
                 else
                     RemoteMan.Protocols.Web.ExternalBrowser.Open(new WebSessionViewModel(e, endpoint, cred, false).Url, e.Web!.Browser, e.Web.IgnoreCertificateErrors);
                 Message = $"Opened {e.Name} externally";
             }
-            catch (Exception ex) { Message = ex.Message; }
+            catch (Exception ex) { Message = ex.Message; Notify(ConnectionProblem.FromException(ex, e.Kind), e); }
             return;
         }
 
         Message = result.UsedFallback ? $"{result.Attempts[0].Endpoint} {result.Attempts[0].Error}, using fallback {endpoint}" : "";
         s.CloseRequested += (_, _) => CloseSession(s);
+        TrackFailures(s);
         AddSession(s);
         RememberRecent(e);
     }
