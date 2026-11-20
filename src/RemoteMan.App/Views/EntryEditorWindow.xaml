@@ -209,18 +209,25 @@
                         <CheckBox x:Name="WebIgnoreCert" Content="Ignore certificate errors" />
                         <CheckBox x:Name="WebAutoFill" Content="Fill in the login form automatically" />
                         <CheckBox x:Name="WebAutoSubmit" Content="Then press the login button" Margin="18,3,0,3" />
-                        <TextBlock Text="Form fields (optional CSS selectors, leave empty to detect automatically)" Style="{StaticResource MutedText}" FontSize="11" Margin="0,6,0,2" />
+                        <DockPanel Margin="0,8,0,2">
+                            <TextBlock Text="Login form" Width="90" Style="{StaticResource Label}" />
+                            <Button DockPanel.Dock="Right" Content="Pick on page…" Margin="6,0,0,0" Click="OnPickFields"
+                                    ToolTip="Open the page and click the user name box, the password box and the login button" />
+                            <ComboBox x:Name="WebPreset" Width="230" HorizontalAlignment="Left" SelectionChanged="OnWebPreset"
+                                      ToolTip="Known login pages, or Automatic to let RemoteMan find the fields" />
+                        </DockPanel>
+                        <TextBlock Text="Which boxes on the page get the user name and password. Leave empty to detect them automatically." Style="{StaticResource MutedText}" FontSize="11" TextWrapping="Wrap" Margin="90,0,0,4" />
                         <DockPanel Margin="0,2">
                             <TextBlock Text="User field" Width="90" Style="{StaticResource Label}" />
-                            <TextBox x:Name="WebUserSel" FontFamily="{StaticResource MonoFont}" FontSize="11" ToolTip="e.g. #username or input[name=login]" />
+                            <TextBox x:Name="WebUserSel" TextChanged="OnWebSelectorChanged" FontFamily="{StaticResource MonoFont}" FontSize="11" ToolTip="e.g. #username or input[name=login]" />
                         </DockPanel>
                         <DockPanel Margin="0,2">
                             <TextBlock Text="Password field" Width="90" Style="{StaticResource Label}" />
-                            <TextBox x:Name="WebPassSel" FontFamily="{StaticResource MonoFont}" FontSize="11" ToolTip="e.g. #password" />
+                            <TextBox x:Name="WebPassSel" TextChanged="OnWebSelectorChanged" FontFamily="{StaticResource MonoFont}" FontSize="11" ToolTip="e.g. #password" />
                         </DockPanel>
                         <DockPanel Margin="0,2">
                             <TextBlock Text="Login button" Width="90" Style="{StaticResource Label}" />
-                            <TextBox x:Name="WebSubmitSel" FontFamily="{StaticResource MonoFont}" FontSize="11" ToolTip="e.g. button#login" />
+                            <TextBox x:Name="WebSubmitSel" TextChanged="OnWebSelectorChanged" FontFamily="{StaticResource MonoFont}" FontSize="11" ToolTip="e.g. button#login" />
                         </DockPanel>
                         <CheckBox x:Name="WebCopySelect" Content="Copy text as soon as it is selected" />
                     </StackPanel>

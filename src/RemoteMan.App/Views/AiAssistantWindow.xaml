@@ -54,6 +54,14 @@
             <Setter Property="FontSize" Value="11" />
         </Style>
 
+        <Style x:Key="SetupPassword" TargetType="PasswordBox" BasedOn="{StaticResource {x:Type PasswordBox}}">
+            <Setter Property="Height" Value="24" />
+            <Setter Property="Padding" Value="4,0" />
+            <Setter Property="Background" Value="{StaticResource Bg}" />
+            <Setter Property="FontFamily" Value="{StaticResource MonoFont}" />
+            <Setter Property="FontSize" Value="11" />
+        </Style>
+
         <!-- Read-only, selectable text that looks like a TextBlock. -->
         <Style x:Key="SelectableText" TargetType="TextBox">
             <Setter Property="IsReadOnly" Value="True" />
@@ -249,7 +257,7 @@
                         </StackPanel>
                         <StackPanel Visibility="{Binding SetupShowKey, Converter={StaticResource BoolVis}}" Margin="0,0,0,8">
                             <TextBlock Text="{Binding SetupFieldLabel}" Style="{StaticResource MutedText}" Margin="0,0,0,4" />
-                            <PasswordBox x:Name="KeyBox" Style="{StaticResource SetupInput}" AutomationProperties.Name="API key" KeyDown="OnKeyBoxKeyDown" />
+                            <PasswordBox x:Name="KeyBox" Style="{StaticResource SetupPassword}" AutomationProperties.Name="API key" KeyDown="OnKeyBoxKeyDown" />
                         </StackPanel>
                         <TextBlock Text="Model" Style="{StaticResource MutedText}" Margin="0,0,0,4" />
                         <ComboBox IsEditable="True" Height="24" Text="{Binding SetupModel, UpdateSourceTrigger=PropertyChanged}" ItemsSource="{Binding SetupModels}"

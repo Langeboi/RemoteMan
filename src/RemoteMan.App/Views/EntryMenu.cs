@@ -207,10 +207,15 @@ public static class EntryMenu
             if (t.Group != group)
             {
                 if (group is not null) menu.Items.Add(new Separator());
-                group = t.Group;
-                var head = new MenuItem { Header = t.Group.ToUpperInvariant(), IsEnabled = false, FontSize = 10, Height = 20 };
+                var head = new MenuItem
+                {
+                    Header = t.Group.ToUpperInvariant(), IsEnabled = false, FontSize = 10, Height = 22,
+                    // Air above and below the heading so it doesn't sit on the first row under it.
+                    Margin = new Thickness(0, group is null ? 2 : 6, 0, 4), VerticalContentAlignment = VerticalAlignment.Bottom,
+                };
                 head.SetResourceReference(Control.ForegroundProperty, "Faint");
                 menu.Items.Add(head);
+                group = t.Group;
             }
             var kind = t.Kind.ToString();
             var color = (Color)ColorConverter.ConvertFromString(t.Color);

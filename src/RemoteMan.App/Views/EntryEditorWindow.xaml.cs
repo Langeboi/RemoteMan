@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using System.Windows;
+using System.Windows.Controls;
 using CommunityToolkit.Mvvm.ComponentModel;
 using RemoteMan.Core.Integrations.Zabbix;
 using RemoteMan.Core.Model;
@@ -157,7 +158,9 @@ public partial class EntryEditorWindow : Window
         WebBrowser.ItemsSource = browsers; WebBrowser.DisplayMemberPath = nameof(BrowserChoice.Label);
         WebBrowser.SelectedItem = browsers.FirstOrDefault(b => b.Kind == w.Browser) ?? browsers[0];
         WebIgnoreCert.IsChecked = w.IgnoreCertificateErrors; WebAutoFill.IsChecked = w.AutoFill; WebAutoSubmit.IsChecked = w.AutoSubmit;
+        WebPreset.ItemsSource = new[] { "Automatic" }.Concat(RemoteMan.Protocols.Web.AutoFillScript.Presets.Select(p => p.Name)).Append("Custom").ToList();
         WebUserSel.Text = w.UserFieldSelector; WebPassSel.Text = w.PasswordFieldSelector; WebSubmitSel.Text = w.SubmitSelector; WebCopySelect.IsChecked = w.CopyOnSelect;
+        MatchWebPreset();
 
         var v = entry.Vnc ?? new VncSettings();
         VncViewerBox.ItemsSource = Enum.GetValues<VncViewer>(); VncViewerBox.SelectedItem = v.Viewer; VncViewOnly.IsChecked = v.ViewOnly;
@@ -361,6 +364,50 @@ public partial class EntryEditorWindow : Window
     private void OnMoveUp(object sender, RoutedEventArgs e)
     {
         if ((sender as FrameworkElement)?.DataContext is HostRow row && _hosts.IndexOf(row) is > 0 and var i) { _hosts.Move(i, i - 1); Renumber(); }
+    }
+
+    private bool _settingPreset;
+
+    /// <summary>Picks the preset that matches the three selectors, Automatic when all are empty, otherwise Custom.</summary>
+    private void MatchWebPreset()
+    {
+        if (WebPreset.ItemsSource is null) return;
+        string T(TextBox b) => b.Text.Trim();
+        var name = T(WebUserSel).Length + T(WebPassSel).Length + T(WebSubmitSel).Length == 0 ? "Automatic"
+            : RemoteMan.Protocols.Web.AutoFillScript.Presets.FirstOrDefault(p => p.User == T(WebUserSel) && p.Password == T(WebPassSel) && p.Submit == T(WebSubmitSel)).Name ?? "Custom";
+        _settingPreset = true;
+        WebPreset.SelectedItem = name;
+        _settingPreset = false;
+    }
+
+    private void OnWebSelectorChanged(object sender, TextChangedEventArgs e)
+    {
+        if (!_settingPreset) MatchWebPreset();
+    }
+
+    private void OnWebPreset(object sender, SelectionChangedEventArgs e)
+    {
+        if (_settingPreset || WebPreset.SelectedItem is not string name || name == "Custom") return;
+        _settingPreset = true;
+        if (name == "Automatic") { WebUserSel.Text = ""; WebPassSel.Text = ""; WebSubmitSel.Text = ""; }
+        else
+        {
+            var p = RemoteMan.Protocols.Web.AutoFillScript.Presets.FirstOrDefault(x => x.Name == name);
+            if (p.Name is not null) { WebUserSel.Text = p.User; WebPassSel.Text = p.Password; WebSubmitSel.Text = p.Submit; }
+        }
+        _settingPreset = false;
+    }
+
+    private void OnPickFields(object sender, RoutedEventArgs e)
+    {
+        var url = WebSettings.NormalizeUrl(UrlBox.Text);
+        if (!Uri.TryCreate(url, UriKind.Absolute, out _)) { UrlBox.Focus(); return; }
+        if (FieldPickerWindow.Pick(this, url, WebIgnoreCert.IsChecked == true) is not { } f) return;
+        _settingPreset = true;
+        WebUserSel.Text = f.User; WebPassSel.Text = f.Password; WebSubmitSel.Text = f.Submit;
+        _settingPreset = false;
+        MatchWebPreset();
+        WebAutoFill.IsChecked = true;
     }
 
     private void OnOk(object sender, RoutedEventArgs e)

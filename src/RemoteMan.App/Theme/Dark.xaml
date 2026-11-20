@@ -1,6 +1,7 @@
 <!-- Onyx-style dark: near-black graphite, one teal accent, blue entry icons, yellow keys. Matches the approved UI refresh mockup. -->
 <ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:v="clr-namespace:RemoteMan.App.Views">
 
     <Color x:Key="C.Bg">#0F1113</Color>
     <Color x:Key="C.Panel">#16191C</Color>
@@ -252,13 +253,62 @@
         <Setter Property="MinHeight" Value="22" />
         <Setter Property="BorderThickness" Value="1" />
         <Setter Property="VerticalContentAlignment" Value="Center" />
+        <Setter Property="v:PasswordReveal.IsEnabled" Value="True" />
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="PasswordBox">
                     <Border x:Name="b" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
                             BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="{StaticResource Radius}" SnapsToDevicePixels="True">
-                        <ScrollViewer x:Name="PART_ContentHost" Focusable="False" HorizontalScrollBarVisibility="Hidden" VerticalScrollBarVisibility="Hidden"
-                                      Padding="{TemplateBinding Padding}" VerticalAlignment="{TemplateBinding VerticalContentAlignment}" />
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <ScrollViewer x:Name="PART_ContentHost" Focusable="False" HorizontalScrollBarVisibility="Hidden" VerticalScrollBarVisibility="Hidden"
+                                          Padding="{TemplateBinding Padding}" VerticalAlignment="{TemplateBinding VerticalContentAlignment}" />
+                            <!-- Shown instead of the dots while the eye is pressed (see PasswordReveal) -->
+                            <TextBox x:Name="PART_Reveal" Visibility="Collapsed" Padding="{TemplateBinding Padding}" FontFamily="{TemplateBinding FontFamily}"
+                                     FontSize="{TemplateBinding FontSize}" Foreground="{TemplateBinding Foreground}" VerticalAlignment="{TemplateBinding VerticalContentAlignment}">
+                                <TextBox.Style>
+                                    <Style TargetType="TextBox">
+                                        <Setter Property="CaretBrush" Value="{StaticResource Text}" />
+                                        <Setter Property="SelectionBrush" Value="{StaticResource Accent}" />
+                                        <Setter Property="Template">
+                                            <Setter.Value>
+                                                <ControlTemplate TargetType="TextBox">
+                                                    <ScrollViewer x:Name="PART_ContentHost" Focusable="False" HorizontalScrollBarVisibility="Hidden" VerticalScrollBarVisibility="Hidden"
+                                                                  Padding="{TemplateBinding Padding}" />
+                                                </ControlTemplate>
+                                            </Setter.Value>
+                                        </Setter>
+                                    </Style>
+                                </TextBox.Style>
+                            </TextBox>
+                            <ToggleButton x:Name="PART_Eye" Grid.Column="1" Width="24" Focusable="False" Cursor="Hand" ToolTip="Show password" Visibility="Collapsed">
+                                <ToggleButton.Template>
+                                    <ControlTemplate TargetType="ToggleButton">
+                                        <Border x:Name="eb" Background="Transparent" CornerRadius="{StaticResource Radius}" Margin="1">
+                                            <Grid Width="16" Height="16">
+                                                <Path x:Name="eye" Stroke="{StaticResource Muted}" StrokeThickness="1.2" StrokeLineJoin="Round"
+                                                      Data="M1.5,8 C3.5,4.2 12.5,4.2 14.5,8 C12.5,11.8 3.5,11.8 1.5,8 z M8,6.1 A1.9,1.9 0 1 1 7.99,6.1 z" />
+                                                <Path x:Name="slash" Stroke="{StaticResource Muted}" StrokeThickness="1.2" StrokeStartLineCap="Round" StrokeEndLineCap="Round"
+                                                      Data="M3,13 L13,3" Visibility="Collapsed" />
+                                            </Grid>
+                                        </Border>
+                                        <ControlTemplate.Triggers>
+                                            <Trigger Property="IsMouseOver" Value="True">
+                                                <Setter TargetName="eb" Property="Background" Value="{StaticResource Hover}" />
+                                                <Setter TargetName="eye" Property="Stroke" Value="{StaticResource Text}" />
+                                                <Setter TargetName="slash" Property="Stroke" Value="{StaticResource Text}" />
+                                            </Trigger>
+                                            <Trigger Property="IsChecked" Value="True">
+                                                <Setter TargetName="slash" Property="Visibility" Value="Visible" />
+                                            </Trigger>
+                                        </ControlTemplate.Triggers>
+                                    </ControlTemplate>
+                                </ToggleButton.Template>
+                            </ToggleButton>
+                        </Grid>
                     </Border>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="0.55" /></Trigger>
