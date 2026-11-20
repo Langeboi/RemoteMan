@@ -121,7 +121,7 @@ public sealed partial class UpdateService : ObservableObject
                 var probe = new UpdateManager(new GithubSource(RepositoryUrl, accessToken: null, prerelease: false));
                 // A copy run from the build folder or an unzipped artifact isn't installed and can't self-update.
                 if (!probe.IsInstalled) return null;
-                _installedChannel = probe.Channel;
+                _installedChannel = Velopack.Locators.VelopackLocator.IsCurrentSet ? Velopack.Locators.VelopackLocator.Current.Channel ?? StableChannel : StableChannel;
                 OnPropertyChanged(nameof(UsesTestBuilds));
 
                 var options = new UpdateOptions();
