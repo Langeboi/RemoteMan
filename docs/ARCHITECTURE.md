@@ -114,7 +114,10 @@ usually can't be reached directly.
 Snippets are entries (`EntryKind.Snippet`, `SnippetData`) in the same table as everything else, so they
 sync, export and back up like connections, but they are kept out of the tree. The SSH tab's Snippets
 panel lists them by group and sends one to any set of open SSH tabs; newlines become CR so multi-line
-snippets type line by line. `BuiltInSnippets` is the starter library, added once per data source.
+snippets type line by line. A snippet's group is `Category/Group` (`SnippetData.Category`/`SubGroup`);
+the panel shows one category at a time with collapsible groups, so a big library stays tidy.
+`BuiltInSnippets` is the starter library (Debian, FortiOS 7.6, MikroTik 7.25), added once per data
+source. Its commands were written from vendor documentation, not run against each device.
 
 ## Import, export and backup
 

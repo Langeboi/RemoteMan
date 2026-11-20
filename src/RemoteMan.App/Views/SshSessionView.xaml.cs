@@ -359,12 +359,14 @@ public partial class SshSessionView : UserControl
         _main = Window.GetWindow(this)?.DataContext as MainViewModel;
         if (_main is null) return;
         _snippetView = new ListCollectionView(_main.Snippets);
-        _snippetView.GroupDescriptions.Add(new PropertyGroupDescription(null, new SnippetGroupConverter()));
-        _snippetView.Filter = o => o is Entry en && MatchesFilter(en, SnippetFilter.Text.Trim());
+        _snippetView.GroupDescriptions.Add(new PropertyGroupDescription(null, new SnippetGroupConverter(
+            () => SnippetFilter.Text.Trim().Length > 0 || CategoryBox.SelectedItem is null or AllCategories)));
+        _snippetView.Filter = o => o is Entry en && InView(en);
         SnippetList.ItemsSource = _snippetView;
         TargetList.ItemsSource = _targets;
         _main.Sessions.CollectionChanged += OnSessionsChanged;
         _main.SnippetsChanged += OnSnippetsChanged;
+        RefreshCategories();
         RefreshTargets();
         if (SnippetList.Items.Count > 0) SnippetList.SelectedIndex = 0;
     }
@@ -374,8 +376,63 @@ public partial class SshSessionView : UserControl
     /// <summary>The store rebuilds the list on every change (also other users' edits): keep the selection.</summary>
     private void OnSnippetsChanged(object? sender, EventArgs e)
     {
+        RefreshCategories();
         if (_main is not null && _selectedSnippet is { } id && _main.Snippets.FirstOrDefault(x => x.Id == id) is { } again)
             SnippetList.SelectedItem = again;
+    }
+
+    // ---- categories and collapsible groups ----
+
+    private const string AllCategories = "All snippets";
+    /// <summary>Shared by all SSH tabs for this run: the chosen category and folded groups.</summary>
+    private static string? _category;
+    private static readonly HashSet<string> Folded = new(StringComparer.OrdinalIgnoreCase);
+    private bool _settingCategories;
+
+    /// <summary>
+    /// One category at a time keeps the list short; typing in the filter searches every category.
+    /// </summary>
+    private bool InView(Entry e)
+    {
+        var f = SnippetFilter.Text.Trim();
+        if (f.Length > 0) return MatchesFilter(e, f);
+        var cat = CategoryBox.SelectedItem as string;
+        return cat is null or AllCategories || string.Equals(e.Snippet?.Category, cat, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private void RefreshCategories()
+    {
+        if (_main is null) return;
+        var cats = _main.Snippets.Select(s => s.Snippet?.Category ?? SnippetData.DefaultCategory)
+            .Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(c => c, StringComparer.OrdinalIgnoreCase).Prepend(AllCategories).ToList();
+        var want = _category ?? cats.Skip(1).FirstOrDefault() ?? AllCategories;
+        _settingCategories = true;
+        CategoryBox.ItemsSource = cats;
+        CategoryBox.SelectedItem = cats.FirstOrDefault(c => string.Equals(c, want, StringComparison.OrdinalIgnoreCase)) ?? AllCategories;
+        _settingCategories = false;
+        _snippetView?.Refresh();
+    }
+
+    private void OnCategoryChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (CategoryBox.SelectedItem is not string cat) return;
+        if (!_settingCategories) _category = cat;
+        _snippetView?.Refresh();
+        if (SnippetList.SelectedItem is null && SnippetList.Items.Count > 0) SnippetList.SelectedIndex = 0;
+    }
+
+    private static string GroupKey(Expander x) =>
+        (x.DataContext as CollectionViewGroup)?.Name?.ToString() ?? "";
+
+    private void OnGroupLoaded(object sender, RoutedEventArgs e)
+    {
+        if (sender is Expander x) x.IsExpanded = !Folded.Contains(GroupKey(x));
+    }
+
+    private void OnGroupToggled(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Expander x || !x.IsLoaded) return;
+        if (x.IsExpanded) Folded.Remove(GroupKey(x)); else Folded.Add(GroupKey(x));
     }
 
     private static bool MatchesFilter(Entry e, string f) =>
@@ -553,10 +610,10 @@ internal static class KnownFolders
     private static extern int SHGetKnownFolderPath([System.Runtime.InteropServices.MarshalAs(System.Runtime.InteropServices.UnmanagedType.LPStruct)] Guid id, uint flags, IntPtr token, out string path);
 }
 
-/// <summary>Groups snippets by their Group, with ungrouped ones under "Other".</summary>
-internal sealed class SnippetGroupConverter : IValueConverter
+/// <summary>Groups snippets by group; with several categories on screen, as "Category · Group".</summary>
+internal sealed class SnippetGroupConverter(Func<bool> showCategory) : IValueConverter
 {
     public object Convert(object value, Type targetType, object parameter, CultureInfo culture) =>
-        value is Entry { Snippet.Group: { Length: > 0 } g } ? g : "Other";
+        value is not Entry { Snippet: { } s } ? "Other" : showCategory() ? $"{s.Category} · {s.SubGroup}" : s.SubGroup;
     public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture) => throw new NotSupportedException();
 }

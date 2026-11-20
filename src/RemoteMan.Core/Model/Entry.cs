@@ -110,6 +110,14 @@ public sealed class SnippetData
     /// <summary>Press Enter after the text (a final newline is added if missing).</summary>
     public bool PressEnter { get; set; } = true;
 
+    public const string DefaultCategory = "My snippets";
+
+    /// <summary>The part of <see cref="Group"/> before the first "/", e.g. "Debian" in "Debian/Network".</summary>
+    [JsonIgnore] public string Category => Group is { Length: > 0 } g ? (g.IndexOf('/') is > 0 and var i ? g[..i] : g).Trim() : DefaultCategory;
+
+    /// <summary>The part after the first "/", e.g. "Network"; "General" when there is none.</summary>
+    [JsonIgnore] public string SubGroup => Group is { } g && g.IndexOf('/') is > 0 and var i && g[(i + 1)..].Trim() is { Length: > 0 } rest ? rest : "General";
+
     public string Expand(string host, string? user, string entryName) =>
         Command.Replace("{host}", host).Replace("{user}", user ?? "").Replace("{name}", entryName);
 }

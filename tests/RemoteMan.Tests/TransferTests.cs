@@ -213,5 +213,12 @@ public class TransferTests
         var s = new SnippetData { Command = "ssh {user}@{host} # {name}" };
         Assert.Equal("ssh root@10.0.0.1 # pve", s.Expand("10.0.0.1", "root", "pve"));
         Assert.Equal(BuiltInSnippets.All.Count, BuiltInSnippets.All.Select(d => d.Group + "|" + d.Name).Distinct().Count());
+        Assert.Equal(["Debian", "FortiOS 7.6", "MikroTik 7.25"], BuiltInSnippets.All.Select(d => new SnippetData { Group = d.Group }.Category).Distinct().ToArray());
+
+        Assert.Equal(("Debian", "Network"), (new SnippetData { Group = "Debian/Network" }.Category, new SnippetData { Group = "Debian/Network" }.SubGroup));
+        Assert.Equal(("Lab 3", "General"), (new SnippetData { Group = "Lab 3" }.Category, new SnippetData { Group = "Lab 3" }.SubGroup));
+        Assert.Equal(SnippetData.DefaultCategory, new SnippetData().Category);
+        // Computed parts are not stored.
+        Assert.DoesNotContain("SubGroup", RemoteMan.Core.Storage.EntryJson.ToPayload(BuiltInSnippets.ToEntry(BuiltInSnippets.All[0])));
     }
 }

@@ -43,9 +43,11 @@ WebView2 runtime ships with Windows 11 and current Windows 10.
 - SSH **jump hosts**: pick another SSH entry to connect through (chains, each hop with its own login and
   fallback hosts). The terminal and the Files panel both go through it.
 - **Snippets** panel in SSH tabs (Ctrl+Shift+S): saved commands sent to this tab or to several open SSH
-  tabs at once, with `{host}`, `{user}` and `{name}` filled in per session. 57 built-in snippets (Linux,
-  packages, network, Docker, Proxmox, Cisco IOS, MikroTik, Windows) are added on first run. Snippets live in
-  the data source, so a team shares them.
+  tabs at once, with `{host}`, `{user}` and `{name}` filled in per session. Snippets are filed as
+  `Category/Group`; the panel shows one category at a time with collapsible groups, and the filter searches
+  them all. 111 built-in snippets for Debian (40), FortiOS 7.6 (34) and MikroTik RouterOS 7.25 (37) are
+  added on first run; ones that need a value (an IP, a port) or reboot are typed without Enter. Snippets
+  live in the data source, so a team shares them.
 - **Import** (File > Import): Devolutions RDM exports (.rdm XML or JSON), .rdp files, PuTTY saved sessions
   (from the registry or a .reg export, with .ppk keys). Preview with tick boxes, duplicates skipped.
 - **Export and backup** (File > Export and backup): password-encrypted `.rmx` files (AES-256-GCM, PBKDF2
