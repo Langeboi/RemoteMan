@@ -20,6 +20,7 @@ public partial class MainWindow : Window
         _vm = new MainViewModel(settings)
         {
             EditDialog = (entry, store, protector) => new EntryEditorWindow(entry, store, protector) { Owner = this }.ShowDialog() == true ? entry : null,
+            Choose = (title, text, buttons) => Views.ChoiceDialog.Show(this, title, text, buttons),
             Confirm = text => MessageBox.Show(this, text, "RemoteMan", MessageBoxButton.YesNo, MessageBoxImage.Question) == MessageBoxResult.Yes,
         };
         DataContext = _vm;

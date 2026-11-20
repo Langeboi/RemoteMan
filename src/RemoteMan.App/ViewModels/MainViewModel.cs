@@ -28,6 +28,8 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
     // --- dialogs supplied by the window ---
     public Func<Entry, EntryStore, ISecretProtector, Entry?>? EditDialog { get; set; }
     public Func<string, bool>? Confirm { get; set; }
+    /// <summary>Shows a question with buttons; returns the index picked, or -1 when closed.</summary>
+    public Func<string, string, string[], int>? Choose { get; set; }
 
     public ObservableCollection<EntryNode> Roots { get; } = new();
     public ObservableCollection<PropertyRow> Properties { get; } = new();
@@ -239,7 +241,7 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
     private async Task ConnectEntryAsync(Entry e)
     {
         var probe = EntryStore.Clone(e);
-        if (probe.Kind == EntryKind.Web && probe.Endpoints.Count == 0 && probe.Web?.Url is { } url)
+        if (probe.Kind == EntryKind.Web && probe.Endpoints.Count == 0 && WebSettings.NormalizeUrl(probe.Web?.Url) is { Length: > 0 } url)
             probe.Endpoints.Add(EndpointResolver.Parse(url) is var ep && ep.Port == 0
                 ? ep with { Port = url.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ? 80 : 443 } : ep);
 
@@ -254,6 +256,36 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
 
         var cred = _store is null || _protector is null ? new RemoteMan.Protocols.ResolvedCredential(null, null, null, null, null) : Secrets.Resolve(e, _store, _protector);
         var endpoint = result.Endpoint!;
+
+        // Chosen external browser missing: offer to install it or use the built-in one, never just fail.
+        if (e.Kind == EntryKind.Web && e.Web is { Browser: BrowserKind.Chrome or BrowserKind.Edge or BrowserKind.Firefox } ws
+            && !RemoteMan.Protocols.Web.ExternalBrowser.IsInstalled(ws.Browser))
+        {
+            var name = RemoteMan.Protocols.Web.BrowserInstaller.DisplayName(ws.Browser);
+            var pick = Choose?.Invoke($"{name} isn't installed",
+                $"{e.Name} is set to open in {name}, which isn't installed on this PC.",
+                [$"Install {name}", "Open in built-in browser", "Cancel"]) ?? 1;
+            if (pick == 0)
+            {
+                Message = $"Installing {name}…";
+                var outcome = await RemoteMan.Protocols.Web.BrowserInstaller.InstallAsync(ws.Browser);
+                if (outcome != RemoteMan.Protocols.Web.BrowserInstaller.Result.Installed)
+                {
+                    Message = outcome == RemoteMan.Protocols.Web.BrowserInstaller.Result.DownloadPageOpened
+                        ? $"Opened the {name} download page. Install it, then connect again."
+                        : $"Couldn't install {name}";
+                    return;
+                }
+                Message = $"{name} installed";
+            }
+            else if (pick == 1)
+            {
+                e = EntryStore.Clone(e);
+                e.Web!.Browser = BrowserKind.Embedded;
+            }
+            else return;
+        }
+
         SessionViewModel? s = e.Kind switch
         {
             EntryKind.Ssh => new SshSessionViewModel(e, endpoint, cred, result.UsedFallback),
@@ -268,7 +300,8 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
             try
             {
                 if (e.Kind == EntryKind.Vnc) RemoteMan.Protocols.Vnc.VncLauncher.Open(endpoint, e.Vnc ?? new VncSettings());
-                else RemoteMan.Protocols.Web.ExternalBrowser.Open(new WebSessionViewModel(e, endpoint, cred, false).Url, e.Web!.Browser, e.Web.IgnoreCertificateErrors);
+                else
+                    RemoteMan.Protocols.Web.ExternalBrowser.Open(new WebSessionViewModel(e, endpoint, cred, false).Url, e.Web!.Browser, e.Web.IgnoreCertificateErrors);
                 Message = $"Opened {e.Name} externally";
             }
             catch (Exception ex) { Message = ex.Message; }

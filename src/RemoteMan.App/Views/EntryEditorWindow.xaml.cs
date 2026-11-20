@@ -152,7 +152,7 @@ public partial class EntryEditorWindow : Window
                 break;
             case EntryKind.Web:
                 _e.Web ??= new();
-                _e.Web.Url = UrlBox.Text.Trim();
+                _e.Web.Url = WebSettings.NormalizeUrl(UrlBox.Text);
                 _e.Web.Browser = (BrowserKind)(WebBrowser.SelectedItem ?? BrowserKind.Embedded);
                 _e.Web.IgnoreCertificateErrors = WebIgnoreCert.IsChecked == true;
                 _e.Web.AutoFill = WebAutoFill.IsChecked == true;
