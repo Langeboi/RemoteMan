@@ -3,6 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="clr-namespace:RemoteMan.App.ViewModels"
         xmlns:views="clr-namespace:RemoteMan.App.Views"
+        xmlns:local="clr-namespace:RemoteMan.App"
         Title="RemoteMan" Width="1440" Height="900" MinWidth="900" MinHeight="520"
         Style="{StaticResource RemoteManWindow}" WindowStartupLocation="CenterScreen">
 
@@ -13,29 +14,28 @@
 
     <Window.Resources>
         <BooleanToVisibilityConverter x:Key="BoolVis" />
+        <local:NullToCollapsedConverter x:Key="NullVis" />
 
         <!-- Session views, chosen by type and kept alive while hidden -->
         <DataTemplate DataType="{x:Type vm:SshSessionViewModel}"><views:SshSessionView /></DataTemplate>
         <DataTemplate DataType="{x:Type vm:RdpSessionViewModel}"><views:RdpSessionView /></DataTemplate>
         <DataTemplate DataType="{x:Type vm:WebSessionViewModel}"><views:WebSessionView /></DataTemplate>
 
-        <!-- Colored initials circle (presence on entries, online users in the title bar) -->
-        <DataTemplate x:Key="Avatar16">
-            <Border Width="16" Height="16" CornerRadius="8" Background="{Binding Color}" Margin="3,0,0,0" ToolTip="{Binding ToolTip}" VerticalAlignment="Center">
-                <TextBlock Text="{Binding Initials}" FontSize="8" FontWeight="SemiBold" Foreground="{StaticResource Bg}" HorizontalAlignment="Center" VerticalAlignment="Center" />
-            </Border>
-        </DataTemplate>
-
         <HierarchicalDataTemplate DataType="{x:Type vm:EntryNode}" ItemsSource="{Binding Children}">
             <DockPanel LastChildFill="True">
-                <ItemsControl DockPanel.Dock="Right" ItemsSource="{Binding People}" ItemTemplate="{StaticResource Avatar16}" Focusable="False">
-                    <ItemsControl.ItemsPanel><ItemsPanelTemplate><StackPanel Orientation="Horizontal" /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
-                </ItemsControl>
                 <Path x:Name="chevron" Width="9" Height="9" Margin="0,0,5,0" Stretch="Uniform" Stroke="{StaticResource Faint}" StrokeThickness="1.6"
                       Data="M0,0 L4,4 L8,0" Visibility="Collapsed" VerticalAlignment="Center" />
                 <Path x:Name="folder" Width="14" Height="12" Margin="0,0,7,0" Stretch="Uniform" Stroke="{StaticResource FolderIcon}" StrokeThickness="1.3"
                       Data="M0,1 H5 L6.5,2.5 H13 V11 H0 Z" Visibility="Collapsed" VerticalAlignment="Center" />
-                <Path x:Name="tag" Style="{StaticResource KindIcon}" Tag="{Binding KindTag}" Margin="0,0,7,0" />
+                <!-- Protocol icon with a tiny presence badge on its corner when someone is on the entry -->
+                <Grid x:Name="tag" Margin="0,0,7,0" VerticalAlignment="Center">
+                    <Path Style="{StaticResource KindIcon}" Tag="{Binding KindTag}" />
+                    <Border Width="9" Height="9" CornerRadius="4.5" Margin="0,0,-3,-3" HorizontalAlignment="Right" VerticalAlignment="Bottom"
+                            Background="{Binding Badge.Color}" BorderBrush="{StaticResource Panel}" BorderThickness="1" ToolTip="{Binding Badge.ToolTip}"
+                            Visibility="{Binding Badge, Converter={StaticResource NullVis}}">
+                        <TextBlock Text="{Binding Badge.Initials}" FontSize="5.5" FontWeight="Bold" Foreground="{StaticResource Bg}" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Border>
+                </Grid>
                 <TextBlock x:Name="name" Text="{Binding Name}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center"
                            Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=TreeViewItem}}" />
             </DockPanel>

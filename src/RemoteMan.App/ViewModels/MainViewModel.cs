@@ -169,6 +169,8 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
             n.People.Clear();
             foreach (var p in _store.PresenceFor(n.Id))
                 n.People.Add(new PresenceChip(p.Initials, $"{p.User} ({p.Machine}) is {p.State.ToString().ToLowerInvariant()}", PresenceChip.ColorFor(p.User)));
+            n.Badge = n.People.Count == 0 ? null
+                : n.People[0] with { Initials = n.People[0].Initials[..1], ToolTip = string.Join("\n", n.People.Select(c => c.ToolTip)) };
         }
         RefreshOnlineUsers();
         var users = _store.Presence.Where(p => p.IsAlive(DateTimeOffset.UtcNow)).Select(p => p.User).Append(_store.User).Distinct().Count();
