@@ -4,7 +4,7 @@
         Title="Edit entry" Width="640" Height="600" MinWidth="520" MinHeight="420"
         Style="{StaticResource RemoteManWindow}" WindowStartupLocation="CenterOwner" ShowInTaskbar="False">
     <Window.Resources>
-        <Style TargetType="TextBlock" x:Key="Label" BasedOn="{StaticResource Muted}">
+        <Style TargetType="TextBlock" x:Key="Label" BasedOn="{StaticResource MutedText}">
             <Setter Property="VerticalAlignment" Value="Center" />
             <Setter Property="Margin" Value="0,3,8,3" />
         </Style>
