@@ -345,16 +345,18 @@
                 <Border Grid.Row="1" Margin="8,8,8,4" Height="30" Background="#1D2125" BorderBrush="{StaticResource InputBorder}" BorderThickness="1" CornerRadius="4"
                         Visibility="{Binding IsNavPanel, Converter={StaticResource BoolVis}}" ToolTip="{Binding DataSourceText}">
                     <DockPanel Margin="9,0">
-                        <Ellipse Width="8" Height="8" Margin="0,0,8,0" VerticalAlignment="Center">
-                            <Ellipse.Style>
-                                <Style TargetType="Ellipse">
-                                    <Setter Property="Fill" Value="{StaticResource Bad}" />
+                        <!-- Database glyph: blue when connected, red when offline -->
+                        <Path Data="M1,3 A6,2.5 0 1 1 13,3 A6,2.5 0 1 1 1,3 Z M1,3 V13 A6,2.5 0 0 0 13,13 V3 M1,8 A6,2.5 0 0 0 13,8"
+                              StrokeThickness="1.3" Margin="0,0,8,0" VerticalAlignment="Center">
+                            <Path.Style>
+                                <Style TargetType="Path">
+                                    <Setter Property="Stroke" Value="{StaticResource Bad}" />
                                     <Style.Triggers>
-                                        <DataTrigger Binding="{Binding DataSourceOk}" Value="True"><Setter Property="Fill" Value="{StaticResource Ok}" /></DataTrigger>
+                                        <DataTrigger Binding="{Binding DataSourceOk}" Value="True"><Setter Property="Stroke" Value="{StaticResource EntryIcon}" /></DataTrigger>
                                     </Style.Triggers>
                                 </Style>
-                            </Ellipse.Style>
-                        </Ellipse>
+                            </Path.Style>
+                        </Path>
                         <TextBlock Text="{Binding DataSourceName}" FontWeight="SemiBold" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
                     </DockPanel>
                 </Border>
