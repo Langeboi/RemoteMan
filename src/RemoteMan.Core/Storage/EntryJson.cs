@@ -23,6 +23,7 @@ public static class EntryJson
         /// <summary>Older versions stored SSO as this flag; still read.</summary>
         public bool? UseWindowsLogin { get; set; }
         public bool? Favorite { get; set; }
+        public string? ZabbixHostId { get; set; }
         public RdpSettings? Rdp { get; set; }
         public SshSettings? Ssh { get; set; }
         public WebSettings? Web { get; set; }
@@ -38,6 +39,7 @@ public static class EntryJson
         CredentialId = e.CredentialId,
         Login = e.Login == LoginSource.None ? null : e.Login,
         Favorite = e.Favorite ? true : null,
+        ZabbixHostId = string.IsNullOrEmpty(e.ZabbixHostId) ? null : e.ZabbixHostId,
         Rdp = e.Rdp, Ssh = e.Ssh, Web = e.Web, Vnc = e.Vnc, Credential = e.Credential,
     }, Options);
 
@@ -53,6 +55,7 @@ public static class EntryJson
         e.Login = p.Login ?? (p.UseWindowsLogin == true ? LoginSource.WindowsLogin
             : p.CredentialId is not null ? LoginSource.Saved : LoginSource.None);
         e.Favorite = p.Favorite == true;
+        e.ZabbixHostId = p.ZabbixHostId;
         e.Rdp = p.Rdp; e.Ssh = p.Ssh; e.Web = p.Web; e.Vnc = p.Vnc; e.Credential = p.Credential;
     }
 }

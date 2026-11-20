@@ -33,6 +33,7 @@ public static class EntryMenu
         ["info"] = G("M12.5,7 A5.5,5.5 0 1 1 1.5,7 A5.5,5.5 0 1 1 12.5,7 Z M7,4 V7 L9,8.5"),
         ["delete"] = G("M2,4 H12 M5,4 V2 H9 V4 M3.5,4 L4.3,12 H9.7 L10.5,4"),
         ["new"] = G("M7,2 V12 M2,7 H12"),
+        ["zabbix"] = G("M1,7 H4 L5.5,3 L8.5,11 L10,7 H13"),
     };
 
     private static Geometry G(string data) { var g = Geometry.Parse(data); g.Freeze(); return g; }
@@ -139,6 +140,15 @@ public static class EntryMenu
             if (e.Kind == EntryKind.Web) open.Items.Add(Item("Default browser", null, () => _ = vm.ConnectWithAsync(node, new(External: true))));
             open.Items.Add(Item("Ping", null, () => vm.Ping(e)));
             menu.Items.Add(open);
+        }
+
+        // --- Zabbix ---
+        if (e.IsConnectable && vm.ZabbixActive)
+        {
+            var z = Item("Zabbix", "zabbix");
+            z.Items.Add(Item("Link to Zabbix host…", null, () => vm.LinkToZabbixCommand.Execute(null)));
+            z.Items.Add(Item("Open in Zabbix", null, () => vm.OpenInZabbixCommand.Execute(null), enabled: vm.ZabbixSnapshot?.HealthFor(e).IsLinked == true));
+            menu.Items.Add(z);
         }
 
         // --- details and delete ---

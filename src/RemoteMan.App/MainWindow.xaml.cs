@@ -21,7 +21,7 @@ public partial class MainWindow : Window
         {
             EditDialog = (entry, store, protector) =>
             {
-                var w = new EntryEditorWindow(entry, store, protector) { Owner = this };
+                var w = new EntryEditorWindow(entry, store, protector) { Owner = this, Zabbix = _vm.ZabbixSnapshot };
                 if (w.ShowDialog() != true) return null;
                 // A login typed in the entry and kept as a reusable credential is saved first.
                 return w.NewCredential is { } cred ? [cred, entry] : [entry];
@@ -30,6 +30,18 @@ public partial class MainWindow : Window
             Choose = (title, text, buttons) => Views.ChoiceDialog.Show(this, title, text, buttons),
             Confirm = text => MessageBox.Show(this, text, "RemoteMan", MessageBoxButton.YesNo, MessageBoxImage.Question) == MessageBoxResult.Yes,
         };
+        _vm.ZabbixLinkDialog = (snap, entry) =>
+        {
+            var dlg = new ZabbixLinkWindow(snap, entry) { Owner = this };
+            return dlg.ShowDialog() == true ? dlg.ChosenHostId ?? "" : null;
+        };
+        _vm.ZabbixImportDialog = (snap, store) =>
+        {
+            var dlg = new ZabbixImportWindow(snap, store, _settings.Zabbix.Url, _vm.ImportParentFolder()) { Owner = this };
+            return dlg.ShowDialog() == true ? dlg.Plan : null;
+        };
+        _vm.ZabbixSettingsDialog = () =>
+            new ZabbixSettingsWindow(_settings, _vm.Store, _vm.Protector) { Owner = this }.ShowDialog() == true;
         DataContext = _vm;
         Loaded += async (_, _) => await _vm.InitializeAsync();
         Closing += async (_, _) => await _vm.DisposeAsync();
@@ -60,6 +72,8 @@ public partial class MainWindow : Window
         menu.Items.Add(new MenuItem { Header = "Close tab", Command = _vm.CloseSessionCommand, CommandParameter = _vm.ActiveSession, InputGestureText = "Ctrl+W" });
         menu.Items.Add(new Separator());
         menu.Items.Add(Click("Data sources…", OnDataSources));
+        menu.Items.Add(Cmd("Zabbix settings…", _vm.ZabbixSettingsCommand));
+        if (_vm.ZabbixActive) menu.Items.Add(Cmd("Import from Zabbix…", _vm.ImportFromZabbixCommand));
         menu.Items.Add(Click("Exit", OnExit));
         menu.IsOpen = true;
     }
@@ -114,6 +128,8 @@ public partial class MainWindow : Window
     }
 
     private void OnQPopupClosed(object? sender, EventArgs e) => QButton.IsChecked = false;
+    private void OnZPopupClosed(object? sender, EventArgs e) => ZButton.IsChecked = false;
+    private void OnZPopupButton(object sender, RoutedEventArgs e) => ZButton.IsChecked = false;
 
     private void OnWindowKeyDown(object sender, KeyEventArgs e)
     {
