@@ -12,6 +12,8 @@ public partial class MainWindow : Window
 {
     private readonly MainViewModel _vm;
     private readonly AppSettings _settings;
+    private readonly AiAssistantViewModel _ai;
+    private AiAssistantWindow? _aiWindow;
 
     public MainWindow(AppSettings settings)
     {
@@ -43,6 +45,13 @@ public partial class MainWindow : Window
         _vm.ZabbixSettingsDialog = () =>
             new ZabbixSettingsWindow(_settings, _vm.Store, _vm.Protector) { Owner = this }.ShowDialog() == true;
         DataContext = _vm;
+
+        _ai = new AiAssistantViewModel(settings, () => _vm.ActiveSession) { StatusMessage = m => _vm.Message = m };
+        AiButton.DataContext = _ai;
+        _vm.PropertyChanged += (_, e) => { if (e.PropertyName == nameof(MainViewModel.ActiveSession)) _ai.RefreshSession(); };
+        LocationChanged += (_, _) => _aiWindow?.Reposition();
+        SizeChanged += (_, _) => _aiWindow?.Reposition();
+        StateChanged += (_, _) => { if (WindowState == WindowState.Minimized) _aiWindow?.HideBox(); else _aiWindow?.Reposition(); };
         Loaded += async (_, _) => await _vm.InitializeAsync();
         Closing += async (_, _) => await _vm.DisposeAsync();
         PreviewKeyDown += OnWindowKeyDown;
@@ -145,7 +154,12 @@ public partial class MainWindow : Window
 
     private void OnWindowKeyDown(object sender, KeyEventArgs e)
     {
-        if (e.Key == Key.K && Keyboard.Modifiers == ModifierKeys.Control)
+        if (e.Key == Key.A && Keyboard.Modifiers == (ModifierKeys.Control | ModifierKeys.Shift))
+        {
+            ToggleAi();
+            e.Handled = true;
+        }
+        else if (e.Key == Key.K && Keyboard.Modifiers == ModifierKeys.Control)
         {
             Search.Focus();
             Search.SelectAll();
@@ -295,6 +309,16 @@ public partial class MainWindow : Window
     private void OnRestore(object sender, RoutedEventArgs e) => new BackupWindow(_vm, section: 2) { Owner = this }.ShowDialog();
 
     private void OnExit(object sender, RoutedEventArgs e) => Close();
+
+    private void OnAiButton(object sender, RoutedEventArgs e) => ToggleAi();
+
+    /// <summary>Opens the chat box under the AI button, or puts it back on standby.</summary>
+    private void ToggleAi()
+    {
+        _aiWindow ??= new AiAssistantWindow(_ai) { Owner = this };
+        if (_aiWindow.IsVisible) _aiWindow.HideBox();
+        else _aiWindow.ShowUnder(AiButton);
+    }
 
     private static TreeViewItem? FindItem(DependencyObject? d)
     {

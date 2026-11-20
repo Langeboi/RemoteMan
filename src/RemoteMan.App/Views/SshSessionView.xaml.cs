@@ -123,7 +123,7 @@ public partial class SshSessionView : UserControl
     {
         if (_vm is null || _ssh is not null) return;
         _ssh = new SshSession();
-        _ssh.Output += s => { lock (_pending) _pending.Append(s); };
+        _ssh.Output += s => { lock (_pending) _pending.Append(s); _vm.Tail.Append(s); };
         _ssh.Info += s => Dispatcher.BeginInvoke(() => Post(new { t = "info", d = s }));
         _ssh.Closed += ex => Dispatcher.BeginInvoke(() =>
         {
@@ -143,6 +143,14 @@ public partial class SshSessionView : UserControl
             _vm.StatusText = $"SSH {_ssh.ConnectedEndpoint ?? _vm.Endpoint}{via}  {_ssh.NegotiatedSummary}";
             var ssh = _ssh;
             _vm.Sender = text => ssh.Send(text);
+            _vm.SendToTerminal = text =>
+            {
+                // Typed, not run: no trailing Enter. Multi-line text goes in a bracketed paste so a
+                // modern shell holds every line until the user presses Enter.
+                text = text.TrimEnd('\r', '\n').Replace("\r\n", "\r").Replace('\n', '\r');
+                _ssh?.Send(text.Contains('\r') ? "\x1b[200~" + text + "\x1b[201~" : text);
+                Post(new { t = "focus" });
+            };
             _flush.Start();
         }
         catch (Exception ex)
@@ -584,6 +592,7 @@ public partial class SshSessionView : UserControl
             _main.Sessions.CollectionChanged -= OnSessionsChanged;
             _main.SnippetsChanged -= OnSnippetsChanged;
         }
+        if (_vm is not null) _vm.SendToTerminal = null;
         _transferCts?.Cancel();
         _flush.Stop();
         _sftp?.Dispose();

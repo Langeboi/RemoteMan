@@ -2,6 +2,7 @@ using System.IO;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using RemoteMan.Core.Integrations.Zabbix;
+using RemoteMan.Core.Ai;
 using RemoteMan.Core.Storage;
 
 namespace RemoteMan.App.Services;
@@ -12,6 +13,7 @@ public static class AppPaths
     public static string Settings => Path.Combine(Root, "settings.json");
     public static string LocalDb => Path.Combine(Root, "local.db");
     public static string KnownHosts => Path.Combine(Root, "known_hosts.json");
+    public static string AiWebData => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "RemoteMan", "AiWeb");
     public static string WebViewData => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "RemoteMan", "WebView2");
 }
 
@@ -33,6 +35,9 @@ public sealed class AppSettings
     public bool SplitView { get; set; } = true;
 
     public ZabbixConfig Zabbix { get; set; } = new();
+
+    /// <summary>AI assistant providers (keys are not stored here; see <see cref="Secrets"/>).</summary>
+    public AiSettings Ai { get; set; } = new();
 
     public DataSourceConfig Active =>
         DataSources.FirstOrDefault(d => d.Name == ActiveDataSource) ?? DataSources[0];

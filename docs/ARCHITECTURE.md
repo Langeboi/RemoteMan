@@ -131,6 +131,24 @@ gzip-compressed bundle encrypted with AES-256-GCM, key from PBKDF2-SHA256 (600,0
 are plain text (the file is the encryption boundary), so a file opens into any data source. Automatic
 backups write `RemoteMan <source> <date>.rmx` daily to `%APPDATA%\RemoteMan\backups` (or a chosen
 folder), keep the newest N, and remember their password under DPAPI.
+## AI assistant
+
+- `RemoteMan.Core/Ai`: one `IAiChatClient` per provider family, all streaming. Claude goes through the
+  official Anthropic SDK (with server-side refusal fallback on); OpenAI, Mistral, Ollama and custom
+  endpoints share a Chat Completions client; Gemini uses `streamGenerateContent`. Connecting lists the
+  account's models first, which proves the key before anything is saved.
+- Keys are DPAPI-encrypted per Windows user in `%APPDATA%\RemoteMan\ai-<provider>.key`. They are never
+  written to a data source, so on a shared database every user brings their own key.
+- Session context: SSH tabs keep a plain-text tail of the terminal (`TerminalTail`, escape codes
+  stripped). When the context toggle is on, the last 50 lines go in front of the user's message, wrapped
+  as untrusted data; the system prompt stays constant so providers can cache it. Nothing is sent until
+  the user presses Send.
+- Paste to terminal types the command without Enter; multi-line text is sent as a bracketed paste.
+- The chat box is a small owned window, not an overlay, because WPF cannot draw over the RDP control or
+  WebView2. It is not a layered window, so the account sign-in WebView2 renders inside it. Windows 11
+  rounds its corners when the provider's theme is rounded.
+- Account sign-in uses a separate WebView2 profile (`%LOCALAPPDATA%\RemoteMan\AiWeb`); signing out
+  deletes that provider's cookies.
 
 ## Known gaps / next steps
 

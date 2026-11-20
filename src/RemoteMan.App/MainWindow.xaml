@@ -226,6 +226,18 @@
                 </ItemsControl>
 
                 <StackPanel Grid.Column="4" Orientation="Horizontal">
+                    <!-- AI assistant: provider name + green dot once signed in (on standby); opens the chat box -->
+                    <Button x:Name="AiButton" Height="24" Margin="0,0,10,0" Padding="8,0" Background="Transparent" VerticalAlignment="Center"
+                            BorderBrush="{StaticResource InputBorder}" Click="OnAiButton" WindowChrome.IsHitTestVisibleInChrome="True"
+                            ToolTip="AI assistant (Ctrl+Shift+A)" AutomationProperties.Name="AI assistant">
+                        <StackPanel Orientation="Horizontal">
+                            <Path Width="12" Height="12" Stretch="Uniform" Stroke="{StaticResource Muted}" StrokeThickness="1.3" Margin="0,0,6,0"
+                                  Data="M12,3 L13.8,8.2 L19,10 L13.8,11.8 L12,17 L10.2,11.8 L5,10 L10.2,8.2 Z" />
+                            <TextBlock Text="{Binding ButtonLabel}" VerticalAlignment="Center" />
+                            <Rectangle Width="6" Height="6" Fill="{StaticResource Ok}" Margin="6,0,0,0" ToolTip="On standby"
+                                       Visibility="{Binding IsConnected, Converter={StaticResource BoolVis}}" />
+                        </StackPanel>
+                    </Button>
                     <Button Style="{StaticResource CaptionButton}" ToolTip="Minimize" AutomationProperties.Name="Minimize" Click="OnMinimize">
                         <Path Data="M0,0 H10" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" StrokeThickness="1" />
                     </Button>

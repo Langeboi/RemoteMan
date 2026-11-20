@@ -1,4 +1,5 @@
 using CommunityToolkit.Mvvm.ComponentModel;
+using RemoteMan.Core.Ai;
 using RemoteMan.Core.Model;
 using RemoteMan.Protocols;
 
@@ -61,6 +62,11 @@ public sealed class SshSessionViewModel(Entry e, HostEndpoint ep, ResolvedCreden
         send(text);
         return true;
     }
+    /// <summary>Recent terminal output as plain text, for the AI assistant's session context.</summary>
+    public TerminalTail Tail { get; } = new();
+
+    /// <summary>Types text into the shell (set by the view once connected). Nothing is sent with Enter.</summary>
+    public Action<string>? SendToTerminal { get; set; }
 }
 
 public sealed class RdpSessionViewModel(Entry e, HostEndpoint ep, ResolvedCredential c, bool fb) : SessionViewModel(e, ep, c, fb)
