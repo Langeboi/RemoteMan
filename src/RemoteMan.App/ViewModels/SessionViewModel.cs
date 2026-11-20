@@ -38,6 +38,24 @@ public abstract partial class SessionViewModel : ObservableObject, IDisposable
 public sealed class SshSessionViewModel(Entry e, HostEndpoint ep, ResolvedCredential c, bool fb) : SessionViewModel(e, ep, c, fb)
 {
     public SshSettings Settings => Entry.Ssh ?? new SshSettings();
+
+    /// <summary>Hosts to try in order. Without a jump host this is just the probed <see cref="SessionViewModel.Endpoint"/>.</summary>
+    public IReadOnlyList<HostEndpoint>? Endpoints { get; init; }
+
+    /// <summary>Jump hosts, outermost first (empty = direct).</summary>
+    public IReadOnlyList<RemoteMan.Protocols.Ssh.SshHop> Jumps { get; init; } = [];
+
+    /// <summary>Set by the view once the shell is up; snippets use it to type into this session.</summary>
+    internal Action<string>? Sender { get; set; }
+
+    public bool IsConnected => Sender is not null;
+
+    public bool Send(string text)
+    {
+        if (Sender is not { } send) return false;
+        send(text);
+        return true;
+    }
 }
 
 public sealed class RdpSessionViewModel(Entry e, HostEndpoint ep, ResolvedCredential c, bool fb) : SessionViewModel(e, ep, c, fb)

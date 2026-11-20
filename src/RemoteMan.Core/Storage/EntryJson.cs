@@ -28,6 +28,7 @@ public static class EntryJson
         public WebSettings? Web { get; set; }
         public VncSettings? Vnc { get; set; }
         public CredentialData? Credential { get; set; }
+        public SnippetData? Snippet { get; set; }
     }
 
     public static string ToPayload(Entry e) => JsonSerializer.Serialize(new Payload
@@ -38,7 +39,7 @@ public static class EntryJson
         CredentialId = e.CredentialId,
         Login = e.Login == LoginSource.None ? null : e.Login,
         Favorite = e.Favorite ? true : null,
-        Rdp = e.Rdp, Ssh = e.Ssh, Web = e.Web, Vnc = e.Vnc, Credential = e.Credential,
+        Rdp = e.Rdp, Ssh = e.Ssh, Web = e.Web, Vnc = e.Vnc, Credential = e.Credential, Snippet = e.Snippet,
     }, Options);
 
     public static void ApplyPayload(Entry e, string? json)
@@ -53,6 +54,6 @@ public static class EntryJson
         e.Login = p.Login ?? (p.UseWindowsLogin == true ? LoginSource.WindowsLogin
             : p.CredentialId is not null ? LoginSource.Saved : LoginSource.None);
         e.Favorite = p.Favorite == true;
-        e.Rdp = p.Rdp; e.Ssh = p.Ssh; e.Web = p.Web; e.Vnc = p.Vnc; e.Credential = p.Credential;
+        e.Rdp = p.Rdp; e.Ssh = p.Ssh; e.Web = p.Web; e.Vnc = p.Vnc; e.Credential = p.Credential; e.Snippet = p.Snippet;
     }
 }

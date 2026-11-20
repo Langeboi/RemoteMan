@@ -1,12 +1,19 @@
+using System.Collections.ObjectModel;
+using System.ComponentModel;
 using System.Diagnostics;
+using System.Globalization;
 using System.IO;
 using System.Text;
 using System.Text.Json;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Data;
 using System.Windows.Input;
 using System.Windows.Threading;
+using CommunityToolkit.Mvvm.ComponentModel;
 using Microsoft.Web.WebView2.Core;
+using RemoteMan.Core.Model;
+using RemoteMan.Core.Storage;
 using RemoteMan.App.Services;
 using RemoteMan.App.ViewModels;
 using RemoteMan.Protocols.Ssh;
@@ -41,6 +48,12 @@ public partial class SshSessionView : UserControl
             if (e.Key == Key.F && Keyboard.Modifiers == (ModifierKeys.Control | ModifierKeys.Shift))
             {
                 FilesToggle.IsChecked = FilesToggle.IsChecked != true;
+                e.Handled = true;
+            }
+            else if (e.Key == Key.S && Keyboard.Modifiers == (ModifierKeys.Control | ModifierKeys.Shift))
+            {
+                SnippetsToggle.IsChecked = SnippetsToggle.IsChecked != true;
+                if (SnippetsToggle.IsChecked == true) SnippetFilter.Focus();
                 e.Handled = true;
             }
         };
@@ -116,15 +129,20 @@ public partial class SshSessionView : UserControl
         {
             Post(new { t = "info", d = ex is null ? "\r\n[session closed]" : $"\r\n[disconnected: {ex.Message}]" });
             _vm.StatusText = "SSH disconnected";
+            _vm.Sender = null;
         });
 
         var fb = _vm.UsedFallback ? " (fallback)" : "";
-        Post(new { t = "info", d = $"Connecting to {_vm.Endpoint}{fb}…" });
+        var targets = _vm.Endpoints ?? [_vm.Endpoint];
+        Post(new { t = "info", d = $"Connecting to {targets[0]}{fb}…" });
         try
         {
-            await _ssh.ConnectAsync(_vm.Endpoint, _vm.Credential, _vm.Settings, KnownHosts, cols, rows);
+            await _ssh.ConnectAsync(targets, _vm.Jumps, _vm.Credential, _vm.Settings, KnownHosts, cols, rows);
             Post(new { t = "info", d = _ssh.NegotiatedSummary ?? "" });
-            _vm.StatusText = $"SSH {_vm.Endpoint}  {_ssh.NegotiatedSummary}";
+            var via = _vm.Jumps.Count > 0 ? $" via {string.Join(" → ", _vm.Jumps.Select(j => j.Name))}" : "";
+            _vm.StatusText = $"SSH {_ssh.ConnectedEndpoint ?? _vm.Endpoint}{via}  {_ssh.NegotiatedSummary}";
+            var ssh = _ssh;
+            _vm.Sender = text => ssh.Send(text);
             _flush.Start();
         }
         catch (Exception ex)
@@ -156,10 +174,17 @@ public partial class SshSessionView : UserControl
     private async void OnFilesToggled(object sender, RoutedEventArgs e)
     {
         var open = FilesToggle.IsChecked == true;
+        if (open) SnippetsToggle.IsChecked = false; // one side panel at a time
         FilesPanel.Visibility = open ? Visibility.Visible : Visibility.Collapsed;
-        FilesCol.Width = open ? new GridLength(300) : new GridLength(0);
-        SplitCol.Width = open ? new GridLength(1) : new GridLength(0);
+        LayoutSidePanel();
         if (open) await EnsureSftpAsync();
+    }
+
+    private void LayoutSidePanel()
+    {
+        var open = FilesToggle.IsChecked == true || SnippetsToggle.IsChecked == true;
+        FilesCol.Width = open ? new GridLength(FilesToggle.IsChecked == true ? 300 : 290) : new GridLength(0);
+        SplitCol.Width = open ? new GridLength(1) : new GridLength(0);
     }
 
     private async Task<bool> EnsureSftpAsync()
@@ -305,8 +330,260 @@ public partial class SshSessionView : UserControl
         finally { TransferBar.Visibility = Visibility.Collapsed; }
     }
 
+    // ---------------- Snippets panel ----------------
+
+    private MainViewModel? _main;
+    private ICollectionView? _snippetView;
+    private readonly ObservableCollection<SendTarget> _targets = new();
+
+    /// <summary>An open SSH tab in the "Send to" row.</summary>
+    public sealed partial class SendTarget(SshSessionViewModel session) : ObservableObject
+    {
+        public SshSessionViewModel Session { get; } = session;
+        public string Title => Session.Title;
+        [ObservableProperty] private bool _isChecked;
+    }
+
+    private void OnSnippetsToggled(object sender, RoutedEventArgs e)
+    {
+        var open = SnippetsToggle.IsChecked == true;
+        if (open) FilesToggle.IsChecked = false;
+        SnippetsPanel.Visibility = open ? Visibility.Visible : Visibility.Collapsed;
+        LayoutSidePanel();
+        if (open) EnsureSnippets();
+    }
+
+    private void EnsureSnippets()
+    {
+        if (_main is not null) { RefreshTargets(); return; }
+        _main = Window.GetWindow(this)?.DataContext as MainViewModel;
+        if (_main is null) return;
+        _snippetView = new ListCollectionView(_main.Snippets);
+        _snippetView.GroupDescriptions.Add(new PropertyGroupDescription(null, new SnippetGroupConverter(
+            () => SnippetFilter.Text.Trim().Length > 0 || CategoryBox.SelectedItem is null or AllCategories)));
+        _snippetView.Filter = o => o is Entry en && InView(en);
+        SnippetList.ItemsSource = _snippetView;
+        TargetList.ItemsSource = _targets;
+        _main.Sessions.CollectionChanged += OnSessionsChanged;
+        _main.SnippetsChanged += OnSnippetsChanged;
+        RefreshCategories();
+        RefreshTargets();
+        if (SnippetList.Items.Count > 0) SnippetList.SelectedIndex = 0;
+    }
+
+    private void OnSessionsChanged(object? sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e) => RefreshTargets();
+
+    /// <summary>The store rebuilds the list on every change (also other users' edits): keep the selection.</summary>
+    private void OnSnippetsChanged(object? sender, EventArgs e)
+    {
+        RefreshCategories();
+        if (_main is not null && _selectedSnippet is { } id && _main.Snippets.FirstOrDefault(x => x.Id == id) is { } again)
+            SnippetList.SelectedItem = again;
+    }
+
+    // ---- categories and collapsible groups ----
+
+    private const string AllCategories = "All snippets";
+    /// <summary>Shared by all SSH tabs for this run: the chosen category and folded groups.</summary>
+    private static string? _category;
+    private static readonly HashSet<string> Folded = new(StringComparer.OrdinalIgnoreCase);
+    private bool _settingCategories;
+
+    /// <summary>
+    /// One category at a time keeps the list short; typing in the filter searches every category.
+    /// </summary>
+    private bool InView(Entry e)
+    {
+        var f = SnippetFilter.Text.Trim();
+        if (f.Length > 0) return MatchesFilter(e, f);
+        var cat = CategoryBox.SelectedItem as string;
+        return cat is null or AllCategories || string.Equals(e.Snippet?.Category, cat, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private void RefreshCategories()
+    {
+        if (_main is null) return;
+        var cats = _main.Snippets.Select(s => s.Snippet?.Category ?? SnippetData.DefaultCategory)
+            .Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(c => c, StringComparer.OrdinalIgnoreCase).Prepend(AllCategories).ToList();
+        var want = _category ?? cats.Skip(1).FirstOrDefault() ?? AllCategories;
+        _settingCategories = true;
+        CategoryBox.ItemsSource = cats;
+        CategoryBox.SelectedItem = cats.FirstOrDefault(c => string.Equals(c, want, StringComparison.OrdinalIgnoreCase)) ?? AllCategories;
+        _settingCategories = false;
+        _snippetView?.Refresh();
+    }
+
+    private void OnCategoryChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (CategoryBox.SelectedItem is not string cat) return;
+        if (!_settingCategories) _category = cat;
+        _snippetView?.Refresh();
+        if (SnippetList.SelectedItem is null && SnippetList.Items.Count > 0) SnippetList.SelectedIndex = 0;
+    }
+
+    private static string GroupKey(Expander x) =>
+        (x.DataContext as CollectionViewGroup)?.Name?.ToString() ?? "";
+
+    private void OnGroupLoaded(object sender, RoutedEventArgs e)
+    {
+        if (sender is Expander x) x.IsExpanded = !Folded.Contains(GroupKey(x));
+    }
+
+    private void OnGroupToggled(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Expander x || !x.IsLoaded) return;
+        if (x.IsExpanded) Folded.Remove(GroupKey(x)); else Folded.Add(GroupKey(x));
+    }
+
+    private static bool MatchesFilter(Entry e, string f) =>
+        f.Length == 0 || e.Name.Contains(f, StringComparison.OrdinalIgnoreCase) ||
+        (e.Snippet?.Command.Contains(f, StringComparison.OrdinalIgnoreCase) ?? false) ||
+        (e.Snippet?.Group?.Contains(f, StringComparison.OrdinalIgnoreCase) ?? false);
+
+    /// <summary>Keeps the "Send to" row in step with the open SSH tabs; this tab is ticked by default.</summary>
+    private void RefreshTargets()
+    {
+        if (_main is null || _vm is null) return;
+        var open = _main.SshSessions.ToList();
+        foreach (var t in _targets.Where(t => !open.Contains(t.Session)).ToList()) _targets.Remove(t);
+        foreach (var s in open.Where(s => _targets.All(t => t.Session != s)))
+        {
+            var t = new SendTarget(s) { IsChecked = s == _vm };
+            t.PropertyChanged += (_, _) => UpdateSendLabel();
+            _targets.Add(t);
+        }
+        UpdateSendLabel();
+    }
+
+    private void UpdateSendLabel()
+    {
+        var n = _targets.Count(t => t.IsChecked);
+        SendButton.Content = SnippetList.SelectedItem is not Entry sel ? "Send"
+            : n == 0 ? "Tick a session"
+            : $"Send \"{sel.Name}\" to {n} session{(n == 1 ? "" : "s")}";
+    }
+
+    private Guid? _selectedSnippet;
+
+    private void OnSnippetSelected(object sender, SelectionChangedEventArgs e)
+    {
+        if (SnippetList.SelectedItem is Entry sel) _selectedSnippet = sel.Id;
+        UpdateSendLabel();
+    }
+
+    private void OnSnippetFilterChanged(object sender, TextChangedEventArgs e)
+    {
+        _snippetView?.Refresh();
+        if (SnippetList.SelectedItem is null && SnippetList.Items.Count > 0) SnippetList.SelectedIndex = 0;
+    }
+
+    private void OnSnippetFilterKey(object sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Down) { SnippetList.Focus(); e.Handled = true; }
+        else if (e.Key == Key.Enter) { SendSelected(onlyHere: Keyboard.Modifiers != ModifierKeys.Control); e.Handled = true; }
+        else if (e.Key == Key.Escape) { SnippetFilter.Text = ""; e.Handled = true; }
+    }
+
+    private void OnSnippetKey(object sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Enter) { SendSelected(onlyHere: Keyboard.Modifiers != ModifierKeys.Control); e.Handled = true; }
+        else if (e.Key == Key.Delete) OnDeleteSnippet(sender, e);
+        else if (e.Key == Key.F2) OnEditSnippet(sender, e);
+    }
+
+    private void OnSnippetDoubleClick(object sender, MouseButtonEventArgs e) => SendSelected(onlyHere: true);
+    private void OnSendHere(object sender, RoutedEventArgs e) => SendSelected(onlyHere: true);
+    private void OnSendSnippet(object sender, RoutedEventArgs e) => SendSelected(onlyHere: false);
+
+    private void SendSelected(bool onlyHere)
+    {
+        if (_main is null || _vm is null || SnippetList.SelectedItem is not Entry sel || sel.Snippet is null) return;
+        List<SshSessionViewModel> targets = onlyHere ? [_vm] : _targets.Where(t => t.IsChecked).Select(t => t.Session).ToList();
+        if (targets.Count == 0) { SnippetStatus.Text = "Tick at least one session under Send to."; return; }
+        // Typed only, unless the snippet is set to run or "Also press Enter" is ticked for this send.
+        var toSend = sel;
+        if (PressEnterBox.IsChecked == true && !sel.Snippet.PressEnter)
+        {
+            toSend = EntryStore.Clone(sel);
+            toSend.Snippet!.PressEnter = true;
+        }
+        var sent = _main.SendSnippet(toSend, targets);
+        var missed = targets.Count - sent;
+        SnippetStatus.Text = $"Sent \"{sel.Name}\" to {string.Join(", ", targets.Where(t => t.IsConnected).Select(t => t.Title))}"
+            + (missed > 0 ? $" ({missed} not connected)" : "");
+        if (onlyHere) Post(new { t = "focus" });
+    }
+
+    private async void OnNewSnippet(object sender, RoutedEventArgs e)
+    {
+        EnsureSnippets();
+        var group = (SnippetList.SelectedItem as Entry)?.Snippet?.Group;
+        await EditSnippetAsync(new Entry { Kind = EntryKind.Snippet, Snippet = new SnippetData { Group = group } });
+    }
+
+    private async void OnEditSnippet(object sender, RoutedEventArgs e)
+    {
+        if (SnippetList.SelectedItem is Entry sel) await EditSnippetAsync(EntryStore.Clone(sel));
+    }
+
+    private async void OnDuplicateSnippet(object sender, RoutedEventArgs e)
+    {
+        if (SnippetList.SelectedItem is not Entry sel) return;
+        var copy = EntryStore.Clone(sel);
+        copy.Id = Guid.NewGuid();
+        copy.Revision = 0;
+        copy.Name += " (copy)";
+        await EditSnippetAsync(copy);
+    }
+
+    private async Task EditSnippetAsync(Entry snippet)
+    {
+        if (_main is null) return;
+        var groups = _main.Snippets.Select(s => s.Snippet?.Group).OfType<string>().Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(g => g).ToList();
+        var dlg = new SnippetEditorWindow(snippet, groups) { Owner = Window.GetWindow(this) };
+        if (dlg.ShowDialog() != true) return;
+        if (dlg.DeleteRequested) { await _main.DeleteSnippetAsync(snippet); return; }
+        if (await _main.SaveSnippetAsync(snippet))
+            SnippetList.SelectedItem = _main.Snippets.FirstOrDefault(s => s.Id == snippet.Id);
+    }
+
+    private async void OnDeleteSnippet(object sender, RoutedEventArgs e)
+    {
+        if (_main is null || SnippetList.SelectedItem is not Entry sel) return;
+        if (MessageBox.Show(Window.GetWindow(this), $"Delete snippet \"{sel.Name}\"?", "RemoteMan", MessageBoxButton.YesNo) == MessageBoxResult.Yes)
+            await _main.DeleteSnippetAsync(sel);
+    }
+
+    private void OnSnippetMore(object sender, RoutedEventArgs e)
+    {
+        EnsureSnippets();
+        var menu = new ContextMenu { PlacementTarget = (UIElement)sender };
+        var builtIn = new MenuItem { Header = "Add missing built-in snippets" };
+        builtIn.Click += async (_, _) =>
+        {
+            if (_main is null) return;
+            var n = await _main.AddBuiltInSnippetsAsync();
+            SnippetStatus.Text = n == 0 ? "All built-in snippets are already there." : $"Added {n} built-in snippet{(n == 1 ? "" : "s")}.";
+        };
+        var all = new MenuItem { Header = "Tick all sessions" };
+        all.Click += (_, _) => { foreach (var t in _targets) t.IsChecked = true; UpdateSendLabel(); };
+        var none = new MenuItem { Header = "Only this session" };
+        none.Click += (_, _) => { foreach (var t in _targets) t.IsChecked = t.Session == _vm; UpdateSendLabel(); };
+        menu.Items.Add(builtIn);
+        menu.Items.Add(new Separator());
+        menu.Items.Add(all);
+        menu.Items.Add(none);
+        menu.IsOpen = true;
+    }
+
     private void Close()
     {
+        if (_vm is not null) _vm.Sender = null;
+        if (_main is not null)
+        {
+            _main.Sessions.CollectionChanged -= OnSessionsChanged;
+            _main.SnippetsChanged -= OnSnippetsChanged;
+        }
         _transferCts?.Cancel();
         _flush.Stop();
         _sftp?.Dispose();
@@ -330,4 +607,12 @@ internal static class KnownFolders
 
     [System.Runtime.InteropServices.DllImport("shell32.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode)]
     private static extern int SHGetKnownFolderPath([System.Runtime.InteropServices.MarshalAs(System.Runtime.InteropServices.UnmanagedType.LPStruct)] Guid id, uint flags, IntPtr token, out string path);
+}
+
+/// <summary>Groups snippets by group; with several categories on screen, as "Category · Group".</summary>
+internal sealed class SnippetGroupConverter(Func<bool> showCategory) : IValueConverter
+{
+    public object Convert(object value, Type targetType, object parameter, CultureInfo culture) =>
+        value is not Entry { Snippet: { } s } ? "Other" : showCategory() ? $"{s.Category} · {s.SubGroup}" : s.SubGroup;
+    public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture) => throw new NotSupportedException();
 }

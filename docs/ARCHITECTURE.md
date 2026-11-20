@@ -99,10 +99,44 @@ WebView2 answers `ServerCertificateErrorDetected` with *AlwaysAllow*, Chrome/Edg
 recording them in `%APPDATA%\RemoteMan\known_hosts.json` (a changed key is shown as a warning). Each of
 these can be turned off per entry.
 
+## SSH jump hosts
+
+An SSH entry can name another SSH entry as its jump host (`SshSettings.JumpHostId`), which can have its
+own, and so on (loops are refused). `SshSession` connects the first hop directly (probed like any entry),
+then for each next hop opens a `ForwardedPortLocal` on a free loopback port of the previous hop
+(direct-tcpip, like OpenSSH ProxyJump) and connects through it, trying that hop's hosts in order. Host keys
+are checked against the real host name, not the loopback forward. SFTP reuses the final connection info,
+so it rides the same tunnel. The target isn't TCP-probed from this PC, because behind a jump host it
+usually can't be reached directly.
+
+## Snippets
+
+Snippets are entries (`EntryKind.Snippet`, `SnippetData`) in the same table as everything else, so they
+sync, export and back up like connections, but they are kept out of the tree. The SSH tab's Snippets
+panel lists them by group and sends one to any set of open SSH tabs; newlines become CR so multi-line
+snippets type line by line. A snippet's group is `Category/Group` (`SnippetData.Category`/`SubGroup`);
+the panel shows one category at a time with collapsible groups, so a big library stays tidy.
+`BuiltInSnippets` is the starter library (Debian, FortiOS 7.6, MikroTik 7.25), added once per data
+source. Its commands were written from vendor documentation, not run against each device.
+
+## Import, export and backup
+
+Importers (`Core/Import`) turn RDM, .rdp and PuTTY data into `ImportItem`s (an entry plus plain-text
+secrets). `ImportPlanner` turns items into entries to save: new ids with links (credential, jump host)
+remapped, parents first, same-named folders reused, duplicates skipped, secrets encrypted with the
+target data source's protector. Restore in merge mode keeps ids instead.
+
+`.rmx` (`ExportFile`): a JSON envelope `{format, version, kdf, iterations, salt, nonce, data}` around a
+gzip-compressed bundle encrypted with AES-256-GCM, key from PBKDF2-SHA256 (600,000 rounds). Secrets inside
+are plain text (the file is the encryption boundary), so a file opens into any data source. Automatic
+backups write `RemoteMan <source> <date>.rmx` daily to `%APPDATA%\RemoteMan\backups` (or a chosen
+folder), keep the newest N, and remember their password under DPAPI.
+
 ## Known gaps / next steps
 
 - Build and run on Windows to shake out XAML issues (this cut was compile-checked on Linux only).
 - Dark styling for ComboBox and context menus.
-- Drag and drop in the tree; import from RDM (.rdm export) and mRemoteNG.
-- Embedded VNC; SFTP side panel for SSH entries; RDP gateway credentials UI.
+- Drag and drop in the tree; import from mRemoteNG.
+- RDM import was written from the export format, not tested against real RDM files yet.
+- Embedded VNC; RDP gateway credentials UI.
 - SQL Server Query Notifications as an optional push channel.

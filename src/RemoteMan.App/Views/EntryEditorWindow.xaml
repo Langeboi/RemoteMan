@@ -4,7 +4,7 @@
         Title="Edit entry" Width="640" Height="600" MinWidth="520" MinHeight="420"
         Style="{StaticResource RemoteManWindow}" WindowStartupLocation="CenterOwner" ShowInTaskbar="False">
     <Window.Resources>
-        <Style TargetType="TextBlock" x:Key="Label" BasedOn="{StaticResource Muted}">
+        <Style TargetType="TextBlock" x:Key="Label" BasedOn="{StaticResource MutedText}">
             <Setter Property="VerticalAlignment" Value="Center" />
             <Setter Property="Margin" Value="0,3,8,3" />
         </Style>
@@ -66,7 +66,7 @@
                     <TextBlock x:Name="CredLabel" Grid.Row="3" Text="Login" Style="{StaticResource Label}" />
                     <ComboBox x:Name="LoginBox" Grid.Row="3" Grid.Column="1" Margin="0,2" DisplayMemberPath="Name" SelectionChanged="OnLoginChanged" />
                     <ComboBox x:Name="CredBox" Grid.Row="4" Grid.Column="1" Margin="0,2" DisplayMemberPath="Name" />
-                    <TextBlock x:Name="LoginHint" Grid.Row="5" Grid.Column="1" Style="{StaticResource Muted}" FontSize="11" Margin="0,2" TextWrapping="Wrap" />
+                    <TextBlock x:Name="LoginHint" Grid.Row="5" Grid.Column="1" Style="{StaticResource MutedText}" FontSize="11" Margin="0,2" TextWrapping="Wrap" />
                 </Grid>
 
                 <!-- Hosts with fallback order -->
@@ -141,7 +141,7 @@
                             <TextBlock Text="Passphrase" Width="90" Style="{StaticResource Label}" />
                             <PasswordBox x:Name="PassphraseBox" />
                         </DockPanel>
-                        <TextBlock x:Name="CertInfo" Style="{StaticResource Muted}" FontSize="11" Margin="90,2,0,2" TextWrapping="Wrap" />
+                        <TextBlock x:Name="CertInfo" Style="{StaticResource MutedText}" FontSize="11" Margin="90,2,0,2" TextWrapping="Wrap" />
                         <CheckBox x:Name="AskPasswordBox" Content="Ask for the password when connecting instead of storing it" Margin="90,4,0,0" />
                         <DockPanel x:Name="NotesRow" Margin="0,2">
                             <TextBlock Text="Notes" Width="90" Style="{StaticResource Label}" VerticalAlignment="Top" />
@@ -168,6 +168,12 @@
 
                 <GroupBox x:Name="SshGroup" Header="SSH options">
                     <StackPanel>
+                        <DockPanel Margin="0,0,0,4">
+                            <TextBlock Text="Jump host" Width="90" Style="{StaticResource Label}" />
+                            <ComboBox x:Name="JumpBox" DisplayMemberPath="Name" SelectionChanged="OnJumpChanged"
+                                      ToolTip="Connect through another SSH entry (ProxyJump). It logs in with its own credential and fallback hosts." />
+                        </DockPanel>
+                        <TextBlock x:Name="JumpPath" Style="{StaticResource MutedText}" FontFamily="{StaticResource MonoFont}" FontSize="11" Margin="90,0,0,4" TextWrapping="Wrap" />
                         <CheckBox x:Name="SshAutoAccept" Content="Accept host keys automatically (logged)" />
                         <CheckBox x:Name="SshLegacy" Content="Allow legacy algorithms (ssh-rsa, DH group1/14-sha1, CBC, 3DES)" />
                         <CheckBox x:Name="SshCopySelect" Content="Copy text as soon as it is selected" />
@@ -191,7 +197,7 @@
                         <CheckBox x:Name="WebIgnoreCert" Content="Ignore certificate errors" />
                         <CheckBox x:Name="WebAutoFill" Content="Fill in the login form automatically" />
                         <CheckBox x:Name="WebAutoSubmit" Content="Then press the login button" Margin="18,3,0,3" />
-                        <TextBlock Text="Form fields (optional CSS selectors, leave empty to detect automatically)" Style="{StaticResource Muted}" FontSize="11" Margin="0,6,0,2" />
+                        <TextBlock Text="Form fields (optional CSS selectors, leave empty to detect automatically)" Style="{StaticResource MutedText}" FontSize="11" Margin="0,6,0,2" />
                         <DockPanel Margin="0,2">
                             <TextBlock Text="User field" Width="90" Style="{StaticResource Label}" />
                             <TextBox x:Name="WebUserSel" FontFamily="{StaticResource MonoFont}" FontSize="11" ToolTip="e.g. #username or input[name=login]" />

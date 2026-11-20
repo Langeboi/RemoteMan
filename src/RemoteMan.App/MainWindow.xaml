@@ -70,6 +70,10 @@
                     <MenuItem Header="_File">
                         <MenuItem Header="Data sources…" Click="OnDataSources" />
                         <Separator />
+                        <MenuItem Header="_Import…" Click="OnImport" />
+                        <MenuItem Header="_Export and backup…" Click="OnExportBackup" />
+                        <MenuItem Header="_Restore from backup…" Click="OnRestore" />
+                        <Separator />
                         <MenuItem Header="E_xit" Click="OnExit" />
                     </MenuItem>
                     <MenuItem Header="_Edit">
@@ -139,9 +143,9 @@
                         <TextBlock Text="Q" FontSize="9" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center"
                                    Foreground="{Binding BorderBrush, RelativeSource={RelativeSource AncestorType=Border}}" />
                     </Border>
-                    <TextBlock Text="{Binding OnlineText}" Style="{StaticResource Muted}" FontSize="11" />
+                    <TextBlock Text="{Binding OnlineText}" Style="{StaticResource MutedText}" FontSize="11" />
                 </StackPanel>
-                <TextBlock DockPanel.Dock="Right" Text="{Binding ActiveSession.StatusText}" Style="{StaticResource Muted}" FontSize="11" VerticalAlignment="Center" />
+                <TextBlock DockPanel.Dock="Right" Text="{Binding ActiveSession.StatusText}" Style="{StaticResource MutedText}" FontSize="11" VerticalAlignment="Center" />
                 <TextBlock Text="{Binding Message}" Foreground="{StaticResource Presence}" FontSize="11" Margin="14,0" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
             </DockPanel>
         </Border>
@@ -196,7 +200,7 @@
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate>
                                         <DockPanel Margin="0,1">
-                                            <TextBlock Width="58" Text="{Binding Key}" Style="{StaticResource Muted}" />
+                                            <TextBlock Width="58" Text="{Binding Key}" Style="{StaticResource MutedText}" />
                                             <TextBlock x:Name="v" Text="{Binding Value}" TextTrimming="CharacterEllipsis" ToolTip="{Binding Value}" />
                                         </DockPanel>
                                         <DataTemplate.Triggers>

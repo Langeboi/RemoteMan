@@ -10,6 +10,8 @@ public enum EntryKind
     Vnc = 3,
     Web = 4,
     Credential = 10,
+    /// <summary>A saved command for SSH sessions. Not shown in the tree; lives in the Snippets panel.</summary>
+    Snippet = 11,
 }
 
 /// <summary>
@@ -53,6 +55,7 @@ public sealed class Entry
     public WebSettings? Web { get; set; }
     public VncSettings? Vnc { get; set; }
     public CredentialData? Credential { get; set; }
+    public SnippetData? Snippet { get; set; }
 
     // --- sync metadata (owned by the data source) ---
     public DateTimeOffset? CreatedAt { get; set; }
@@ -107,6 +110,35 @@ public sealed class SshSettings
     public bool CopyOnSelect { get; set; } = true;
     /// <summary>Folder downloads go to; empty = the user's Downloads folder.</summary>
     public string? DownloadFolder { get; set; }
+    /// <summary>Another SSH entry to connect through (ProxyJump). That entry may have its own jump host.</summary>
+    public Guid? JumpHostId { get; set; }
+}
+
+public sealed class SnippetData
+{
+    /// <summary>Text sent to the terminal. {host}, {user} and {name} are filled in per session.</summary>
+    public string Command { get; set; } = "";
+    /// <summary>Heading the snippet is listed under in the panel.</summary>
+    public string? Group { get; set; }
+    /// <summary>
+    /// Run it: press Enter after the text. Off by default, so a snippet is only typed and you check it,
+    /// fill in what's missing and press Enter yourself. (In a multi-line snippet the earlier lines still run.)
+    /// </summary>
+    public bool PressEnter { get; set; }
+
+    /// <summary>Ends in a space or "=": the snippet expects a value (an IP, an interface) typed after it.</summary>
+    [JsonIgnore] public bool NeedsValue => Command.EndsWith(' ') || Command.EndsWith('=');
+
+    public const string DefaultCategory = "My snippets";
+
+    /// <summary>The part of <see cref="Group"/> before the first "/", e.g. "Debian" in "Debian/Network".</summary>
+    [JsonIgnore] public string Category => Group is { Length: > 0 } g ? (g.IndexOf('/') is > 0 and var i ? g[..i] : g).Trim() : DefaultCategory;
+
+    /// <summary>The part after the first "/", e.g. "Network"; "General" when there is none.</summary>
+    [JsonIgnore] public string SubGroup => Group is { } g && g.IndexOf('/') is > 0 and var i && g[(i + 1)..].Trim() is { Length: > 0 } rest ? rest : "General";
+
+    public string Expand(string host, string? user, string entryName) =>
+        Command.Replace("{host}", host).Replace("{user}", user ?? "").Replace("{name}", entryName);
 }
 
 public enum BrowserKind { Embedded = 0, Edge = 1, Chrome = 2, Firefox = 3, SystemDefault = 4 }

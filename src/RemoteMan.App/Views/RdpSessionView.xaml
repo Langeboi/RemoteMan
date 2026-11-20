@@ -34,7 +34,7 @@
                             VerticalAlignment="Top" Margin="10,0,0,0" Click="OnCloseNotice" AutomationProperties.Name="Close" />
                     <StackPanel>
                         <TextBlock x:Name="NoticeTitle" FontWeight="SemiBold" TextWrapping="Wrap" />
-                        <TextBlock x:Name="NoticeText" Style="{StaticResource Muted}" TextWrapping="Wrap" Margin="0,4,0,0" />
+                        <TextBlock x:Name="NoticeText" Style="{StaticResource MutedText}" TextWrapping="Wrap" Margin="0,4,0,0" />
                     </StackPanel>
                 </DockPanel>
             </Border>
