@@ -60,19 +60,22 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
             if (source is RedundantDataSource r)
                 r.FailedOver += (_, now) => OnUi(() => { DataSourceText = r.DisplayName; Message = $"Data source failed over to {now.DisplayName}"; });
             _protector = Secrets.For(cfg);
-            var user = _settings.DisplayName ?? Environment.UserName;
-            _store = new EntryStore(source, user, Environment.MachineName);
-            _store.EntriesChanged += (_, _) => OnUi(RebuildTree);
-            _store.PresenceChanged += (_, _) => OnUi(ApplyPresence);
-            source.ConnectionChanged += (_, up) => OnUi(() =>
-            {
-                DataSourceOk = up;
-                DataSourceText = up ? source.DisplayName : $"{source.DisplayName}: not reachable, retrying";
-            });
+            // Local files: your Windows account. Shared databases: the login the server reports (set on open).
+            var user = Environment.UserDomainName is { Length: > 0 } dom && dom != Environment.MachineName
+                ? $"{dom}\\{Environment.UserName}" : Environment.UserName;
             IsSharedSource = cfg.Kind != DataSourceKind.Sqlite;
-            await _store.OpenAsync();
-            DataSourceText = source.DisplayName;
-            DataSourceOk = true;
+            var cache = IsSharedSource ? new OfflineCache(cfg.Name) : null;
+            var store = _store = new EntryStore(source, user, Environment.MachineName, cache);
+            store.EntriesChanged += (_, _) => OnUi(RebuildTree);
+            store.PresenceChanged += (_, _) => OnUi(ApplyPresence);
+            // Lost connection = offline mode: red Q, entries stay usable, edits wait. Back online = green Q, live again.
+            store.OnlineChanged += (_, up) => OnUi(() =>
+            {
+                ShowOnlineState(source, store);
+                Message = up ? "Back online" : "Database unreachable: working offline, retrying every 15 seconds";
+            });
+            await store.OpenAsync();
+            ShowOnlineState(source, store);
             RebuildTree();
         }
         catch (Exception ex)
@@ -81,6 +84,14 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
             DataSourceText = $"{cfg.Name}: {ex.Message}";
             Message = DataSourceText;
         }
+    }
+
+    private void ShowOnlineState(IDataSource source, EntryStore store)
+    {
+        DataSourceOk = store.IsOnline;
+        DataSourceText = store.IsOnline
+            ? $"{source.DisplayName} as {store.User}"
+            : $"{source.DisplayName}: offline, retrying every {store.ReconnectInterval.TotalSeconds:0} s" + (store.LastError is { } err ? $" ({err})" : "");
     }
 
     private static void OnUi(Action a)
@@ -176,7 +187,7 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
         else if (e.IsConnectable)
         {
             var cred = e.CredentialId is { } cid ? _store.Get(cid) : null;
-            Properties.Add(new PropertyRow("Login", cred?.Name ?? "none (Ctrl+click a credential)"));
+            Properties.Add(new PropertyRow("Login", e.UseWindowsLogin ? "Windows (SSO)" : cred?.Name ?? "none (Ctrl+click a credential)"));
             if (cred is not null && _nodes.TryGetValue(cred.Id, out var cn)) cn.IsLinkTarget = true;
         }
         switch (e.Kind)
@@ -195,7 +206,9 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
         }
         var people = _store.PresenceFor(e.Id).Select(p => $"{p.User} ({p.State.ToString().ToLowerInvariant()})").ToList();
         if (people.Count > 0) Properties.Add(new PropertyRow("Users", string.Join(", ", people), "presence"));
-        if (e.UpdatedBy is not null) Properties.Add(new PropertyRow("Changed", $"{e.UpdatedAt.ToLocalTime():g} by {e.UpdatedBy}"));
+        if (e.CreatedBy is not null) Properties.Add(new PropertyRow("Created", $"{e.CreatedAt?.ToLocalTime():g} by {e.CreatedBy}"));
+        if (e.UpdatedBy is not null && e.Revision > 0 && e.UpdatedAt != e.CreatedAt)
+            Properties.Add(new PropertyRow("Modified", $"{e.UpdatedAt.ToLocalTime():g} by {e.UpdatedBy}"));
     }
 
     /// <summary>Ctrl+click on a credential while a connection is selected.</summary>
@@ -326,6 +339,7 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
     private async Task EditAndSaveAsync(Entry e)
     {
         if (_store is null || _protector is null || EditDialog is null) return;
+        if (!_store.IsOnline) { Message = "Offline: entries can be opened but not changed until the database is back"; return; }
         await _store.SetMyPresenceAsync(e.Id, PresenceState.Editing);
         var edited = EditDialog(e, _store, _protector);
         await _store.SetMyPresenceAsync(Selected?.Id, PresenceState.Viewing);
@@ -348,7 +362,8 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
         if (_store is null || Selected is not { } s) return;
         var what = s.IsFolder ? $"folder \"{s.Name}\" and everything in it" : $"\"{s.Name}\"";
         if (Confirm?.Invoke($"Delete {what}?") != true) return;
-        await _store.DeleteAsync(s.Id);
+        try { await _store.DeleteAsync(s.Id); }
+        catch (Exception ex) { Message = ex.Message; }
     }
 
     /// <summary>Copies the entry and opens the editor on the copy; nothing is saved if you cancel.</summary>

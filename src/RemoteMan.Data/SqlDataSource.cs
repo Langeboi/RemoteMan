@@ -76,6 +76,14 @@ public abstract class SqlDataSource : IDataSource
         return cmd;
     }
 
+    /// <summary>Query returning the login name of the current connection; null when the source has no logins.</summary>
+    protected virtual string? CurrentUserSql => null;
+
+    /// <summary>Idempotent upgrades for databases created by older versions. Errors are ignored where flagged.</summary>
+    protected virtual IEnumerable<(string Sql, bool IgnoreErrors)> MigrationStatements => [];
+
+    public string? DatabaseUser { get; private set; }
+
     public virtual async Task InitializeAsync(CancellationToken ct = default)
     {
         await using var c = await OpenAsync(ct);
@@ -84,9 +92,19 @@ public abstract class SqlDataSource : IDataSource
             await using var cmd = Cmd(c, sql);
             await cmd.ExecuteNonQueryAsync(ct);
         }
+        foreach (var (sql, ignore) in MigrationStatements)
+        {
+            try { await using var cmd = Cmd(c, sql); await cmd.ExecuteNonQueryAsync(ct); }
+            catch (DbException) when (ignore) { }
+        }
+        if (CurrentUserSql is { } who)
+        {
+            await using var cmd = Cmd(c, who);
+            DatabaseUser = (await cmd.ExecuteScalarAsync(ct))?.ToString();
+        }
     }
 
-    private const string SelectColumns = "id, parent_id, kind, name, payload, revision, updated_at, updated_by, deleted";
+    private const string SelectColumns = "id, parent_id, kind, name, payload, revision, updated_at, updated_by, deleted, created_at, created_by";
 
     public async Task<IReadOnlyList<Entry>> LoadAllAsync(CancellationToken ct = default)
     {
@@ -118,6 +136,8 @@ public abstract class SqlDataSource : IDataSource
                 UpdatedAt = DateTimeOffset.FromUnixTimeMilliseconds(Convert.ToInt64(r.GetValue(6))),
                 UpdatedBy = r.IsDBNull(7) ? null : r.GetString(7),
                 Deleted = Convert.ToInt32(r.GetValue(8)) != 0,
+                CreatedAt = r.IsDBNull(9) ? null : DateTimeOffset.FromUnixTimeMilliseconds(Convert.ToInt64(r.GetValue(9))),
+                CreatedBy = r.IsDBNull(10) ? null : r.GetString(10),
             };
             EntryJson.ApplyPayload(e, r.IsDBNull(4) ? null : r.GetString(4));
             list.Add(e);
@@ -127,6 +147,8 @@ public abstract class SqlDataSource : IDataSource
 
     public async Task<Entry> SaveAsync(Entry entry, string user, long? expectedRevision = null, CancellationToken ct = default)
     {
+        // On a shared server, the login the server reports is who made the change.
+        user = DatabaseUser ?? user;
         await using var c = await OpenAsync(ct);
         await using var tx = await c.BeginTransactionAsync(IsolationLevel.ReadCommitted, ct);
 
@@ -154,7 +176,7 @@ public abstract class SqlDataSource : IDataSource
             n = await upd.ExecuteNonQueryAsync(ct);
         if (n == 0)
         {
-            await using var ins = Cmd(c, "INSERT INTO remoteman_entries (id, parent_id, kind, name, payload, revision, updated_at, updated_by, deleted) VALUES (@id, @parent, @kind, @name, @payload, @rev, @at, @by, @del)", tx, args);
+            await using var ins = Cmd(c, "INSERT INTO remoteman_entries (id, parent_id, kind, name, payload, revision, updated_at, updated_by, deleted, created_at, created_by) VALUES (@id, @parent, @kind, @name, @payload, @rev, @at, @by, @del, @at, @by)", tx, args);
             await ins.ExecuteNonQueryAsync(ct);
         }
         if (AfterEntryWriteSql is { } notify)
@@ -168,6 +190,7 @@ public abstract class SqlDataSource : IDataSource
         saved.Revision = rev;
         saved.UpdatedAt = DateTimeOffset.FromUnixTimeMilliseconds(now.ToUnixTimeMilliseconds());
         saved.UpdatedBy = user;
+        if (n == 0) { saved.CreatedAt = saved.UpdatedAt; saved.CreatedBy = user; }
         return saved;
     }
 

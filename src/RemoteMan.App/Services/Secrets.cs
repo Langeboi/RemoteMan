@@ -46,6 +46,7 @@ public static class Secrets
     /// <summary>Decrypts the credential linked to an entry (or the entry's own, for credential entries).</summary>
     public static ResolvedCredential Resolve(Entry entry, EntryStore store, ISecretProtector protector)
     {
+        if (entry.UseWindowsLogin) return ResolvedCredential.WindowsLogin();
         var credEntry = entry.Kind == EntryKind.Credential ? entry : entry.CredentialId is { } id ? store.Get(id) : null;
         var c = credEntry?.Credential;
         if (c is null) return new ResolvedCredential(null, null, null, null, null);

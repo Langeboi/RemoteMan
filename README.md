@@ -39,5 +39,12 @@ WebView2 runtime ships with Windows 11 and current Windows 10.
 - VNC through an installed viewer (TigerVNC, TightVNC, RealVNC, UltraVNC).
 - Data sources: local SQLite (default), or shared PostgreSQL, SQL Server or MySQL/MariaDB with
   multi-server failover, live updates and presence (who is viewing, editing or connected).
+- Users are the database login (local files: your Windows account). Every entry records when it was
+  created and last modified, and by whom (shown in the properties pane).
+- Optional single sign-on: a shared database can use your Windows login (SQL Server integrated security,
+  PostgreSQL/MySQL Kerberos), and RDP and web entries can log in as "(my Windows login)".
+- Offline mode: if the database drops, the Q turns red, entries keep working from memory (or from an
+  encrypted local cache at startup), edits wait, and RemoteMan retries every 15 s. When the database is
+  back the Q turns green and everything missed shows up live.
 
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the design.

@@ -44,6 +44,14 @@ schema migration. Indexed columns: `id`, `parent_id`, `kind`, `name`, `revision`
   failure the next becomes active and the tree resyncs. Replication between them is the database's
   job (Postgres streaming replication, SQL Server Always On, MySQL group replication).
 
+- **Identity and history.** On a shared server the user is the database login (`session_user`,
+  `SUSER_SNAME()`, `USER()`), so nobody can claim another name. Each row stores `created_at/by` and
+  `updated_at/by`, written by the server-side login.
+- **Offline mode.** Connection failures never surface as errors. `EntryStore` goes offline (red Q),
+  keeps serving entries from memory or from a DPAPI-encrypted cache (`%APPDATA%\RemoteMan\cache`),
+  refuses edits with a clear message and probes every 15 s. The first successful probe pulls every
+  revision missed meanwhile (a full reload when it started from the cache) and resumes presence.
+
 **Recommendation for teams: PostgreSQL**, because it is the only one of the four that pushes changes
 instead of being polled.
 
@@ -53,6 +61,18 @@ instead of being polled.
 - Shared databases: AES-256-GCM with a key derived (PBKDF2-SHA256, 210k rounds) from a team vault
   passphrase. Each user enters it once; it is cached locally under DPAPI. The database server never
   sees plaintext.
+
+## Single sign-on (optional)
+
+- Database: "Use my Windows login" rewrites the connection string: SQL Server `Integrated Security`,
+  PostgreSQL GSSAPI/SSPI (no password; user defaults to the Windows user), MySQL
+  `authentication_windows_client` / MariaDB GSSAPI.
+- RDP: the entry's credential "(my Windows login)" sends no password and lets CredSSP pass your
+  logged-on credentials. Windows only allows that when the "Allow delegating default credentials"
+  policy lists the server (`TERMSRV/*`); RemoteMan shows a hint when it doesn't.
+- Web: a separate WebView2 profile with `--auth-server-allowlist` set to the entry's hosts answers
+  Kerberos/NTLM challenges, and Entra ID sites sign in with the Windows account. Form auto-fill is off.
+- SSH: not supported (SSH.NET has no GSSAPI); use keys.
 
 ## Connecting
 

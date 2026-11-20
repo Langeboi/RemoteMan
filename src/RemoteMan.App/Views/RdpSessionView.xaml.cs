@@ -52,6 +52,8 @@ public partial class RdpSessionView : UserControl
         try
         {
             vm.StatusText = $"RDP connecting to {vm.Endpoint}…";
+            if (vm.Credential.UseWindowsLogin && !SsoPolicy.AllowsDefaultCredentials(vm.Endpoint.Host))
+                vm.StatusText = SsoPolicy.Hint;
             _rdp.Connect(vm.Endpoint, vm.Credential, vm.Settings);
         }
         catch (Exception ex)

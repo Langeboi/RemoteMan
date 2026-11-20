@@ -20,7 +20,7 @@ public partial class EntryEditorWindow : Window
     private readonly Entry _e;
     private readonly ISecretProtector _protector;
     private readonly ObservableCollection<HostRow> _hosts = new();
-    private sealed record CredChoice(Guid? Id, string Name);
+    private sealed record CredChoice(Guid? Id, string Name, bool Windows = false);
 
     public EntryEditorWindow(Entry entry, EntryStore store, ISecretProtector protector)
     {
@@ -52,9 +52,13 @@ public partial class EntryEditorWindow : Window
         Renumber();
 
         var creds = new List<CredChoice> { new(null, "(none)") };
+        // Single sign-on: RDP (CredSSP default credentials) and web (Kerberos/NTLM, Entra ID).
+        if (kind is EntryKind.Rdp or EntryKind.Web) creds.Add(new(null, "(my Windows login)", true));
         creds.AddRange(store.Entries.Where(x => x.Kind == EntryKind.Credential).OrderBy(x => x.Name).Select(x => new CredChoice(x.Id, x.Name)));
         CredBox.ItemsSource = creds;
-        CredBox.SelectedItem = creds.FirstOrDefault(c => c.Id == entry.CredentialId) ?? creds[0];
+        CredBox.SelectedItem = entry.UseWindowsLogin && kind is EntryKind.Rdp or EntryKind.Web
+            ? creds.First(c => c.Windows)
+            : creds.FirstOrDefault(c => !c.Windows && c.Id == entry.CredentialId) ?? creds[0];
 
         if (entry.Credential is { } c)
         {
@@ -120,7 +124,9 @@ public partial class EntryEditorWindow : Window
         {
             _e.Endpoints = _hosts.Where(h => !string.IsNullOrWhiteSpace(h.Host))
                 .Select(h => new HostEndpoint(h.Host.Trim(), int.TryParse(h.Port, out var p) ? p : 0)).ToList();
-            _e.CredentialId = (CredBox.SelectedItem as CredChoice)?.Id;
+            var choice = CredBox.SelectedItem as CredChoice;
+            _e.UseWindowsLogin = choice?.Windows == true;
+            _e.CredentialId = choice?.Windows == true ? null : choice?.Id;
         }
 
         switch (_e.Kind)

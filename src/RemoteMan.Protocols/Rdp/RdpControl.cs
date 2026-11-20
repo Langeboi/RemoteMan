@@ -48,6 +48,8 @@ public sealed class RdpControl : AxHost
         var adv = ocx.AdvancedSettings9;
         adv.RDPPort = endpoint.Port;
         if (!string.IsNullOrEmpty(cred.Password)) adv.ClearTextPassword = cred.Password;
+        // CredSSP (NLA). With no password set, CredSSP signs in with the current Windows logon when
+        // the "Allow delegating default credentials" policy covers TERMSRV/<host>; otherwise Windows asks once.
         adv.EnableCredSspSupport = true;
         // 0 = connect without warning if server authentication fails: no certificate prompt.
         adv.AuthenticationLevel = s.IgnoreCertificateErrors ? 0 : 2;

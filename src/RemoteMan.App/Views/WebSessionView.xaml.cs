@@ -26,7 +26,11 @@ public partial class WebSessionView : UserControl
         if (_started || DataContext is not WebSessionViewModel vm) return;
         _started = true;
         _vm = vm;
-        await Web.EnsureCoreWebView2Async(await WebViewEnvironment.GetAsync());
+        var hosts = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { vm.Endpoint.Host };
+        if (Uri.TryCreate(vm.Settings.Url, UriKind.Absolute, out var entryUri)) hosts.Add(entryUri.Host);
+        foreach (var ep in vm.Entry.Endpoints) hosts.Add(ep.Host);
+        var sso = vm.Credential.UseWindowsLogin;
+        await Web.EnsureCoreWebView2Async(sso ? await WebViewEnvironment.GetSsoAsync(hosts) : await WebViewEnvironment.GetAsync());
         var core = Web.CoreWebView2;
 
         core.ServerCertificateErrorDetected += (_, a) =>
@@ -35,16 +39,13 @@ public partial class WebSessionView : UserControl
         };
         core.BasicAuthenticationRequested += (_, a) =>
         {
-            if (vm.Credential.UserName is { } u) { a.Response.UserName = u; a.Response.Password = vm.Credential.Password ?? ""; }
+            if (!sso && vm.Credential.UserName is { } u) { a.Response.UserName = u; a.Response.Password = vm.Credential.Password ?? ""; }
         };
         core.SourceChanged += (_, _) => Address.Text = core.Source;
         core.DocumentTitleChanged += (_, _) => vm.StatusText = core.DocumentTitle;
         // Auto-login runs in every page of this tab, limited to the entry's own hosts.
-        if (vm.Settings.AutoFill && vm.Credential.Password is not null)
+        if (!sso && vm.Settings.AutoFill && vm.Credential.Password is not null)
         {
-            var hosts = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { vm.Endpoint.Host };
-            if (Uri.TryCreate(vm.Settings.Url, UriKind.Absolute, out var u)) hosts.Add(u.Host);
-            foreach (var ep in vm.Entry.Endpoints) hosts.Add(ep.Host);
             var s = vm.Settings;
             await core.AddScriptToExecuteOnDocumentCreatedAsync(AutoFillScript.Build(vm.Credential.UserName, vm.Credential.Password,
                 new AutoLoginOptions(hosts, s.AutoSubmit, Blank(s.UserFieldSelector), Blank(s.PasswordFieldSelector), Blank(s.SubmitSelector))));

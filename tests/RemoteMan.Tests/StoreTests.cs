@@ -107,6 +107,49 @@ public class StoreTests : IDisposable
     }
 
     [Fact]
+    public async Task KeepsCreatedAndLastModifiedSeparately()
+    {
+        await using var a = new EntryStore(new SqliteDataSource(_db), "alice", "pc1");
+        await a.OpenAsync();
+        var e = await a.SaveAsync(Ssh("box"));
+        Assert.Equal("alice", e.CreatedBy);
+        Assert.NotNull(e.CreatedAt);
+
+        await Task.Delay(20);
+        await using var b = new EntryStore(new SqliteDataSource(_db), "bob", "pc2");
+        await b.OpenAsync();
+        var edit = EntryStore.Clone(b.Get(e.Id)!); edit.Name = "box-renamed";
+        await b.SaveAsync(edit);
+
+        await using var c = new EntryStore(new SqliteDataSource(_db), "carol", "pc3");
+        await c.OpenAsync();
+        var seen = c.Get(e.Id)!;
+        Assert.Equal("alice", seen.CreatedBy);
+        Assert.Equal("bob", seen.UpdatedBy);
+        Assert.Equal(e.CreatedAt, seen.CreatedAt);
+        Assert.True(seen.UpdatedAt > seen.CreatedAt);
+    }
+
+    [Fact]
+    public async Task UpgradesDatabaseFromBeforeHistoryColumns()
+    {
+        using (var conn = new Microsoft.Data.Sqlite.SqliteConnection($"Data Source={_db}"))
+        {
+            conn.Open();
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = "CREATE TABLE remoteman_entries (id TEXT PRIMARY KEY, parent_id TEXT NULL, kind INTEGER NOT NULL, name TEXT NOT NULL, payload TEXT NULL, revision INTEGER NOT NULL, updated_at INTEGER NOT NULL, updated_by TEXT NULL, deleted INTEGER NOT NULL DEFAULT 0);" +
+                              "INSERT INTO remoteman_entries VALUES ('" + Guid.NewGuid() + "', NULL, 2, 'old', NULL, 1, 0, 'x', 0);";
+            cmd.ExecuteNonQuery();
+        }
+        await using var s = new EntryStore(new SqliteDataSource(_db), "alice", "pc1");
+        await s.OpenAsync();
+        var old = Assert.Single(s.Entries);
+        Assert.Null(old.CreatedBy);
+        var fresh = await s.SaveAsync(Ssh("new"));
+        Assert.Equal("alice", fresh.CreatedBy);
+    }
+
+    [Fact]
     public async Task PresenceIsVisibleToOthers()
     {
         await using var a = new EntryStore(new SqliteDataSource(_db), "alice", "pc1");
@@ -121,6 +164,131 @@ public class StoreTests : IDisposable
         Assert.Equal("alice", p.User);
         Assert.Equal(PresenceState.Connected, p.State);
         Assert.Empty(a.PresenceFor(e.Id)); // you don't see yourself
+    }
+    [Fact]
+    public void WindowsLoginRewritesConnectionStrings()
+    {
+        var sql = DataSourceFactory.WithWindowsLogin(DataSourceKind.SqlServer, "Server=db;Database=rm;User ID=sa;Password=x");
+        Assert.Contains("Integrated Security=True", sql);
+        Assert.DoesNotContain("Password", sql);
+        Assert.DoesNotContain("User ID", sql);
+        var pg = DataSourceFactory.WithWindowsLogin(DataSourceKind.PostgreSql, "Host=db;Database=rm;Username=lange;Password=x");
+        Assert.DoesNotContain("Password", pg);
+        Assert.Contains("Username=lange", pg);
+        Assert.Contains("Username=", DataSourceFactory.WithWindowsLogin(DataSourceKind.PostgreSql, "Host=db;Database=rm"));
+        Assert.DoesNotContain("x", DataSourceFactory.WithWindowsLogin(DataSourceKind.MySql, "Server=db;User ID=u;Password=x").Replace("Server", ""));
+    }
+
+    [Fact]
+    public async Task WindowsLoginFlagRoundTripsAndLinkingClearsIt()
+    {
+        await using var store = new EntryStore(new SqliteDataSource(_db), "alice", "pc1");
+        await store.OpenAsync();
+        var rdp = await store.SaveAsync(new Entry { Kind = EntryKind.Rdp, Name = "dc", UseWindowsLogin = true, Endpoints = { new HostEndpoint("dc", 3389) } });
+        Assert.True(EntryStore.Clone(rdp).UseWindowsLogin);
+        var cred = await store.SaveAsync(new Entry { Kind = EntryKind.Credential, Name = "admin", Credential = new() { UserName = "a" } });
+        var linked = await store.LinkCredentialAsync(rdp.Id, cred.Id);
+        Assert.False(linked.UseWindowsLogin);
+        Assert.Equal(cred.Id, linked.CredentialId);
+    }
+
+    [Fact]
+    public async Task GoesOfflineQuietlyAndCatchesUpWhenTheDatabaseReturns()
+    {
+        var flaky = new FlakySource(new SqliteDataSource(_db, pollMs: 100));
+        await using var a = new EntryStore(flaky, "alice", "pc1") { ReconnectInterval = TimeSpan.FromMilliseconds(200) };
+        await a.OpenAsync();
+        Assert.True(a.IsOnline);
+        var seen = new List<bool>();
+        a.OnlineChanged += (_, up) => { lock (seen) seen.Add(up); };
+
+        flaky.Down = true;
+        await Assert.ThrowsAsync<DataSourceOfflineException>(() => a.SaveAsync(new Entry { Kind = EntryKind.Folder, Name = "x" }));
+        Assert.False(a.IsOnline);
+        // Already offline: refused at once, without waiting on the network.
+        await Assert.ThrowsAsync<DataSourceOfflineException>(() => a.SaveAsync(new Entry { Kind = EntryKind.Folder, Name = "y" }));
+
+        // Someone else keeps working while we are cut off.
+        await using (var b = new EntryStore(new SqliteDataSource(_db), "bob", "pc2"))
+        {
+            await b.OpenAsync();
+            await b.SaveAsync(new Entry { Kind = EntryKind.Folder, Name = "made while you were offline" });
+        }
+
+        flaky.Down = false;
+        await WaitFor(() => a.IsOnline && a.Entries.Any(e => e.Name == "made while you were offline"));
+        lock (seen) Assert.Equal(new[] { false, true }, seen);
+        await a.SaveAsync(new Entry { Kind = EntryKind.Folder, Name = "after" });
+    }
+
+    [Fact]
+    public async Task OpensOfflineFromCacheWhenTheDatabaseIsDown()
+    {
+        var cache = new MemoryCache();
+        await using (var first = new EntryStore(new SqliteDataSource(_db), "alice", "pc1", cache))
+        {
+            await first.OpenAsync();
+            await first.SaveAsync(new Entry { Kind = EntryKind.Ssh, Name = "web01", Endpoints = { new HostEndpoint("web01", 22) } });
+        } // dispose flushes the cache
+
+        var flaky = new FlakySource(new SqliteDataSource(_db, pollMs: 100)) { Down = true };
+        await using var store = new EntryStore(flaky, "alice", "pc1", cache) { ReconnectInterval = TimeSpan.FromMilliseconds(200) };
+        await store.OpenAsync(); // no exception
+        Assert.False(store.IsOnline);
+        Assert.NotNull(store.LastError);
+        Assert.Contains(store.Entries, e => e.Name == "web01");
+
+        flaky.Down = false;
+        await WaitFor(() => store.IsOnline);
+        Assert.Contains(store.Entries, e => e.Name == "web01");
+    }
+
+    private static async Task WaitFor(Func<bool> condition)
+    {
+        var until = DateTime.UtcNow.AddSeconds(10);
+        while (!condition())
+        {
+            if (DateTime.UtcNow > until) throw new TimeoutException("condition not met");
+            await Task.Delay(50);
+        }
+    }
+
+    private sealed class MemoryCache : IEntryCache
+    {
+        private List<Entry>? _saved;
+        public IReadOnlyList<Entry>? Load() => _saved;
+        public void Save(IReadOnlyList<Entry> entries) => _saved = entries.Select(EntryStore.Clone).ToList();
+    }
+
+    /// <summary>Wraps a real source and simulates the network going away.</summary>
+    private sealed class FlakySource(IDataSource inner) : IDataSource
+    {
+        public volatile bool Down;
+        private T Check<T>(T value) => Down ? throw new IOException("network is down") : value;
+        private async Task<T> Go<T>(Func<Task<T>> f) { await Task.Yield(); Check(0); return await f(); }
+        private async Task Go(Func<Task> f) { await Task.Yield(); Check(0); await f(); }
+
+        public string DisplayName => "flaky";
+        public DataSourceKind Kind => inner.Kind;
+        public bool SupportsPresence => inner.SupportsPresence;
+        public string? DatabaseUser => inner.DatabaseUser;
+        public bool IsConnected => !Down;
+        public event EventHandler<bool>? ConnectionChanged { add { } remove { } }
+        public event EventHandler<ChangeSignal>? Changed
+        {
+            add => inner.Changed += value;
+            remove => inner.Changed -= value;
+        }
+        public Task InitializeAsync(CancellationToken ct = default) => Go(() => inner.InitializeAsync(ct));
+        public Task<IReadOnlyList<Entry>> LoadAllAsync(CancellationToken ct = default) => Go(() => inner.LoadAllAsync(ct));
+        public Task<IReadOnlyList<Entry>> GetChangesAsync(long since, CancellationToken ct = default) => Go(() => inner.GetChangesAsync(since, ct));
+        public Task<Entry> SaveAsync(Entry e, string user, long? exp = null, CancellationToken ct = default) => Go(() => inner.SaveAsync(e, user, exp, ct));
+        public Task DeleteAsync(Guid id, string user, CancellationToken ct = default) => Go(() => inner.DeleteAsync(id, user, ct));
+        public Task HeartbeatPresenceAsync(Presence p, CancellationToken ct = default) => Go(() => inner.HeartbeatPresenceAsync(p, ct));
+        public Task ClearPresenceAsync(string u, string m, CancellationToken ct = default) => Go(() => inner.ClearPresenceAsync(u, m, ct));
+        public Task<IReadOnlyList<Presence>> GetPresenceAsync(CancellationToken ct = default) => Go(() => inner.GetPresenceAsync(ct));
+        public Task StartChangeFeedAsync(CancellationToken ct = default) => inner.StartChangeFeedAsync(ct);
+        public ValueTask DisposeAsync() => inner.DisposeAsync();
     }
 }
 

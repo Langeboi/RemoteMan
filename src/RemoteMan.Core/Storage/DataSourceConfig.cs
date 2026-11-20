@@ -15,6 +15,10 @@ public sealed class DataSourceConfig
     /// <summary>Polling interval for backends without push notifications (MySQL, SQL Server without Service Broker).</summary>
     public int PollMilliseconds { get; set; } = 1000;
 
+    /// <summary>Single sign-on to the database with the current Windows account (SQL Server integrated
+    /// security, PostgreSQL Kerberos/SSPI, MySQL Windows auth / MariaDB GSSAPI). No database password is stored.</summary>
+    public bool UseWindowsLogin { get; set; }
+
     /// <summary>Shared sources encrypt secrets with a key derived from this vault passphrase
     /// (stored locally with DPAPI), so every member of the team can decrypt.</summary>
     public bool UseSharedVaultKey { get; set; }

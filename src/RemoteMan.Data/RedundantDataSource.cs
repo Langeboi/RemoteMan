@@ -34,6 +34,7 @@ public sealed class RedundantDataSource : IDataSource
     public DataSourceKind Kind => Active.Kind;
     public bool SupportsPresence => Active.SupportsPresence;
     public bool IsConnected => Active.IsConnected;
+    public string? DatabaseUser => Active.DatabaseUser;
     public event EventHandler<bool>? ConnectionChanged;
 
     public event EventHandler<ChangeSignal>? Changed;

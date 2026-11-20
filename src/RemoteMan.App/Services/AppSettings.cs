@@ -22,7 +22,6 @@ public sealed class AppSettings
     public List<DataSourceConfig> DataSources { get; set; } = new();
     public string? ActiveDataSource { get; set; }
     public int FallbackTimeoutMs { get; set; } = 2000;
-    public string? DisplayName { get; set; }
 
     public DataSourceConfig Active =>
         DataSources.FirstOrDefault(d => d.Name == ActiveDataSource) ?? DataSources[0];

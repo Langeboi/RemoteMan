@@ -1,4 +1,6 @@
 using System.Collections.Concurrent;
+using System.Data.Common;
+using System.Net.Sockets;
 using RemoteMan.Core.Model;
 
 namespace RemoteMan.Core.Storage;
@@ -6,6 +8,11 @@ namespace RemoteMan.Core.Storage;
 /// <summary>
 /// In-memory mirror of a data source that the UI binds to. Applies incremental
 /// changes as other users make them, and keeps presence fresh.
+/// <para>Offline mode: when the database can't be reached nothing is thrown at the user.
+/// The store keeps serving the last known entries (from memory, or from the local cache
+/// at startup), refuses edits with <see cref="DataSourceOfflineException"/>, and probes the
+/// server every <see cref="ReconnectInterval"/>. When the probe succeeds it catches up on
+/// every change made meanwhile and presence resumes.</para>
 /// </summary>
 public sealed class EntryStore : IAsyncDisposable
 {
@@ -17,16 +24,38 @@ public sealed class EntryStore : IAsyncDisposable
     private IReadOnlyList<Presence> _presence = Array.Empty<Presence>();
     private Timer? _heartbeat;
     private Presence? _myPresence;
+    private readonly IEntryCache? _cache;
+    private Timer? _reconnect;
+    private Timer? _cacheTimer;
+    private int _online;          // 1 = online
+    private int _probing;         // 1 = a reconnect probe is running
+    private bool _initialized;    // schema checked and DatabaseUser known
+    private bool _feedStarted;
+    private bool _fromCache;      // entries came from the cache: do a full reload on reconnect
 
-    public EntryStore(IDataSource source, string user, string machine)
+    public EntryStore(IDataSource source, string user, string machine, IEntryCache? cache = null)
     {
         _source = source;
         User = user;
         Machine = machine;
+        _cache = cache;
         _source.Changed += OnSourceChanged;
+        _source.ConnectionChanged += OnSourceConnectionChanged;
     }
 
-    public string User { get; }
+    /// <summary>How often to try the database again while offline.</summary>
+    public TimeSpan ReconnectInterval { get; set; } = TimeSpan.FromSeconds(15);
+
+    public bool IsOnline => Volatile.Read(ref _online) == 1;
+
+    /// <summary>Why the last connection attempt failed (shown as the indicator's tooltip).</summary>
+    public string? LastError { get; private set; }
+
+    /// <summary>Raised (on a background thread) when the store goes offline or comes back.</summary>
+    public event EventHandler<bool>? OnlineChanged;
+
+    /// <summary>Who you are: the account you are logged in to the database with (Windows user for local files).</summary>
+    public string User { get; private set; }
     public string Machine { get; }
     public IDataSource Source => _source;
     public long LastRevision => Interlocked.Read(ref _lastRevision);
@@ -40,31 +69,163 @@ public sealed class EntryStore : IAsyncDisposable
 
     public Entry? Get(Guid id) => _entries.TryGetValue(id, out var e) && !e.Deleted ? e : null;
 
+    /// <summary>
+    /// Connects and loads everything. If the server can't be reached the store opens
+    /// offline instead (from the cache when there is one) and keeps retrying; only
+    /// errors that retrying can't fix are thrown.
+    /// </summary>
     public async Task OpenAsync(CancellationToken ct = default)
     {
-        await _source.InitializeAsync(ct);
-        var all = await _source.LoadAllAsync(ct);
-        foreach (var e in all) _entries[e.Id] = e;
-        _lastRevision = all.Count == 0 ? 0 : all.Max(e => e.Revision);
-        await _source.StartChangeFeedAsync(_cts.Token);
-        if (_source.SupportsPresence)
+        try
         {
-            _heartbeat = new Timer(_ => _ = HeartbeatAsync(), null, TimeSpan.Zero, TimeSpan.FromSeconds(10));
+            await ConnectAndLoadAsync(full: true, ct);
         }
+        catch (Exception ex) when (IsConnectionFailure(ex) && !ct.IsCancellationRequested)
+        {
+            LastError = Innermost(ex).Message;
+            if (_cache?.Load() is { } cached)
+            {
+                foreach (var e in cached) _entries[e.Id] = e;
+                _lastRevision = cached.Count == 0 ? 0 : cached.Max(e => e.Revision);
+                _fromCache = true;
+            }
+            GoOffline();
+        }
+        if (_source.SupportsPresence)
+            _heartbeat = new Timer(_ => _ = HeartbeatAsync(), null, TimeSpan.FromSeconds(10), TimeSpan.FromSeconds(10));
+    }
+
+    private async Task ConnectAndLoadAsync(bool full, CancellationToken ct)
+    {
+        if (!_initialized)
+        {
+            await _source.InitializeAsync(ct);
+            if (!string.IsNullOrWhiteSpace(_source.DatabaseUser)) User = _source.DatabaseUser!;
+            _initialized = true;
+        }
+        if (full)
+        {
+            var all = await _source.LoadAllAsync(ct);
+            var live = all.Select(e => e.Id).ToHashSet();
+            var gone = _entries.Values.Where(e => !live.Contains(e.Id)).ToList();
+            foreach (var e in gone) { _entries.TryRemove(e.Id, out _); e.Deleted = true; }
+            foreach (var e in all) _entries[e.Id] = e;
+            Interlocked.Exchange(ref _lastRevision, all.Count == 0 ? 0 : all.Max(e => e.Revision));
+            _fromCache = false;
+            if (gone.Count > 0 || all.Count > 0) EntriesChanged?.Invoke(this, all.Concat(gone).ToList());
+            ScheduleCacheSave();
+        }
+        else
+        {
+            await PullCoreAsync(ct);
+        }
+        if (!_feedStarted)
+        {
+            await _source.StartChangeFeedAsync(_cts.Token);
+            _feedStarted = true;
+        }
+        GoOnline();
+        if (_source.SupportsPresence) await HeartbeatAsync();
     }
 
     public async Task<Entry> SaveAsync(Entry entry, CancellationToken ct = default)
     {
+        EnsureOnline();
         long? expected = _entries.TryGetValue(entry.Id, out var existing) ? existing.Revision : null;
-        var saved = await _source.SaveAsync(entry, User, expected, ct);
-        Apply(new[] { saved });
-        return saved;
+        try
+        {
+            var saved = await _source.SaveAsync(entry, User, expected, ct);
+            Apply(new[] { saved });
+            return saved;
+        }
+        catch (Exception ex) when (IsConnectionFailure(ex)) { GoOffline(); throw new DataSourceOfflineException(ex); }
     }
 
     public async Task DeleteAsync(Guid id, CancellationToken ct = default)
     {
-        await _source.DeleteAsync(id, User, ct);
-        await PullAsync(ct);
+        EnsureOnline();
+        try
+        {
+            await _source.DeleteAsync(id, User, ct);
+            await PullAsync(ct);
+        }
+        catch (Exception ex) when (IsConnectionFailure(ex)) { GoOffline(); throw new DataSourceOfflineException(ex); }
+    }
+
+    private void EnsureOnline()
+    {
+        if (!IsOnline) throw new DataSourceOfflineException(null);
+    }
+
+    // ---------------- offline / reconnect ----------------
+
+    public static bool IsConnectionFailure(Exception ex) => ex switch
+    {
+        ConcurrencyException or DataSourceOfflineException => false,
+        DbException or SocketException or TimeoutException or IOException => true,
+        OperationCanceledException => false,
+        _ => ex.InnerException is { } inner && IsConnectionFailure(inner),
+    };
+
+    private static Exception Innermost(Exception ex) => ex.InnerException is { } i ? Innermost(i) : ex;
+
+    private void GoOffline()
+    {
+        if (_cts.IsCancellationRequested) return;
+        if (Interlocked.Exchange(ref _online, 0) == 1 || _reconnect is null)
+        {
+            _presence = Array.Empty<Presence>();
+            PresenceChanged?.Invoke(this, EventArgs.Empty);
+            OnlineChanged?.Invoke(this, false);
+        }
+        lock (_cts)
+        {
+            _reconnect ??= new Timer(_ => _ = ProbeAsync(), null, ReconnectInterval, ReconnectInterval);
+        }
+    }
+
+    private void GoOnline()
+    {
+        lock (_cts)
+        {
+            _reconnect?.Dispose();
+            _reconnect = null;
+        }
+        if (Interlocked.Exchange(ref _online, 1) == 0) OnlineChanged?.Invoke(this, true);
+    }
+
+    /// <summary>One background reconnect attempt; on success everything missed is pulled in.</summary>
+    private async Task ProbeAsync()
+    {
+        if (IsOnline || Interlocked.Exchange(ref _probing, 1) == 1) return;
+        try { await ConnectAndLoadAsync(full: _fromCache || !_initialized, _cts.Token); }
+        catch (Exception ex) { LastError = Innermost(ex).Message; /* still offline: the timer tries again */ }
+        finally { Volatile.Write(ref _probing, 0); }
+    }
+
+    /// <summary>Retry right away (for a "reconnect now" click).</summary>
+    public Task ReconnectNowAsync() => ProbeAsync();
+
+    private void OnSourceConnectionChanged(object? sender, bool up)
+    {
+        if (!up) { LastError = "connection lost"; GoOffline(); }
+        else if (!IsOnline) _ = ProbeAsync();
+    }
+
+    private void ScheduleCacheSave()
+    {
+        if (_cache is null || _cts.IsCancellationRequested) return;
+        lock (_cts)
+        {
+            _cacheTimer ??= new Timer(_ => SaveCache(), null, Timeout.Infinite, Timeout.Infinite);
+            _cacheTimer.Change(TimeSpan.FromSeconds(2), Timeout.InfiniteTimeSpan);
+        }
+    }
+
+    private void SaveCache()
+    {
+        try { _cache?.Save(_entries.Values.Where(e => !e.Deleted).ToList()); }
+        catch (Exception) { /* the cache is a convenience; never fail because of it */ }
     }
 
     /// <summary>Ctrl+click linking: attach a credential entry to a connection entry.</summary>
@@ -76,6 +237,7 @@ public sealed class EntryStore : IAsyncDisposable
         if (cred.Kind != EntryKind.Credential) throw new InvalidOperationException($"{cred.Name} is not a credential.");
         var copy = Clone(conn);
         copy.CredentialId = cred.Id;
+        copy.UseWindowsLogin = false;
         return await SaveAsync(copy, ct);
     }
 
@@ -94,7 +256,7 @@ public sealed class EntryStore : IAsyncDisposable
 
     private async Task HeartbeatAsync()
     {
-        if (!_source.SupportsPresence) return;
+        if (!_source.SupportsPresence || !IsOnline) return;
         try
         {
             if (_myPresence is { } p)
@@ -104,6 +266,7 @@ public sealed class EntryStore : IAsyncDisposable
             await RefreshPresenceAsync();
         }
         catch (Exception) when (_cts.IsCancellationRequested) { }
+        catch (Exception ex) when (IsConnectionFailure(ex)) { GoOffline(); }
         catch (Exception) { /* transient: next tick retries */ }
     }
 
@@ -115,16 +278,24 @@ public sealed class EntryStore : IAsyncDisposable
 
     private async void OnSourceChanged(object? sender, ChangeSignal signal)
     {
+        if (!IsOnline) { _ = ProbeAsync(); return; }
         try
         {
             if (signal.Kind == ChangeSignalKind.Presence) await RefreshPresenceAsync();
             else if (signal.Revision is null || signal.Revision > LastRevision) await PullAsync(_cts.Token);
         }
         catch (Exception) when (_cts.IsCancellationRequested) { }
+        catch (Exception ex) when (IsConnectionFailure(ex)) { GoOffline(); }
         catch (Exception) { /* the next signal or poll will catch up */ }
     }
 
     public async Task PullAsync(CancellationToken ct = default)
+    {
+        if (!IsOnline) return;
+        await PullCoreAsync(ct);
+    }
+
+    private async Task PullCoreAsync(CancellationToken ct)
     {
         await _syncLock.WaitAsync(ct);
         try
@@ -147,6 +318,7 @@ public sealed class EntryStore : IAsyncDisposable
                    Interlocked.CompareExchange(ref _lastRevision, e.Revision, cur) != cur) { }
         }
         EntriesChanged?.Invoke(this, applied);
+        ScheduleCacheSave();
     }
 
     public static Entry Clone(Entry e)
@@ -155,6 +327,7 @@ public sealed class EntryStore : IAsyncDisposable
         {
             Id = e.Id, ParentId = e.ParentId, Kind = e.Kind, Name = e.Name,
             Revision = e.Revision, UpdatedAt = e.UpdatedAt, UpdatedBy = e.UpdatedBy, Deleted = e.Deleted,
+            CreatedAt = e.CreatedAt, CreatedBy = e.CreatedBy,
         };
         EntryJson.ApplyPayload(c, EntryJson.ToPayload(e));
         return c;
@@ -164,8 +337,21 @@ public sealed class EntryStore : IAsyncDisposable
     {
         _cts.Cancel();
         if (_heartbeat is not null) await _heartbeat.DisposeAsync();
-        try { await _source.ClearPresenceAsync(User, Machine); } catch { }
+        lock (_cts) { _reconnect?.Dispose(); _reconnect = null; }
+        if (_cacheTimer is not null) { await _cacheTimer.DisposeAsync(); SaveCache(); }
+        if (IsOnline) { try { await _source.ClearPresenceAsync(User, Machine); } catch { } }
         _source.Changed -= OnSourceChanged;
+        _source.ConnectionChanged -= OnSourceConnectionChanged;
         await _source.DisposeAsync();
     }
 }
+
+/// <summary>Where the last known entries are kept so RemoteMan can open while the database is down.</summary>
+public interface IEntryCache
+{
+    IReadOnlyList<Entry>? Load();
+    void Save(IReadOnlyList<Entry> entries);
+}
+
+public sealed class DataSourceOfflineException(Exception? inner)
+    : Exception("Offline: the database can't be reached, so changes can't be saved right now. RemoteMan keeps retrying in the background.", inner);

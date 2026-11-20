@@ -32,6 +32,15 @@ public sealed class MySqlDataSource : SqlDataSource
         "INSERT IGNORE INTO remoteman_meta (id, rev) VALUES (1, 0)",
     ];
 
+    protected override IEnumerable<(string, bool)> MigrationStatements =>
+    [
+        ("ALTER TABLE remoteman_entries ADD COLUMN created_at BIGINT NULL", true),
+        ("ALTER TABLE remoteman_entries ADD COLUMN created_by VARCHAR(200) NULL", true),
+    ];
+
+    // USER() is the name the client logged in with (CURRENT_USER() may be a wildcard account).
+    protected override string? CurrentUserSql => "SELECT SUBSTRING_INDEX(USER(), '@', 1)";
+
     // LAST_INSERT_ID(expr) stores the value per-connection, so this is race free.
     protected override string NextRevisionSql => "UPDATE remoteman_meta SET rev = LAST_INSERT_ID(rev + 1) WHERE id = 1; SELECT LAST_INSERT_ID();";
 }

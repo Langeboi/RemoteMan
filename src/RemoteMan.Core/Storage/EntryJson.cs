@@ -19,6 +19,7 @@ public static class EntryJson
         public string? Tags { get; set; }
         public List<HostEndpoint>? Endpoints { get; set; }
         public Guid? CredentialId { get; set; }
+        public bool? UseWindowsLogin { get; set; }
         public RdpSettings? Rdp { get; set; }
         public SshSettings? Ssh { get; set; }
         public WebSettings? Web { get; set; }
@@ -32,6 +33,7 @@ public static class EntryJson
         Tags = e.Tags,
         Endpoints = e.Endpoints.Count > 0 ? e.Endpoints : null,
         CredentialId = e.CredentialId,
+        UseWindowsLogin = e.UseWindowsLogin ? true : null,
         Rdp = e.Rdp, Ssh = e.Ssh, Web = e.Web, Vnc = e.Vnc, Credential = e.Credential,
     }, Options);
 
@@ -43,6 +45,7 @@ public static class EntryJson
         e.Tags = p.Tags;
         e.Endpoints = p.Endpoints ?? new();
         e.CredentialId = p.CredentialId;
+        e.UseWindowsLogin = p.UseWindowsLogin == true;
         e.Rdp = p.Rdp; e.Ssh = p.Ssh; e.Web = p.Web; e.Vnc = p.Vnc; e.Credential = p.Credential;
     }
 }

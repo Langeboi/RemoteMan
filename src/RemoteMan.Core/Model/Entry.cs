@@ -32,6 +32,9 @@ public sealed class Entry
     /// <summary>Credential entry used to log in (set by Ctrl+click linking).</summary>
     public Guid? CredentialId { get; set; }
 
+    /// <summary>Single sign-on: log in as the current Windows user instead of a stored credential (RDP, web).</summary>
+    public bool UseWindowsLogin { get; set; }
+
     public RdpSettings? Rdp { get; set; }
     public SshSettings? Ssh { get; set; }
     public WebSettings? Web { get; set; }
@@ -39,6 +42,8 @@ public sealed class Entry
     public CredentialData? Credential { get; set; }
 
     // --- sync metadata (owned by the data source) ---
+    public DateTimeOffset? CreatedAt { get; set; }
+    public string? CreatedBy { get; set; }
     public long Revision { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }
     public string? UpdatedBy { get; set; }
