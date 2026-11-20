@@ -15,7 +15,6 @@
     <Window.Resources>
         <BooleanToVisibilityConverter x:Key="BoolVis" />
         <local:NullToCollapsedConverter x:Key="NullVis" />
-        <local:InvertBoolConverter x:Key="Invert" />
 
         <!-- Session views, chosen by type and kept alive while hidden -->
         <DataTemplate DataType="{x:Type vm:SshSessionViewModel}"><views:SshSessionView /></DataTemplate>
@@ -359,14 +358,6 @@
                         <Button DockPanel.Dock="Right" Style="{StaticResource FlatButton}" Width="26" Padding="0" ToolTip="Collapse all" AutomationProperties.Name="Collapse all folders" Click="OnCollapseAll">
                             <Path Data="M0,5 L4,1 L8,5" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" StrokeThickness="1.5" />
                         </Button>
-                        <!-- Zabbix: pressed = hide the green checks, show only problems -->
-                        <ToggleButton DockPanel.Dock="Right" Style="{StaticResource BarToggle}" Width="26" Height="26"
-                                      IsChecked="{Binding ShowZabbixOk, Converter={StaticResource Invert}}"
-                                      Visibility="{Binding ZabbixActive, Converter={StaticResource BoolVis}}"
-                                      ToolTip="Show only Zabbix problems (hide OK checks)" AutomationProperties.Name="Show only Zabbix problems">
-                            <Path Data="M0,6 H3 L5,1 L8,11 L10,6 H13" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ToggleButton}}"
-                                  StrokeThickness="1.4" StrokeLineJoin="Round" StrokeStartLineCap="Round" StrokeEndLineCap="Round" />
-                        </ToggleButton>
                         <TextBlock Text="{Binding PanelTitle}" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource Muted}" VerticalAlignment="Center"
                                    Typography.Capitals="AllSmallCaps" />
                     </DockPanel>

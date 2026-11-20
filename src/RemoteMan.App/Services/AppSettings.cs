@@ -66,8 +66,6 @@ public sealed class ZabbixConfig
     public bool MatchByAddress { get; set; } = true;
     public bool MatchByName { get; set; } = true;
     public bool IgnoreBracketSuffix { get; set; } = true;
-    /// <summary>Show the green check on healthy entries (the pulse button above the tree).</summary>
-    public bool ShowOk { get; set; } = true;
 
     public bool IsConfigured => Enabled && Url.Length > 0 && !string.IsNullOrEmpty(ProtectedToken);
 

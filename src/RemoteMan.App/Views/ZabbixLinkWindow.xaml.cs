@@ -31,11 +31,7 @@ public partial class ZabbixLinkWindow : Window
             .Select(h =>
             {
                 var health = snapshot.HealthOf(h);
-                var tag = health.State switch
-                {
-                    ZabbixHealthState.Ok => "ok", ZabbixHealthState.Warning => "warn", ZabbixHealthState.High => "high",
-                    ZabbixHealthState.Unreachable => "unreach", ZabbixHealthState.Maintenance => "maint", _ => "",
-                };
+                var tag = RemoteMan.App.ViewModels.MainViewModel.TagFor(health.State) ?? "";
                 return new ZabbixHostRow(h, tag, h.DisplayName + (h.Enabled ? "" : " (disabled)"), h.MainInterface?.Address ?? "",
                     string.Join(", ", h.Groups), suggestions.TryGetValue(h.HostId, out var why) ? $"Likely match: {why}" : "");
             })

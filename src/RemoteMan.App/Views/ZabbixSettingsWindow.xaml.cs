@@ -66,7 +66,6 @@ public partial class ZabbixSettingsWindow : Window
         MatchByAddress = ByAddressBox.IsChecked == true,
         MatchByName = ByNameBox.IsChecked == true,
         IgnoreBracketSuffix = BracketBox.IsChecked == true,
-        ShowOk = _settings.Zabbix.ShowOk,
     };
 
     private string? Token => TokenBox.Password.Trim() is { Length: > 0 } t ? t : ZabbixConnector.LoadToken(_settings.Zabbix);

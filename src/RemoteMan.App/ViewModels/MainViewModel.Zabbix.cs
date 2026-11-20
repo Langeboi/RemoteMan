@@ -34,9 +34,8 @@ public sealed partial class MainViewModel
 
     [ObservableProperty] private bool _zabbixActive;
     [ObservableProperty] private string _zabbixStatusText = "";
-    /// <summary>Glyph in the status bar: ok, warn, high, or unreach when Zabbix can't be reached.</summary>
+    /// <summary>Glyph in the status bar: warn, high, unreach when Zabbix can't be reached, or none when all is well.</summary>
     [ObservableProperty] private string? _zabbixStatusTag;
-    [ObservableProperty] private bool _showZabbixOk = true;
 
     [ObservableProperty] private bool _selectedZabbixVisible;
     [ObservableProperty] private bool _selectedZabbixLinked;
@@ -48,18 +47,11 @@ public sealed partial class MainViewModel
     partial void OnSelectedZabbixVisibleChanged(bool value) => OnPropertyChanged(nameof(SelectedZabbixUnlinked));
     partial void OnSelectedZabbixLinkedChanged(bool value) => OnPropertyChanged(nameof(SelectedZabbixUnlinked));
 
-    partial void OnShowZabbixOkChanged(bool value)
-    {
-        if (_settings.Zabbix.ShowOk != value) { _settings.Zabbix.ShowOk = value; _settings.Save(); }
-        ApplyZabbix();
-    }
-
     /// <summary>(Re)starts polling with the current settings. Called on open and after the settings change.</summary>
     public async Task StartZabbixAsync()
     {
         await StopZabbixAsync();
         var cfg = _settings.Zabbix;
-        ShowZabbixOk = cfg.ShowOk;
         var token = cfg.IsConfigured ? ZabbixConnector.LoadToken(cfg) : null;
         if (token is null)
         {
@@ -118,7 +110,7 @@ public sealed partial class MainViewModel
                 }
                 var health = snap is null || !n.Entry.IsConnectable ? ZabbixHealth.Unlinked : snap.HealthFor(n.Entry);
                 var tag = TagFor(health.State);
-                n.Health = tag == "ok" && !ShowZabbixOk ? null : tag;
+                n.Health = tag;
                 n.HealthTip = health.IsLinked ? $"Zabbix: {health.Summary}" : null;
                 if (health.IsBad) { bad++; high |= health.State == ZabbixHealthState.High; }
             }
@@ -131,7 +123,7 @@ public sealed partial class MainViewModel
             var hosts = snap.ProblemHostCount;
             var problems = snap.Problems.Count(p => !p.Suppressed && snap.Hosts.Any(h => h.HostId == p.HostId && h.Enabled));
             var worst = snap.Hosts.Where(h => h.Enabled).Select(h => snap.HealthOf(h).State).DefaultIfEmpty(ZabbixHealthState.Ok).Max();
-            ZabbixStatusTag = worst switch { ZabbixHealthState.High => "high", ZabbixHealthState.Warning => "warn", _ => "ok" };
+            ZabbixStatusTag = worst switch { ZabbixHealthState.High => "high", ZabbixHealthState.Warning => "warn", _ => null };
             ZabbixStatusText = problems == 0 && hosts == 0
                 ? $"Zabbix: all {snap.Hosts.Count} hosts OK · {snap.FetchedAt.ToLocalTime():HH:mm:ss}"
                 : $"Zabbix: {problems} problem{(problems == 1 ? "" : "s")} on {hosts} host{(hosts == 1 ? "" : "s")} · {snap.FetchedAt.ToLocalTime():HH:mm:ss}";
@@ -139,13 +131,12 @@ public sealed partial class MainViewModel
         RefreshZabbixCard();
     }
 
-    private static string? TagFor(ZabbixHealthState s) => s switch
+    /// <summary>Glyphs only for errors and warnings: OK and maintenance show nothing.</summary>
+    internal static string? TagFor(ZabbixHealthState s) => s switch
     {
-        ZabbixHealthState.Ok => "ok",
         ZabbixHealthState.Warning => "warn",
         ZabbixHealthState.High => "high",
         ZabbixHealthState.Unreachable => "unreach",
-        ZabbixHealthState.Maintenance => "maint",
         _ => null,
     };
 
