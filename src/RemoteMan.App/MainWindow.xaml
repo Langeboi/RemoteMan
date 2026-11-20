@@ -173,6 +173,7 @@
                           Background="Transparent" BorderThickness="0" Padding="0,2"
                           VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling"
                           SelectedItemChanged="OnTreeSelectionChanged" PreviewMouseLeftButtonDown="OnTreeMouseDown"
+                          PreviewMouseMove="OnTreeMouseMove" AllowDrop="True" DragOver="OnTreeDragOver" DragLeave="OnTreeDragLeave" Drop="OnTreeDrop"
                           MouseDoubleClick="OnTreeDoubleClick" KeyDown="OnTreeKeyDown">
                     <TreeView.ContextMenu>
                         <ContextMenu>

@@ -213,6 +213,34 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
             Properties.Add(new PropertyRow("Modified", $"{e.UpdatedAt.ToLocalTime():g} by {e.UpdatedBy}"));
     }
 
+    public EntryNode? FindNode(Guid id) => _nodes.TryGetValue(id, out var n) ? n : null;
+
+    /// <summary>True when <paramref name="id"/> can go into <paramref name="folder"/> (null = top level):
+    /// not into itself or anything below it, and not where it already is.</summary>
+    public bool CanMove(Guid id, Guid? folder)
+    {
+        if (_store?.Get(id) is not { } e || e.ParentId == folder) return false;
+        for (var f = folder; f is { } fid; f = _store.Get(fid)?.ParentId)
+            if (fid == id) return false;
+        return folder is null || _store.Get(folder.Value)?.Kind == EntryKind.Folder;
+    }
+
+    public async Task MoveAsync(Guid id, Guid? folder)
+    {
+        if (_store is null || !CanMove(id, folder)) return;
+        if (!_store.IsOnline) { Message = "Offline: entries can't be moved until the database is back"; return; }
+        var copy = EntryStore.Clone(_store.Get(id)!);
+        copy.ParentId = folder;
+        try
+        {
+            await _store.SaveAsync(copy);
+            var where = folder is { } f && _store.Get(f) is { } fe ? fe.Name : "the top level";
+            Message = $"Moved {copy.Name} to {where}";
+            if (folder is { } fid && _nodes.TryGetValue(fid, out var fn)) fn.IsExpanded = true;
+        }
+        catch (Exception ex) { Message = ex.Message; }
+    }
+
     /// <summary>Ctrl+click on a credential while a connection is selected.</summary>
     public async Task<bool> TryCtrlClickLinkAsync(EntryNode clicked)
     {
