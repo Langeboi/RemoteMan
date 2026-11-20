@@ -49,6 +49,14 @@ public partial class RdpSessionView : UserControl
         // Copy on select needs clipboard redirection to bring the text back.
         if (vm.Settings.CopyOnSelect && vm.Settings.RedirectClipboard) _copy = new CopyOnSelect(_rdp);
 
+        // Only the tab you're looking at draws and listens to the mouse.
+        vm.PropertyChanged += (_, a) =>
+        {
+            if (a.PropertyName != nameof(SessionViewModel.IsActive) || _rdp is null) return;
+            _rdp.SetForeground(vm.IsActive);
+            if (_copy is not null) _copy.Enabled = vm.IsActive;
+        };
+
         try
         {
             vm.StatusText = $"RDP connecting to {vm.Endpoint}…";

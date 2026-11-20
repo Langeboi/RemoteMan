@@ -49,6 +49,8 @@
     <FontFamily x:Key="UiFont">Segoe UI Variable Text, Segoe UI</FontFamily>
     <FontFamily x:Key="MonoFont">Cascadia Mono, Consolas</FontFamily>
 
+    <!-- Keep this window opaque: AllowsTransparency, Effects or Opacity on anything above a session
+         would push the RDP/WebView2 hosts into software rendering (WPF airspace rules). -->
     <Style TargetType="Window" x:Key="RemoteManWindow">
         <Setter Property="Background" Value="{StaticResource Bg}" />
         <Setter Property="Foreground" Value="{StaticResource Text}" />

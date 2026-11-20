@@ -25,6 +25,9 @@ WebView2 runtime ships with Windows 11 and current Windows 10.
 - Copy user name (Ctrl+Shift+U), password (Ctrl+Shift+P) or both (Ctrl+Shift+B: paste once for the user
   name, again for the password). Passwords stay out of clipboard history and are cleared after 30 s.
 - RDP embedded (Windows' own mstscax control), resizes with the tab, no certificate prompts.
+- Many RDP sessions stay light: the client offers the RDP 8+ graphics pipeline so servers with H.264/AVC
+  enabled stream video-coded frames that Windows decodes on the GPU; background tabs are hidden at the
+  window level and drop their mouse hook.
 - SSH in an xterm.js terminal: host keys accepted automatically (trust on first use, changes logged),
   modern and legacy algorithms, password / keyboard-interactive / key auth (OpenSSH, PEM, PuTTY .ppk).
 - Web in embedded Chromium (WebView2) with certificate errors skipped and automatic login (finds the user

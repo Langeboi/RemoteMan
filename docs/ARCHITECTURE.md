@@ -62,6 +62,18 @@ instead of being polled.
   passphrase. Each user enters it once; it is cached locally under DPAPI. The database server never
   sees plaintext.
 
+## RDP performance with many sessions
+
+- 32-bit colour plus `NetworkConnectionType = 7` (auto-detect) and `BandwidthDetection` make the client
+  offer the RDP 8+ graphics pipeline (GFX). If the server allows H.264/AVC (group policy "Prioritize
+  H.264/AVC 444 graphics mode", and "Configure H.264/AVC hardware encoding" for GPU encoding on the
+  host), frames arrive video-coded and Windows decodes them on the GPU.
+- Background tabs: the ActiveX window is hidden (`SetForeground(false)`), resizes are deferred until the
+  tab is shown, and copy-on-select's low-level mouse hook is removed, so only the visible session costs
+  anything locally.
+- Airspace: the main window is opaque, with no Effects or Opacity above session hosts, so WPF and the
+  hosted RDP/WebView2 windows stay hardware-rendered.
+
 ## Single sign-on (optional)
 
 - Database: "Use my Windows login" rewrites the connection string: SQL Server `Integrated Security`,

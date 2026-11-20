@@ -29,15 +29,32 @@ public sealed class CopyOnSelect : IDisposable
         _target = target;
         _proc = HookCallback;
         _send.Tick += (_, _) => { _send.Stop(); SendCtrlC(); };
+        Install();
+    }
+
+    /// <summary>Off for background tabs: the global mouse hook is removed, so many open
+    /// sessions don't each add work to every mouse move on the machine.</summary>
+    public bool Enabled
+    {
+        get => _hook != IntPtr.Zero;
+        set { if (value) Install(); else Uninstall(); }
+    }
+
+    private void Install()
+    {
+        if (_hook != IntPtr.Zero) return;
         using var p = Process.GetCurrentProcess();
         _hook = SetWindowsHookEx(WH_MOUSE_LL, _proc, GetModuleHandle(p.MainModule?.ModuleName), 0);
     }
 
-    public bool Enabled { get; set; } = true;
+    private void Uninstall()
+    {
+        if (_hook != IntPtr.Zero) { UnhookWindowsHookEx(_hook); _hook = IntPtr.Zero; }
+    }
 
     private IntPtr HookCallback(int nCode, IntPtr wParam, IntPtr lParam)
     {
-        if (nCode >= 0 && Enabled && _target.IsHandleCreated && _target.Visible)
+        if (nCode >= 0 && _target.IsHandleCreated && _target.Visible)
         {
             var info = Marshal.PtrToStructure<MSLLHOOKSTRUCT>(lParam);
             var pt = new Point(info.x, info.y);
@@ -81,7 +98,7 @@ public sealed class CopyOnSelect : IDisposable
     public void Dispose()
     {
         _send.Dispose();
-        if (_hook != IntPtr.Zero) { UnhookWindowsHookEx(_hook); _hook = IntPtr.Zero; }
+        Uninstall();
     }
 
     private delegate IntPtr HookProc(int nCode, IntPtr wParam, IntPtr lParam);
