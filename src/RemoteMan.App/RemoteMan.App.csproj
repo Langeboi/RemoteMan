@@ -15,6 +15,7 @@
     <StartupObject>RemoteMan.App.Program</StartupObject>
     <!-- Release builds get the version from the git tag (see .github/workflows/release.yml). -->
     <Version>0.1.0</Version>
+    <ApplicationIcon>Assets\remoteman.ico</ApplicationIcon>
   </PropertyGroup>
   <!-- WPF app that also hosts a WinForms control: keep WinForms out of the global usings. -->
   <ItemGroup>

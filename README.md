@@ -35,9 +35,21 @@ WebView2 runtime ships with Windows 11 and current Windows 10.
 - Data sources: local SQLite (default), or shared PostgreSQL, SQL Server or MySQL/MariaDB with
   multi-server failover, live updates and presence (who is viewing, editing or connected).
 
+## Install
+
+Download `RemoteMan-win-Setup.exe` from the [latest release](https://github.com/Langeboi/RemoteMan/releases/latest)
+and run it. It installs for your Windows user (no admin prompt) into `%LocalAppData%\RemoteMan`, adds
+Start menu and desktop shortcuts, registers RemoteMan in **Settings > Apps > Installed apps** for uninstalling,
+and installs the .NET 8 desktop runtime first if the PC doesn't have it. Your entries and settings in
+`%AppData%\RemoteMan` are kept across updates.
+
+To try a build before it's released, open a run of the
+[build workflow](https://github.com/Langeboi/RemoteMan/actions/workflows/build.yml) and download the
+`RemoteMan-Setup-…` artifact (sign in to GitHub first). Test builds are numbered below the next release
+(`0.1.0-ci.42`), so an installed test build updates to the real release when it comes out.
+
 ## Updates
 
-Install RemoteMan with `RemoteMan-win-Setup.exe` from the [latest release](https://github.com/Langeboi/RemoteMan/releases/latest).
 The installed app checks GitHub Releases 15 seconds after start and every 4 hours after that. When a new
 version exists, a banner under the menu bar offers **Update**; it downloads in the background (only the
 changes, when a delta is available) and then offers **Restart now**. Choosing **On next launch** applies it the next

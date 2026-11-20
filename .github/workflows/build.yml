@@ -7,6 +7,8 @@ on:
 jobs:
   windows:
     runs-on: windows-latest
+    env:
+      VPK_VERSION: 1.2.161
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
@@ -14,7 +16,26 @@ jobs:
           dotnet-version: 8.0.x
       - run: dotnet build RemoteMan.sln -c Release
       - run: dotnet test tests/RemoteMan.Tests -c Release --no-build
-      - run: dotnet publish src/RemoteMan.App -c Release -r win-x64 --self-contained false -o publish
+
+      # Test builds are versioned below the next release (0.1.0-ci.42 < 0.1.0), so an installed
+      # test build still offers the real release as an update when it comes out.
+      - name: Test build version
+        shell: pwsh
+        run: |
+          $base = dotnet msbuild src/RemoteMan.App -getProperty:Version
+          "VERSION=$base-ci.${{ github.run_number }}" >> $env:GITHUB_ENV
+
+      - run: dotnet publish src/RemoteMan.App -c Release -r win-x64 --self-contained false -p:Version=${{ env.VERSION }} -o publish
+      - run: dotnet tool install -g vpk --version ${{ env.VPK_VERSION }}
+      - name: Build installer
+        shell: pwsh
+        run: ./build/pack.ps1 -Version ${{ env.VERSION }}
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: RemoteMan-Setup-${{ env.VERSION }}
+          path: releases/RemoteMan-win-Setup.exe
+          compression-level: 0
       - uses: actions/upload-artifact@v4
         with:
           name: remoteman-win-x64
