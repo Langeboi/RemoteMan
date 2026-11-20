@@ -4,13 +4,31 @@ on:
   push:
   pull_request:
 
+# Pushes to the test branch are also published as GitHub prereleases on the "test" update channel,
+# so an installed test build updates itself (More > Update channel > Test builds).
+env:
+  TEST_BRANCH: test/all-features
+
 jobs:
   windows:
     runs-on: windows-latest
+    permissions:
+      contents: write
     env:
       VPK_VERSION: 1.2.161
+      # Code signing (optional, see build/pack.ps1). Empty secrets = unsigned build.
+      AZURE_SIGNING_ENDPOINT: ${{ secrets.AZURE_SIGNING_ENDPOINT }}
+      AZURE_SIGNING_ACCOUNT: ${{ secrets.AZURE_SIGNING_ACCOUNT }}
+      AZURE_SIGNING_PROFILE: ${{ secrets.AZURE_SIGNING_PROFILE }}
+      AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+      AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+      AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+      SIGN_PFX_BASE64: ${{ secrets.SIGN_PFX_BASE64 }}
+      SIGN_PFX_PASSWORD: ${{ secrets.SIGN_PFX_PASSWORD }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 20
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 8.0.x
@@ -27,14 +45,51 @@ jobs:
 
       - run: dotnet publish src/RemoteMan.App -c Release -r win-x64 --self-contained false -p:Version=${{ env.VERSION }} -o publish
       - run: dotnet tool install -g vpk --version ${{ env.VPK_VERSION }}
+
+      - name: Test channel?
+        shell: pwsh
+        run: |
+          $test = '${{ github.event_name }}' -eq 'push' -and '${{ github.ref_name }}' -eq $env:TEST_BRANCH
+          "PUBLISH_TEST=$($test.ToString().ToLower())" >> $env:GITHUB_ENV
+          "CHANNEL=$(if ($test) { 'test' } else { '' })" >> $env:GITHUB_ENV
+
+      # The previous test build lets vpk make a small delta update.
+      - name: Fetch previous test build
+        if: env.PUBLISH_TEST == 'true'
+        continue-on-error: true
+        run: vpk download github --repoUrl ${{ github.server_url }}/${{ github.repository }} --token ${{ secrets.GITHUB_TOKEN }} --channel test --pre -o releases
+
+      - name: Release notes
+        if: env.PUBLISH_TEST == 'true'
+        shell: pwsh
+        run: |
+          $lines = git log -15 --no-merges --pretty=format:'- %s'
+          "## Test build ${{ env.VERSION }}`n`nRecent changes on ${{ github.ref_name }}:`n`n$($lines -join "`n")" | Set-Content -Encoding utf8 release-notes.md
+
       - name: Build installer
         shell: pwsh
-        run: ./build/pack.ps1 -Version ${{ env.VERSION }}
+        run: |
+          $notes = if (Test-Path release-notes.md) { 'release-notes.md' } else { '' }
+          ./build/pack.ps1 -Version ${{ env.VERSION }} -Channel '${{ env.CHANNEL }}' -ReleaseNotes $notes
+
+      - name: Publish test build
+        if: env.PUBLISH_TEST == 'true'
+        run: >
+          vpk upload github
+          --repoUrl ${{ github.server_url }}/${{ github.repository }}
+          --token ${{ secrets.GITHUB_TOKEN }}
+          --channel test
+          -o releases
+          --targetCommitish ${{ github.sha }}
+          --tag test-${{ env.VERSION }}
+          --releaseName "RemoteMan test build ${{ env.VERSION }}"
+          --pre
+          --publish
 
       - uses: actions/upload-artifact@v4
         with:
           name: RemoteMan-Setup-${{ env.VERSION }}
-          path: releases/RemoteMan-win-Setup.exe
+          path: releases/*-Setup.exe
           compression-level: 0
       - uses: actions/upload-artifact@v4
         with:

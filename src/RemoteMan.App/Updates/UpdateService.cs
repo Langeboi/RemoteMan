@@ -80,6 +80,29 @@ public sealed partial class UpdateService : ObservableObject
 
     public string ReleasesUrl => RepositoryUrl + "/releases";
 
+    private const string StableChannel = "win";
+    private const string TestChannel = "test";
+    private string? _installedChannel;
+
+    /// <summary>True when updates come from test builds (every build of the test branch) instead of releases.</summary>
+    public bool UsesTestBuilds => _prefs.Channel is { } c ? c == TestChannel : _installedChannel == TestChannel;
+
+    /// <summary>Switches between releases and test builds, then checks right away.</summary>
+    [RelayCommand]
+    private async Task SetChannel(string channel)
+    {
+        var wanted = channel == TestChannel ? TestChannel : "stable";
+        if (_prefs.Channel == wanted && _manager is not null) { await CheckAsync(userInitiated: true); return; }
+        _prefs.Channel = wanted;
+        _prefs.SkippedVersion = null;
+        _prefs.Save();
+        _manager = null;
+        _pending = null;
+        State = UpdateState.Idle;
+        OnPropertyChanged(nameof(UsesTestBuilds));
+        await CheckAsync(userInitiated: true);
+    }
+
     /// <summary>Starts background checks. Call once after the main window is shown.</summary>
     public void Start()
     {
@@ -94,9 +117,22 @@ public sealed partial class UpdateService : ObservableObject
             if (_manager is not null) return _manager;
             try
             {
-                var mgr = new UpdateManager(new GithubSource(RepositoryUrl, accessToken: null, prerelease: _prefs.IncludePrereleases));
+                // Which channel the installer came from: "win" for releases, "test" for test builds.
+                var probe = new UpdateManager(new GithubSource(RepositoryUrl, accessToken: null, prerelease: false));
                 // A copy run from the build folder or an unzipped artifact isn't installed and can't self-update.
-                if (!mgr.IsInstalled) return null;
+                if (!probe.IsInstalled) return null;
+                _installedChannel = probe.Channel;
+                OnPropertyChanged(nameof(UsesTestBuilds));
+
+                var options = new UpdateOptions();
+                if (_prefs.Channel is { } chosen)
+                {
+                    options.ExplicitChannel = chosen == TestChannel ? TestChannel : StableChannel;
+                    // Going from a test build back to stable can mean an older version number.
+                    options.AllowVersionDowngrade = options.ExplicitChannel != _installedChannel;
+                }
+                // Test builds are published as GitHub prereleases.
+                var mgr = new UpdateManager(new GithubSource(RepositoryUrl, accessToken: null, prerelease: _prefs.IncludePrereleases || UsesTestBuilds), options);
                 CurrentVersion = mgr.CurrentVersion?.ToString() ?? CurrentVersion;
                 return _manager = mgr;
             }

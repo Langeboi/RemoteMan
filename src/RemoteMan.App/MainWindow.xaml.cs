@@ -92,6 +92,10 @@ public partial class MainWindow : Window
         var auto = new MenuItem { Header = "Check for updates automatically", IsCheckable = true, IsChecked = updates.AutoCheck };
         auto.Click += (_, _) => updates.AutoCheck = auto.IsChecked;
         menu.Items.Add(auto);
+        var channel = new MenuItem { Header = "Update channel" };
+        channel.Items.Add(new MenuItem { Header = "Releases", IsCheckable = true, IsChecked = !updates.UsesTestBuilds, Command = updates.SetChannelCommand, CommandParameter = "stable" });
+        channel.Items.Add(new MenuItem { Header = "Test builds (newest changes, may have bugs)", IsCheckable = true, IsChecked = updates.UsesTestBuilds, Command = updates.SetChannelCommand, CommandParameter = "test" });
+        menu.Items.Add(channel);
         menu.Items.Add(new MenuItem { Header = "Release notes", Command = updates.OpenReleaseNotesCommand });
         menu.Items.Add(new MenuItem { Header = $"RemoteMan {updates.CurrentVersion}", IsEnabled = false });
         menu.Items.Add(new Separator());

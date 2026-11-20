@@ -12,6 +12,8 @@ public sealed class UpdatePrefs
 
     public bool AutoCheck { get; set; } = true;
     public bool IncludePrereleases { get; set; }
+    /// <summary>"stable" or "test"; null follows the build that was installed (a test installer gets test builds).</summary>
+    public string? Channel { get; set; }
     public string? SkippedVersion { get; set; }
     public DateTimeOffset? LastCheck { get; set; }
 
