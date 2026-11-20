@@ -15,6 +15,7 @@
     <Window.Resources>
         <BooleanToVisibilityConverter x:Key="BoolVis" />
         <local:NullToCollapsedConverter x:Key="NullVis" />
+        <local:InvertBoolConverter x:Key="Invert" />
 
         <!-- Session views, chosen by type and kept alive while hidden -->
         <DataTemplate DataType="{x:Type vm:SshSessionViewModel}"><views:SshSessionView /></DataTemplate>
@@ -36,6 +37,12 @@
                         <TextBlock Text="{Binding Badge.Initials}" FontSize="5.5" FontWeight="Bold" Foreground="{StaticResource Bg}" HorizontalAlignment="Center" VerticalAlignment="Center" />
                     </Border>
                 </Grid>
+                <!-- Zabbix: health glyph on entries, count of problem hosts on folders -->
+                <Path DockPanel.Dock="Right" Style="{StaticResource HealthGlyph}" Tag="{Binding Health}" Margin="6,0,0,0" ToolTip="{Binding HealthTip}" />
+                <Border x:Name="pcount" DockPanel.Dock="Right" MinWidth="16" Height="16" CornerRadius="8" Padding="4,0" Margin="6,0,0,0" Background="{StaticResource Warn}"
+                        ToolTip="{Binding HealthTip}" Visibility="{Binding HasProblemCount, Converter={StaticResource BoolVis}}">
+                    <TextBlock Text="{Binding ProblemCount}" FontSize="10" FontWeight="SemiBold" Foreground="{StaticResource Bg}" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                </Border>
                 <TextBlock x:Name="name" Text="{Binding Name}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center"
                            Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=TreeViewItem}}" />
             </DockPanel>
@@ -52,6 +59,9 @@
                 </DataTrigger>
                 <DataTrigger Binding="{Binding IsExpanded}" Value="False">
                     <Setter TargetName="chevron" Property="Data" Value="M0,0 L4,4 L0,8" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding ProblemCountHigh}" Value="True">
+                    <Setter TargetName="pcount" Property="Background" Value="{StaticResource Bad}" />
                 </DataTrigger>
             </HierarchicalDataTemplate.Triggers>
         </HierarchicalDataTemplate>
@@ -255,6 +265,18 @@
                 <TextBlock DockPanel.Dock="Right" Text="{Binding AppVersion}" Style="{StaticResource Muted}" FontSize="11" VerticalAlignment="Center" Margin="10,0" />
                 <TextBlock DockPanel.Dock="Right" Text="{Binding OnlineText}" Style="{StaticResource Muted}" FontSize="11" VerticalAlignment="Center" Margin="10,0,0,0" />
 
+                <!-- Zabbix: worst state across hosts, problem count, last update. Click for settings. -->
+                <Button DockPanel.Dock="Right" Style="{StaticResource FlatButton}" Height="24" Padding="6,0" Margin="6,0,0,0"
+                        Command="{Binding ZabbixSettingsCommand}" ToolTip="{Binding ZabbixStatusText}" AutomationProperties.Name="{Binding ZabbixStatusText}"
+                        Visibility="{Binding ZabbixActive, Converter={StaticResource BoolVis}}">
+                    <StackPanel Orientation="Horizontal">
+                        <Path Style="{StaticResource HealthGlyph}" Tag="{Binding ZabbixStatusTag}" Margin="0,0,5,0">
+                            <Path.LayoutTransform><ScaleTransform ScaleX="0.8" ScaleY="0.8" /></Path.LayoutTransform>
+                        </Path>
+                        <TextBlock Text="{Binding ZabbixStatusText}" FontSize="11" Foreground="{StaticResource Muted}" VerticalAlignment="Center" MaxWidth="360" TextTrimming="CharacterEllipsis" />
+                    </StackPanel>
+                </Button>
+
                 <!-- Shared data source: a small "Q", green when connected, red when offline. Hidden for local. Click for details. -->
                 <Grid DockPanel.Dock="Right" Visibility="{Binding IsSharedSource, Converter={StaticResource BoolVis}}">
                     <ToggleButton x:Name="QButton" Style="{StaticResource BarToggle}" Width="30" Height="24" ToolTip="{Binding DataSourceText}" AutomationProperties.Name="{Binding DataSourceText}">
@@ -337,6 +359,14 @@
                         <Button DockPanel.Dock="Right" Style="{StaticResource FlatButton}" Width="26" Padding="0" ToolTip="Collapse all" AutomationProperties.Name="Collapse all folders" Click="OnCollapseAll">
                             <Path Data="M0,5 L4,1 L8,5" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" StrokeThickness="1.5" />
                         </Button>
+                        <!-- Zabbix: pressed = hide the green checks, show only problems -->
+                        <ToggleButton DockPanel.Dock="Right" Style="{StaticResource BarToggle}" Width="26" Height="26"
+                                      IsChecked="{Binding ShowZabbixOk, Converter={StaticResource Invert}}"
+                                      Visibility="{Binding ZabbixActive, Converter={StaticResource BoolVis}}"
+                                      ToolTip="Show only Zabbix problems (hide OK checks)" AutomationProperties.Name="Show only Zabbix problems">
+                            <Path Data="M0,6 H3 L5,1 L8,11 L10,6 H13" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ToggleButton}}"
+                                  StrokeThickness="1.4" StrokeLineJoin="Round" StrokeStartLineCap="Round" StrokeEndLineCap="Round" />
+                        </ToggleButton>
                         <TextBlock Text="{Binding PanelTitle}" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource Muted}" VerticalAlignment="Center"
                                    Typography.Capitals="AllSmallCaps" />
                     </DockPanel>
@@ -373,6 +403,9 @@
                             <MenuItem Header="Duplicate…" InputGestureText="Ctrl+D" Command="{Binding DuplicateCommand}" />
                             <MenuItem Header="Add to / remove from favorites" Command="{Binding ToggleFavoriteCommand}" />
                             <Separator />
+                            <MenuItem Header="Link to Zabbix host…" Command="{Binding LinkToZabbixCommand}" Visibility="{Binding ZabbixActive, Converter={StaticResource BoolVis}}" />
+                            <MenuItem Header="Open in Zabbix" Command="{Binding OpenInZabbixCommand}" Visibility="{Binding SelectedZabbixLinked, Converter={StaticResource BoolVis}}" />
+                            <Separator Visibility="{Binding ZabbixActive, Converter={StaticResource BoolVis}}" />
                             <MenuItem Header="Copy user name" InputGestureText="Ctrl+Shift+U" Command="{Binding CopyUserNameCommand}" />
                             <MenuItem Header="Copy password" InputGestureText="Ctrl+Shift+P" Command="{Binding CopyPasswordCommand}" />
                             <MenuItem Header="Copy both (paste twice)" InputGestureText="Ctrl+Shift+B" Command="{Binding CopyBothCommand}" />
@@ -403,6 +436,46 @@
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
+
+                        <!-- Zabbix: state, how it matched, open problems -->
+                        <StackPanel Visibility="{Binding SelectedZabbixVisible, Converter={StaticResource BoolVis}}">
+                            <Border Height="1" Background="{StaticResource BorderSoft}" Margin="0,8,0,8" />
+                            <DockPanel>
+                                <TextBlock DockPanel.Dock="Right" VerticalAlignment="Center" FontSize="11" Visibility="{Binding SelectedZabbixLinked, Converter={StaticResource BoolVis}}">
+                                    <Hyperlink Command="{Binding OpenInZabbixCommand}" Foreground="#7FD3C4" ToolTip="Open this host's problems in the Zabbix web UI">Open in Zabbix</Hyperlink>
+                                </TextBlock>
+                                <TextBlock Text="ZABBIX" FontSize="10" FontWeight="SemiBold" Foreground="{StaticResource Muted}" VerticalAlignment="Center" Margin="0,0,8,0" />
+                                <Path Style="{StaticResource HealthGlyph}" Tag="{Binding SelectedZabbixTag}" Margin="0,0,4,0">
+                                    <Path.LayoutTransform><ScaleTransform ScaleX="0.85" ScaleY="0.85" /></Path.LayoutTransform>
+                                </Path>
+                                <TextBlock Text="{Binding SelectedZabbixSummary}" FontSize="11" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                            </DockPanel>
+                            <DockPanel Margin="0,4,0,0" Visibility="{Binding SelectedZabbixLinked, Converter={StaticResource BoolVis}}">
+                                <TextBlock Width="66" Text="Matched" Style="{StaticResource Muted}" FontSize="11" />
+                                <TextBlock Text="{Binding SelectedZabbixMatch}" FontSize="11" TextTrimming="CharacterEllipsis" ToolTip="{Binding SelectedZabbixMatch}" />
+                            </DockPanel>
+                            <ItemsControl ItemsSource="{Binding SelectedProblems}" Focusable="False" Margin="0,4,0,0">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Border Background="#1A1E22" CornerRadius="4" Padding="6,5" Margin="0,2">
+                                            <DockPanel>
+                                                <Path Style="{StaticResource HealthGlyph}" Tag="{Binding Tag}" VerticalAlignment="Top" Margin="0,0,6,0">
+                                                    <Path.LayoutTransform><ScaleTransform ScaleX="0.8" ScaleY="0.8" /></Path.LayoutTransform>
+                                                </Path>
+                                                <StackPanel>
+                                                    <TextBlock Text="{Binding Name}" FontSize="11" TextWrapping="Wrap" />
+                                                    <TextBlock Text="{Binding Meta}" FontSize="10" Style="{StaticResource Muted}" Margin="0,1,0,0" TextTrimming="CharacterEllipsis" />
+                                                </StackPanel>
+                                            </DockPanel>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                            <DockPanel Margin="0,2,0,0" Visibility="{Binding SelectedZabbixUnlinked, Converter={StaticResource BoolVis}}">
+                                <TextBlock DockPanel.Dock="Right" FontSize="11"><Hyperlink Command="{Binding LinkToZabbixCommand}" Foreground="#7FD3C4">Link to Zabbix host</Hyperlink></TextBlock>
+                                <TextBlock Text="No Zabbix host matches this entry." Style="{StaticResource Muted}" FontSize="11" TextTrimming="CharacterEllipsis" />
+                            </DockPanel>
+                        </StackPanel>
                     </StackPanel>
                 </Border>
             </Grid>

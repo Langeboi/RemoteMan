@@ -37,6 +37,14 @@ public sealed partial class EntryNode : ObservableObject
     /// <summary>Tiny initials badge on the corner of the protocol icon: the first person on this entry, tooltip lists everyone.</summary>
     [ObservableProperty] private PresenceChip? _badge;
 
+    /// <summary>Zabbix glyph on the right of the row: ok, warn, high, unreach, maint, or null for none.</summary>
+    [ObservableProperty] private string? _health;
+    [ObservableProperty] private string? _healthTip;
+    /// <summary>Folders: hosts with problems inside (any depth). 0 hides the count.</summary>
+    [ObservableProperty] [NotifyPropertyChangedFor(nameof(HasProblemCount))] private int _problemCount;
+    [ObservableProperty] private bool _problemCountHigh;
+    public bool HasProblemCount => ProblemCount > 0;
+
     public int Depth { get; }
     public Thickness Indent => new(8 + Depth * 16, 0, 8, 0);
     public string Name => Entry.Name;

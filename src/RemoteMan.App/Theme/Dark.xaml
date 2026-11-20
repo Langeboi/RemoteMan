@@ -107,6 +107,38 @@
         </Style.Triggers>
     </Style>
 
+    <!-- Zabbix health glyphs (16x16, stroke only): check, triangle, octagon, crossed-out signal, wrench -->
+    <Color x:Key="C.Maint">#7FA7D9</Color>
+    <SolidColorBrush x:Key="Maint" Color="{StaticResource C.Maint}" />
+    <Geometry x:Key="Icon.Z.ok">M3.5,8.5 L6.5,11.5 L12.5,4.5</Geometry>
+    <Geometry x:Key="Icon.Z.warn">M8,2 L14.5,13.5 H1.5 Z M8,6.5 V9.5 M8,11.6 V11.8</Geometry>
+    <Geometry x:Key="Icon.Z.high">M5.5,1.5 H10.5 L14.5,5.5 V10.5 L10.5,14.5 H5.5 L1.5,10.5 V5.5 Z M8,4.8 V8.8 M8,11 V11.2</Geometry>
+    <Geometry x:Key="Icon.Z.unreach">M3,6 A7,7 0 0 1 13,6 M5,8.8 A4,4 0 0 1 11,8.8 M2,2 L14,14 M8,12 V12.2</Geometry>
+    <Geometry x:Key="Icon.Z.info">M14.5,8 A6.5,6.5 0 1 1 1.5,8 A6.5,6.5 0 1 1 14.5,8 Z M8,7.5 V11.5 M8,4.6 V4.8</Geometry>
+    <Geometry x:Key="Icon.Z.maint">M9.5,3.5 A3,3 0 0 0 12.5,6.5 L6.5,12.5 L4.5,14.5 L1.5,11.5 L3.5,9.5 L9.5,3.5 Z</Geometry>
+
+    <!-- Tag = ok | warn | high | unreach | maint | info -->
+    <Style TargetType="Path" x:Key="HealthGlyph">
+        <Setter Property="Width" Value="16" />
+        <Setter Property="Height" Value="16" />
+        <Setter Property="Stretch" Value="None" />
+        <Setter Property="StrokeThickness" Value="1.5" />
+        <Setter Property="StrokeLineJoin" Value="Round" />
+        <Setter Property="StrokeStartLineCap" Value="Round" />
+        <Setter Property="StrokeEndLineCap" Value="Round" />
+        <Setter Property="SnapsToDevicePixels" Value="True" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+        <Setter Property="Visibility" Value="Collapsed" />
+        <Style.Triggers>
+            <Trigger Property="Tag" Value="ok"><Setter Property="Visibility" Value="Visible" /><Setter Property="Data" Value="{StaticResource Icon.Z.ok}" /><Setter Property="Stroke" Value="{StaticResource Ok}" /><Setter Property="Opacity" Value="0.75" /></Trigger>
+            <Trigger Property="Tag" Value="warn"><Setter Property="Visibility" Value="Visible" /><Setter Property="Data" Value="{StaticResource Icon.Z.warn}" /><Setter Property="Stroke" Value="{StaticResource Warn}" /></Trigger>
+            <Trigger Property="Tag" Value="high"><Setter Property="Visibility" Value="Visible" /><Setter Property="Data" Value="{StaticResource Icon.Z.high}" /><Setter Property="Stroke" Value="{StaticResource Bad}" /></Trigger>
+            <Trigger Property="Tag" Value="unreach"><Setter Property="Visibility" Value="Visible" /><Setter Property="Data" Value="{StaticResource Icon.Z.unreach}" /><Setter Property="Stroke" Value="#9AA3AD" /></Trigger>
+            <Trigger Property="Tag" Value="info"><Setter Property="Visibility" Value="Visible" /><Setter Property="Data" Value="{StaticResource Icon.Z.info}" /><Setter Property="Stroke" Value="{StaticResource Maint}" /></Trigger>
+            <Trigger Property="Tag" Value="maint"><Setter Property="Visibility" Value="Visible" /><Setter Property="Data" Value="{StaticResource Icon.Z.maint}" /><Setter Property="Stroke" Value="{StaticResource Maint}" /></Trigger>
+        </Style.Triggers>
+    </Style>
+
     <!-- Buttons -->
     <Style TargetType="Button">
         <Setter Property="Foreground" Value="{StaticResource Text}" />

@@ -35,6 +35,9 @@ public sealed class Entry
     /// <summary>Single sign-on: log in as the current Windows user instead of a stored credential (RDP, web).</summary>
     public bool UseWindowsLogin { get; set; }
 
+    /// <summary>Zabbix host this entry is linked to (set on import or by "Link to Zabbix host"). Wins over automatic matching.</summary>
+    public string? ZabbixHostId { get; set; }
+
     public RdpSettings? Rdp { get; set; }
     public SshSettings? Ssh { get; set; }
     public WebSettings? Web { get; set; }

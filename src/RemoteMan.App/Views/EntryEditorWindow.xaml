@@ -141,6 +141,15 @@
                     </StackPanel>
                 </GroupBox>
 
+                <!-- Zabbix: which host's health shows on this entry -->
+                <GroupBox x:Name="ZabbixGroup" Header="Zabbix" Visibility="Collapsed">
+                    <DockPanel>
+                        <Button x:Name="ZabbixUnlink" DockPanel.Dock="Right" Content="Unlink" MinWidth="70" Margin="6,0,0,0" Click="OnZabbixUnlink" />
+                        <Button DockPanel.Dock="Right" Content="Link to Zabbix host…" Margin="6,0,0,0" Click="OnZabbixLink" />
+                        <TextBlock x:Name="ZabbixCurrent" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Foreground="{StaticResource Text}" />
+                    </DockPanel>
+                </GroupBox>
+
                 <GroupBox x:Name="VncGroup" Header="VNC options">
                     <StackPanel>
                         <DockPanel>

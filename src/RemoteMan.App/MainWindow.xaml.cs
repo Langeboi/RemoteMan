@@ -19,9 +19,22 @@ public partial class MainWindow : Window
         _settings = settings;
         _vm = new MainViewModel(settings)
         {
-            EditDialog = (entry, store, protector) => new EntryEditorWindow(entry, store, protector) { Owner = this }.ShowDialog() == true ? entry : null,
             Confirm = text => MessageBox.Show(this, text, "RemoteMan", MessageBoxButton.YesNo, MessageBoxImage.Question) == MessageBoxResult.Yes,
         };
+        _vm.EditDialog = (entry, store, protector) =>
+            new EntryEditorWindow(entry, store, protector) { Owner = this, Zabbix = _vm.ZabbixSnapshot }.ShowDialog() == true ? entry : null;
+        _vm.ZabbixLinkDialog = (snap, entry) =>
+        {
+            var dlg = new ZabbixLinkWindow(snap, entry) { Owner = this };
+            return dlg.ShowDialog() == true ? dlg.ChosenHostId ?? "" : null;
+        };
+        _vm.ZabbixImportDialog = (snap, store) =>
+        {
+            var dlg = new ZabbixImportWindow(snap, store, _settings.Zabbix.Url, _vm.ImportParentFolder()) { Owner = this };
+            return dlg.ShowDialog() == true ? dlg.Plan : null;
+        };
+        _vm.ZabbixSettingsDialog = () =>
+            new ZabbixSettingsWindow(_settings, _vm.Store, _vm.Protector) { Owner = this }.ShowDialog() == true;
         DataContext = _vm;
         Loaded += async (_, _) => await _vm.InitializeAsync();
         Closing += async (_, _) => await _vm.DisposeAsync();
@@ -52,6 +65,8 @@ public partial class MainWindow : Window
         menu.Items.Add(new MenuItem { Header = "Close tab", Command = _vm.CloseSessionCommand, CommandParameter = _vm.ActiveSession, InputGestureText = "Ctrl+W" });
         menu.Items.Add(new Separator());
         menu.Items.Add(Click("Data sources…", OnDataSources));
+        menu.Items.Add(Cmd("Zabbix settings…", _vm.ZabbixSettingsCommand));
+        if (_vm.ZabbixActive) menu.Items.Add(Cmd("Import from Zabbix…", _vm.ImportFromZabbixCommand));
         menu.Items.Add(Click("Exit", OnExit));
         menu.IsOpen = true;
     }
