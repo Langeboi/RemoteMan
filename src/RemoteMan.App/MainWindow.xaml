@@ -3,11 +3,18 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="clr-namespace:RemoteMan.App.ViewModels"
         xmlns:views="clr-namespace:RemoteMan.App.Views"
-        Title="RemoteMan" Width="1440" Height="900" MinWidth="800" MinHeight="500"
+        xmlns:local="clr-namespace:RemoteMan.App"
+        Title="RemoteMan" Width="1440" Height="900" MinWidth="900" MinHeight="520"
         Style="{StaticResource RemoteManWindow}" WindowStartupLocation="CenterScreen">
+
+    <!-- Own title bar (no transparency, so RDP/WebView2 keep GPU rendering). -->
+    <WindowChrome.WindowChrome>
+        <WindowChrome CaptionHeight="36" ResizeBorderThickness="6" GlassFrameThickness="0" CornerRadius="0" UseAeroCaptionButtons="False" />
+    </WindowChrome.WindowChrome>
 
     <Window.Resources>
         <BooleanToVisibilityConverter x:Key="BoolVis" />
+        <local:NullToCollapsedConverter x:Key="NullVis" />
 
         <!-- Session views, chosen by type and kept alive while hidden -->
         <DataTemplate DataType="{x:Type vm:SshSessionViewModel}"><views:SshSessionView /></DataTemplate>
@@ -16,39 +23,106 @@
 
         <HierarchicalDataTemplate DataType="{x:Type vm:EntryNode}" ItemsSource="{Binding Children}">
             <DockPanel LastChildFill="True">
-                <ItemsControl DockPanel.Dock="Right" ItemsSource="{Binding People}" Focusable="False">
-                    <ItemsControl.ItemsPanel><ItemsPanelTemplate><StackPanel Orientation="Horizontal" /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
-                    <ItemsControl.ItemTemplate>
-                        <DataTemplate>
-                            <Border BorderBrush="#5A5240" BorderThickness="1" Padding="2,0" Margin="3,0,0,0" ToolTip="{Binding ToolTip}" VerticalAlignment="Center">
-                                <TextBlock Text="{Binding Initials}" FontSize="9" FontWeight="SemiBold" Foreground="{StaticResource Presence}" />
-                            </Border>
-                        </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                </ItemsControl>
-                <Path x:Name="chevron" Width="10" Height="10" Margin="0,0,4,0" Stretch="Uniform" Stroke="{StaticResource Muted}" StrokeThickness="1.5"
+                <Path x:Name="chevron" Width="9" Height="9" Margin="0,0,5,0" Stretch="Uniform" Stroke="{StaticResource Faint}" StrokeThickness="1.6"
                       Data="M0,0 L4,4 L8,0" Visibility="Collapsed" VerticalAlignment="Center" />
-                <Path x:Name="folder" Width="13" Height="11" Margin="0,0,6,0" Stretch="Uniform" Stroke="#9C9686" StrokeThickness="1.3"
+                <Path x:Name="folder" Width="14" Height="12" Margin="0,0,7,0" Stretch="Uniform" Stroke="{StaticResource FolderIcon}" StrokeThickness="1.3"
                       Data="M0,1 H5 L6.5,2.5 H13 V11 H0 Z" Visibility="Collapsed" VerticalAlignment="Center" />
-                <Path x:Name="tag" Style="{StaticResource KindIcon}" Tag="{Binding KindTag}" Margin="0,0,6,0" />
+                <!-- Protocol icon with a tiny presence badge on its corner when someone is on the entry -->
+                <Grid x:Name="tag" Margin="0,0,7,0" VerticalAlignment="Center">
+                    <Path Style="{StaticResource KindIcon}" Tag="{Binding KindTag}" />
+                    <Border Width="9" Height="9" CornerRadius="4.5" Margin="0,0,-3,-3" HorizontalAlignment="Right" VerticalAlignment="Bottom"
+                            Background="{Binding Badge.Color}" BorderBrush="{StaticResource Panel}" BorderThickness="1" ToolTip="{Binding Badge.ToolTip}"
+                            Visibility="{Binding Badge, Converter={StaticResource NullVis}}">
+                        <TextBlock Text="{Binding Badge.Initials}" FontSize="5.5" FontWeight="Bold" Foreground="{StaticResource Bg}" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Border>
+                </Grid>
+                <!-- Zabbix: health glyph on entries, count of problem hosts on folders -->
+                <Path DockPanel.Dock="Right" Style="{StaticResource HealthGlyph}" Tag="{Binding Health}" Margin="6,0,0,0" ToolTip="{Binding HealthTip}" />
+                <Border x:Name="pcount" DockPanel.Dock="Right" MinWidth="16" Height="16" CornerRadius="8" Padding="4,0" Margin="6,0,0,0" Background="{StaticResource Warn}"
+                        ToolTip="{Binding HealthTip}" Visibility="{Binding HasProblemCount, Converter={StaticResource BoolVis}}">
+                    <TextBlock Text="{Binding ProblemCount}" FontSize="10" FontWeight="SemiBold" Foreground="{StaticResource Bg}" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                </Border>
                 <TextBlock x:Name="name" Text="{Binding Name}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center"
                            Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=TreeViewItem}}" />
             </DockPanel>
             <HierarchicalDataTemplate.Triggers>
                 <DataTrigger Binding="{Binding IsSelected}" Value="True">
-                    <Setter TargetName="tag" Property="Stroke" Value="{StaticResource TextStrong}" />
+                    <Setter TargetName="name" Property="FontWeight" Value="SemiBold" />
                 </DataTrigger>
                 <DataTrigger Binding="{Binding IsFolder}" Value="True">
                     <Setter TargetName="chevron" Property="Visibility" Value="Visible" />
                     <Setter TargetName="folder" Property="Visibility" Value="Visible" />
                     <Setter TargetName="tag" Property="Visibility" Value="Collapsed" />
                     <Setter TargetName="name" Property="FontWeight" Value="SemiBold" />
+                    <Setter TargetName="name" Property="Foreground" Value="#C9CFD6" />
                 </DataTrigger>
                 <DataTrigger Binding="{Binding IsExpanded}" Value="False">
                     <Setter TargetName="chevron" Property="Data" Value="M0,0 L4,4 L0,8" />
                 </DataTrigger>
+                <DataTrigger Binding="{Binding ProblemCountHigh}" Value="True">
+                    <Setter TargetName="pcount" Property="Background" Value="{StaticResource Bad}" />
+                </DataTrigger>
             </HierarchicalDataTemplate.Triggers>
         </HierarchicalDataTemplate>
+
+        <!-- One tab in a pane's tab strip -->
+        <DataTemplate x:Key="TabHeader">
+            <StackPanel Orientation="Horizontal" MouseDown="OnTabMouseDown" Background="Transparent">
+                <StackPanel.ContextMenu>
+                    <ContextMenu>
+                        <MenuItem Header="Move to other pane" Click="OnMoveTab" />
+                        <Separator />
+                        <MenuItem Header="Close" InputGestureText="Ctrl+W" Click="OnCloseTab" />
+                    </ContextMenu>
+                </StackPanel.ContextMenu>
+                <Path Style="{StaticResource KindIcon}" Tag="{Binding KindTag}" Margin="0,0,7,0" />
+                <TextBlock Text="{Binding Title}" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" VerticalAlignment="Center" />
+                <Button Style="{StaticResource FlatButton}" Width="22" Padding="0" MinHeight="22" Margin="6,0,0,0" Foreground="{StaticResource Faint}"
+                        ToolTip="Close (Ctrl+W)" AutomationProperties.Name="Close tab"
+                        Command="{Binding DataContext.CloseSessionCommand, RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="{Binding}">
+                    <Path Data="M0,0 L8,8 M8,0 L0,8" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" StrokeThickness="1.3" />
+                </Button>
+            </StackPanel>
+        </DataTemplate>
+
+        <Style TargetType="ListBox" x:Key="TabStrip">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="ItemContainerStyle" Value="{StaticResource SessionTab}" />
+            <Setter Property="ItemTemplate" Value="{StaticResource TabHeader}" />
+            <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Hidden" />
+            <Setter Property="ScrollViewer.VerticalScrollBarVisibility" Value="Disabled" />
+            <Setter Property="ItemsPanel">
+                <Setter.Value><ItemsPanelTemplate><StackPanel Orientation="Horizontal" /></ItemsPanelTemplate></Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Pane frame: accent border on the focused pane in split view -->
+        <Style TargetType="Border" x:Key="PaneFrame">
+            <Setter Property="Background" Value="{StaticResource Bg}" />
+            <Setter Property="BorderBrush" Value="{StaticResource Border}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="3" />
+            <Style.Triggers>
+                <MultiDataTrigger>
+                    <MultiDataTrigger.Conditions>
+                        <Condition Binding="{Binding Tag, RelativeSource={RelativeSource Self}}" Value="focused" />
+                        <Condition Binding="{Binding IsSplit}" Value="True" />
+                    </MultiDataTrigger.Conditions>
+                    <Setter Property="BorderBrush" Value="{StaticResource Accent}" />
+                </MultiDataTrigger>
+            </Style.Triggers>
+        </Style>
+
+        <Style TargetType="TextBlock" x:Key="EmptyHint">
+            <Setter Property="Foreground" Value="{StaticResource Faint}" />
+            <Setter Property="HorizontalAlignment" Value="Center" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="TextAlignment" Value="Center" />
+            <Setter Property="Grid.Row" Value="1" />
+        </Style>
+
+        <Geometry x:Key="Glyph.Search">M10.5,10.5 L14,14 M11.5,6.5 A5,5 0 1 1 1.5,6.5 A5,5 0 1 1 11.5,6.5 Z</Geometry>
     </Window.Resources>
 
     <Window.InputBindings>
@@ -61,46 +135,69 @@
         <KeyBinding Key="W" Modifiers="Control" Command="{Binding CloseSessionCommand}" CommandParameter="{Binding ActiveSession}" />
     </Window.InputBindings>
 
+    <!-- Maximized windows overhang the screen by the resize border; pad it back in. -->
+    <Border x:Name="Root">
+        <Border.Style>
+            <Style TargetType="Border">
+                <Style.Triggers>
+                    <DataTrigger Binding="{Binding WindowState, RelativeSource={RelativeSource AncestorType=Window}}" Value="Maximized">
+                        <Setter Property="Padding" Value="7" />
+                    </DataTrigger>
+                </Style.Triggers>
+            </Style>
+        </Border.Style>
     <DockPanel>
-        <!-- Menu + search strip -->
-        <Border DockPanel.Dock="Top" Height="30" Background="{StaticResource Header}" BorderBrush="{StaticResource Border}" BorderThickness="0,0,0,1">
-            <DockPanel Margin="6,0" LastChildFill="False">
-                <TextBlock Text="RemoteMan" FontWeight="SemiBold" Foreground="#E4E6E9" VerticalAlignment="Center" Margin="4,0,10,0" />
-                <Menu VerticalAlignment="Center">
-                    <MenuItem Header="_File">
-                        <MenuItem Header="Data sources…" Click="OnDataSources" />
-                        <Separator />
-                        <MenuItem Header="E_xit" Click="OnExit" />
-                    </MenuItem>
-                    <MenuItem Header="_Edit">
-                        <MenuItem Header="New RDP entry" Command="{Binding NewEntryCommand}" CommandParameter="Rdp" />
-                        <MenuItem Header="New SSH entry" Command="{Binding NewEntryCommand}" CommandParameter="Ssh" />
-                        <MenuItem Header="New web entry" Command="{Binding NewEntryCommand}" CommandParameter="Web" />
-                        <MenuItem Header="New VNC entry" Command="{Binding NewEntryCommand}" CommandParameter="Vnc" />
-                        <MenuItem Header="New credential" Command="{Binding NewEntryCommand}" CommandParameter="Credential" />
-                        <MenuItem Header="New folder" Command="{Binding NewEntryCommand}" CommandParameter="Folder" />
-                        <Separator />
-                        <MenuItem Header="Edit" InputGestureText="F2" Command="{Binding EditCommand}" />
-                        <MenuItem Header="Duplicate…" InputGestureText="Ctrl+D" Command="{Binding DuplicateCommand}" />
-                        <MenuItem Header="Delete" InputGestureText="Del" Command="{Binding DeleteCommand}" />
-                        <Separator />
-                        <MenuItem Header="Copy user name" InputGestureText="Ctrl+Shift+U" Command="{Binding CopyUserNameCommand}" />
-                        <MenuItem Header="Copy password" InputGestureText="Ctrl+Shift+P" Command="{Binding CopyPasswordCommand}" />
-                        <MenuItem Header="Copy both (paste twice)" InputGestureText="Ctrl+Shift+B" Command="{Binding CopyBothCommand}" />
-                    </MenuItem>
-                    <MenuItem Header="_Session">
-                        <MenuItem Header="Connect" InputGestureText="Enter" Command="{Binding ConnectCommand}" />
-                        <MenuItem Header="Close tab" InputGestureText="Ctrl+W" Command="{Binding CloseSessionCommand}" CommandParameter="{Binding ActiveSession}" />
-                    </MenuItem>
-                </Menu>
-                <Border DockPanel.Dock="Right" Width="340" Height="22" VerticalAlignment="Center" Background="{StaticResource Bg}"
-                        BorderBrush="{StaticResource InputBorder}" BorderThickness="1">
-                    <DockPanel Margin="6,0">
-                        <TextBlock DockPanel.Dock="Right" Text="Ctrl+K" FontFamily="{StaticResource MonoFont}" FontSize="10" Foreground="{StaticResource Faint}" VerticalAlignment="Center" />
+        <!-- Title bar: app mark, a few actions, search everywhere, who's online, window buttons -->
+        <Border DockPanel.Dock="Top" Height="36" Background="{StaticResource Header}" BorderBrush="{StaticResource Border}" BorderThickness="0,0,0,1">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+
+                <StackPanel Orientation="Horizontal" Margin="10,0,0,0" VerticalAlignment="Center">
+                    <Border Width="20" Height="20" CornerRadius="4" Background="{StaticResource Accent}">
+                        <TextBlock Text="R" FontWeight="Bold" Foreground="{StaticResource Bg}" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Border>
+                    <TextBlock Text="RemoteMan" FontWeight="SemiBold" Margin="8,0,10,0" VerticalAlignment="Center" />
+                    <Border Width="1" Height="20" Background="{StaticResource Border}" />
+                </StackPanel>
+
+                <StackPanel Grid.Column="1" Orientation="Horizontal" Margin="4,0,0,0" VerticalAlignment="Center">
+                    <Button Style="{StaticResource BarButton}" ToolTip="New entry" AutomationProperties.Name="New entry" Click="OnNewMenu">
+                        <Path Data="M7,1 V13 M1,7 H13" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" StrokeThickness="1.6" />
+                    </Button>
+                    <Button Style="{StaticResource BarButton}" ToolTip="Edit entry (F2)" AutomationProperties.Name="Edit entry" Command="{Binding EditCommand}">
+                        <Path Data="M1,13 H4 L13,4 L10,1 L1,10 Z" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" StrokeThickness="1.4" StrokeLineJoin="Round" />
+                    </Button>
+                    <Button Style="{StaticResource BarButton}" ToolTip="Connect (Enter)" AutomationProperties.Name="Connect" Command="{Binding ConnectCommand}">
+                        <Path Data="M2,1 L12,7 L2,13 Z" Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
+                    </Button>
+                    <Button Style="{StaticResource BarButton}" ToolTip="Add to or remove from favorites" AutomationProperties.Name="Toggle favorite" Command="{Binding ToggleFavoriteCommand}">
+                        <Path Data="M7,0.8 L8.9,4.8 L13.2,5.3 L10,8.3 L10.9,12.6 L7,10.4 L3.1,12.6 L4,8.3 L0.8,5.3 L5.1,4.8 Z" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" StrokeThickness="1.3" StrokeLineJoin="Round" />
+                    </Button>
+                    <ToggleButton Style="{StaticResource BarToggle}" IsChecked="{Binding IsSplit}" ToolTip="Split view" AutomationProperties.Name="Split view">
+                        <Path Data="M1,1 H15 V13 H1 Z M8,1 V13" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ToggleButton}}" StrokeThickness="1.4" />
+                    </ToggleButton>
+                    <Button Style="{StaticResource BarButton}" ToolTip="More" AutomationProperties.Name="More actions" Click="OnMoreMenu">
+                        <Path Data="M1,7 H3 M6,7 H8 M11,7 H13" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" StrokeThickness="2" StrokeStartLineCap="Round" StrokeEndLineCap="Round" />
+                    </Button>
+                </StackPanel>
+
+                <Border Grid.Column="2" MaxWidth="440" Height="26" Margin="16,0" VerticalAlignment="Center" Background="{StaticResource Bg}"
+                        BorderBrush="{StaticResource InputBorder}" BorderThickness="1" CornerRadius="4" WindowChrome.IsHitTestVisibleInChrome="True">
+                    <DockPanel Margin="8,0,6,0">
+                        <Path DockPanel.Dock="Left" Data="{StaticResource Glyph.Search}" Stroke="{StaticResource Faint}" StrokeThickness="1.4" VerticalAlignment="Center" Margin="0,0,6,0" />
+                        <Border DockPanel.Dock="Right" BorderBrush="{StaticResource InputBorder}" BorderThickness="1" CornerRadius="3" Padding="4,0" VerticalAlignment="Center">
+                            <TextBlock Text="Ctrl K" FontFamily="{StaticResource MonoFont}" FontSize="10" Foreground="{StaticResource Faint}" />
+                        </Border>
                         <Grid>
                             <TextBox x:Name="Search" Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged, Delay=120}" BorderThickness="0" Background="Transparent"
-                                     AutomationProperties.Name="Find entry or quick connect host" KeyDown="OnSearchKeyDown" />
-                            <TextBlock Text="Find entry or quick connect host" Foreground="{StaticResource Faint}" IsHitTestVisible="False" VerticalAlignment="Center" Margin="5,0">
+                                     AutomationProperties.Name="Search entries or type a host to connect" KeyDown="OnSearchKeyDown" />
+                            <TextBlock Text="Search entries, or type a host to connect" Foreground="{StaticResource Faint}" IsHitTestVisible="False" VerticalAlignment="Center" Margin="5,0">
                                 <TextBlock.Style>
                                     <Style TargetType="TextBlock">
                                         <Setter Property="Visibility" Value="Collapsed" />
@@ -113,64 +210,205 @@
                         </Grid>
                     </DockPanel>
                 </Border>
+
+                <!-- Who's online (shared data sources only). The AI assistant button goes right of this. -->
+                <ItemsControl Grid.Column="3" ItemsSource="{Binding OnlineUsers}" Focusable="False" VerticalAlignment="Center" Margin="0,0,8,0">
+                    <ItemsControl.ItemsPanel><ItemsPanelTemplate><StackPanel Orientation="Horizontal" /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Border Width="24" Height="24" CornerRadius="12" Background="{Binding Color}" BorderBrush="{StaticResource Header}" BorderThickness="2"
+                                    Margin="-5,0,0,0" ToolTip="{Binding ToolTip}" WindowChrome.IsHitTestVisibleInChrome="True">
+                                <TextBlock Text="{Binding Initials}" FontSize="9" FontWeight="SemiBold" Foreground="{StaticResource Bg}" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+
+                <StackPanel Grid.Column="4" Orientation="Horizontal">
+                    <Button Style="{StaticResource CaptionButton}" ToolTip="Minimize" AutomationProperties.Name="Minimize" Click="OnMinimize">
+                        <Path Data="M0,0 H10" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" StrokeThickness="1" />
+                    </Button>
+                    <Button Style="{StaticResource CaptionButton}" ToolTip="Maximize" AutomationProperties.Name="Maximize" Click="OnMaximize">
+                        <Path x:Name="MaxGlyph" Data="M0.5,0.5 H9.5 V9.5 H0.5 Z" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" StrokeThickness="1" />
+                    </Button>
+                    <Button Style="{StaticResource CloseCaptionButton}" ToolTip="Close" AutomationProperties.Name="Close" Click="OnClose">
+                        <Path Data="M0,0 L10,10 M10,0 L0,10" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" StrokeThickness="1" />
+                    </Button>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <!-- Status bar: quick connect, messages, active session, the Q, users online, version -->
+        <Border DockPanel.Dock="Bottom" Height="26" Background="{StaticResource Header}" BorderBrush="{StaticResource Border}" BorderThickness="0,1,0,0">
+            <DockPanel>
+                <Border DockPanel.Dock="Left" BorderBrush="{StaticResource Border}" BorderThickness="0,0,1,0" Padding="10,0">
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                        <TextBlock Text="Connect" Style="{StaticResource Muted}" FontSize="11" VerticalAlignment="Center" Margin="0,0,6,0" />
+                        <Grid Width="150">
+                            <TextBox x:Name="QuickHostBox" Text="{Binding QuickHost, UpdateSourceTrigger=PropertyChanged}" MinHeight="18" Height="18" Padding="4,0"
+                                     FontFamily="{StaticResource MonoFont}" FontSize="11" AutomationProperties.Name="Quick connect host or IP" KeyDown="OnQuickHostKeyDown" />
+                            <TextBlock Text="Host or IP address" FontSize="11" Foreground="{StaticResource Faint}" IsHitTestVisible="False" VerticalAlignment="Center" Margin="6,0">
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="Visibility" Value="Collapsed" />
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding Text, ElementName=QuickHostBox}" Value=""><Setter Property="Visibility" Value="Visible" /></DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
+                        </Grid>
+                    </StackPanel>
+                </Border>
+
+                <TextBlock DockPanel.Dock="Right" Text="{Binding AppVersion}" Style="{StaticResource Muted}" FontSize="11" VerticalAlignment="Center" Margin="10,0" />
+                <TextBlock DockPanel.Dock="Right" Text="{Binding OnlineText}" Style="{StaticResource Muted}" FontSize="11" VerticalAlignment="Center" Margin="10,0,0,0" />
+
+                <!-- Zabbix: a small "Z" like the Q. Green when connected, red when unreachable, grey while connecting. Click for details. -->
+                <Grid DockPanel.Dock="Right" Visibility="{Binding ZabbixActive, Converter={StaticResource BoolVis}}">
+                    <ToggleButton x:Name="ZButton" Style="{StaticResource BarToggle}" Width="30" Height="24" ToolTip="{Binding ZabbixStatusText}" AutomationProperties.Name="{Binding ZabbixStatusText}">
+                        <Grid Width="16" Height="16">
+                            <Ellipse>
+                                <Ellipse.Style>
+                                    <Style TargetType="Ellipse">
+                                        <Setter Property="Fill" Value="{StaticResource Faint}" />
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding ZabbixConnState}" Value="ok"><Setter Property="Fill" Value="{StaticResource Ok}" /></DataTrigger>
+                                            <DataTrigger Binding="{Binding ZabbixConnState}" Value="bad"><Setter Property="Fill" Value="{StaticResource Bad}" /></DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Ellipse.Style>
+                            </Ellipse>
+                            <TextBlock Text="Z" FontSize="10" FontWeight="Bold" Foreground="{StaticResource Bg}" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Grid>
+                    </ToggleButton>
+                    <Popup IsOpen="{Binding IsChecked, ElementName=ZButton}" StaysOpen="False" Placement="Top" PlacementTarget="{Binding ElementName=ZButton}"
+                           HorizontalOffset="-240" VerticalOffset="-4" Closed="OnZPopupClosed">
+                        <Border Width="300" Background="#1D2125" BorderBrush="#353B42" BorderThickness="1" CornerRadius="6" Padding="12">
+                            <StackPanel>
+                                <TextBlock Text="Zabbix" FontWeight="SemiBold" Margin="0,0,0,6" />
+                                <DockPanel>
+                                    <Path Style="{StaticResource HealthGlyph}" Tag="{Binding ZabbixStatusTag}" Margin="0,0,6,0" VerticalAlignment="Top" />
+                                    <TextBlock Text="{Binding ZabbixStatusText}" TextWrapping="Wrap" />
+                                </DockPanel>
+                                <TextBlock Text="{Binding ZabbixRouteText}" Style="{StaticResource Muted}" FontSize="11" TextWrapping="Wrap" Margin="0,6,0,0" />
+                                <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
+                                    <Button Content="Settings…" Command="{Binding ZabbixSettingsCommand}" Click="OnZPopupButton" />
+                                    <Button Content="Import hosts…" Margin="6,0,0,0" Command="{Binding ImportFromZabbixCommand}" Click="OnZPopupButton" />
+                                </StackPanel>
+                            </StackPanel>
+                        </Border>
+                    </Popup>
+                </Grid>
+
+                <!-- Shared data source: a small "Q", green when connected, red when offline. Hidden for local. Click for details. -->
+                <Grid DockPanel.Dock="Right" Visibility="{Binding IsSharedSource, Converter={StaticResource BoolVis}}">
+                    <ToggleButton x:Name="QButton" Style="{StaticResource BarToggle}" Width="30" Height="24" ToolTip="{Binding DataSourceText}" AutomationProperties.Name="{Binding DataSourceText}">
+                        <Grid Width="16" Height="16">
+                            <Ellipse>
+                                <Ellipse.Style>
+                                    <Style TargetType="Ellipse">
+                                        <Setter Property="Fill" Value="{StaticResource Bad}" />
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding DataSourceOk}" Value="True"><Setter Property="Fill" Value="{StaticResource Ok}" /></DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Ellipse.Style>
+                            </Ellipse>
+                            <TextBlock Text="Q" FontSize="10" FontWeight="Bold" Foreground="{StaticResource Bg}" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Grid>
+                    </ToggleButton>
+                    <Popup IsOpen="{Binding IsChecked, ElementName=QButton}" StaysOpen="False" Placement="Top" PlacementTarget="{Binding ElementName=QButton}"
+                           HorizontalOffset="-240" VerticalOffset="-4" Closed="OnQPopupClosed">
+                        <Border Width="300" Background="#1D2125" BorderBrush="#353B42" BorderThickness="1" CornerRadius="6" Padding="12">
+                            <StackPanel>
+                                <TextBlock Text="Shared database" FontWeight="SemiBold" Margin="0,0,0,6" />
+                                <TextBlock Text="{Binding DataSourceText}" TextWrapping="Wrap" />
+                                <TextBlock Text="{Binding OnlineText}" Style="{StaticResource Muted}" FontSize="11" Margin="0,6,0,0" />
+                                <TextBlock Text="When the database is unreachable, RemoteMan works from its local cache and retries every 15 seconds."
+                                           Style="{StaticResource Muted}" FontSize="11" TextWrapping="Wrap" Margin="0,6,0,0" />
+                            </StackPanel>
+                        </Border>
+                    </Popup>
+                </Grid>
+
+                <TextBlock DockPanel.Dock="Right" Text="{Binding ActiveSession.StatusText}" FontFamily="{StaticResource MonoFont}" Style="{StaticResource Muted}" FontSize="11" VerticalAlignment="Center" Margin="10,0" />
+                <TextBlock Text="{Binding Message}" Foreground="{StaticResource Presence}" FontSize="11" Margin="10,0" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
             </DockPanel>
         </Border>
 
-        <!-- Status bar -->
-        <Border DockPanel.Dock="Bottom" Height="22" Background="{StaticResource Header}" BorderBrush="{StaticResource Border}" BorderThickness="0,1,0,0">
-            <DockPanel Margin="8,0">
-                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                    <!-- Shared data source: a small "Q", green when connected, red when not. Hidden for local. -->
-                    <Border Width="14" Height="14" BorderThickness="1" Margin="0,0,8,0" ToolTip="{Binding DataSourceText}"
-                            Visibility="{Binding IsSharedSource, Converter={StaticResource BoolVis}}"
-                            AutomationProperties.Name="{Binding DataSourceText}">
-                        <Border.Style>
-                            <Style TargetType="Border">
-                                <Setter Property="BorderBrush" Value="{StaticResource Bad}" />
-                                <Setter Property="TextElement.Foreground" Value="{StaticResource Bad}" />
-                                <Style.Triggers>
-                                    <DataTrigger Binding="{Binding DataSourceOk}" Value="True">
-                                        <Setter Property="BorderBrush" Value="{StaticResource Ok}" />
-                                        <Setter Property="TextElement.Foreground" Value="{StaticResource Ok}" />
-                                    </DataTrigger>
-                                </Style.Triggers>
-                            </Style>
-                        </Border.Style>
-                        <TextBlock Text="Q" FontSize="9" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center"
-                                   Foreground="{Binding BorderBrush, RelativeSource={RelativeSource AncestorType=Border}}" />
-                    </Border>
-                    <TextBlock Text="{Binding OnlineText}" Style="{StaticResource Muted}" FontSize="11" />
+        <!-- Icon rail -->
+        <Border DockPanel.Dock="Left" Width="44" Background="{StaticResource Rail}" BorderBrush="{StaticResource Border}" BorderThickness="0,0,1,0">
+            <DockPanel Margin="0,6">
+                <Button DockPanel.Dock="Bottom" Style="{StaticResource FlatButton}" Width="34" Height="34" Padding="0" Foreground="#8E98A3"
+                        ToolTip="Data sources" AutomationProperties.Name="Data sources" Click="OnDataSources">
+                    <Path Data="M1,3 A6,2.5 0 1 1 13,3 A6,2.5 0 1 1 1,3 Z M1,3 V13 A6,2.5 0 0 0 13,13 V3 M1,8 A6,2.5 0 0 0 13,8"
+                          Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" StrokeThickness="1.3" />
+                </Button>
+                <StackPanel>
+                    <RadioButton GroupName="Rail" Style="{StaticResource RailButton}" Tag="nav" IsChecked="True" Checked="OnRailChecked" ToolTip="Navigation" AutomationProperties.Name="Navigation">
+                        <Path Data="M1,2 H15 M1,8 H10 M1,14 H12" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=RadioButton}}" StrokeThickness="1.6" StrokeStartLineCap="Round" StrokeEndLineCap="Round" />
+                    </RadioButton>
+                    <RadioButton GroupName="Rail" Style="{StaticResource RailButton}" Tag="fav" Checked="OnRailChecked" ToolTip="Favorites" AutomationProperties.Name="Favorites">
+                        <Path Data="M8,0.8 L10.1,5.2 L14.9,5.8 L11.4,9.1 L12.3,13.9 L8,11.5 L3.7,13.9 L4.6,9.1 L1.1,5.8 L5.9,5.2 Z" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=RadioButton}}" StrokeThickness="1.4" StrokeLineJoin="Round" />
+                    </RadioButton>
+                    <RadioButton GroupName="Rail" Style="{StaticResource RailButton}" Tag="recent" Checked="OnRailChecked" ToolTip="Recent" AutomationProperties.Name="Recent">
+                        <Path Data="M15,8 A7,7 0 1 1 1,8 A7,7 0 1 1 15,8 Z M8,4 V8 L10.5,9.8" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=RadioButton}}" StrokeThickness="1.4" StrokeLineJoin="Round" />
+                    </RadioButton>
+                    <RadioButton GroupName="Rail" Style="{StaticResource RailButton}" Tag="cred" Checked="OnRailChecked" ToolTip="Credentials" AutomationProperties.Name="Credentials">
+                        <Path Data="{StaticResource Icon.KEY}" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=RadioButton}}" StrokeThickness="1.4" StrokeStartLineCap="Round" StrokeEndLineCap="Round" />
+                    </RadioButton>
                 </StackPanel>
-                <TextBlock DockPanel.Dock="Right" Text="{Binding ActiveSession.StatusText}" Style="{StaticResource Muted}" FontSize="11" VerticalAlignment="Center" />
-                <TextBlock Text="{Binding Message}" Foreground="{StaticResource Presence}" FontSize="11" Margin="14,0" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
             </DockPanel>
         </Border>
 
         <Grid>
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="260" MinWidth="180" MaxWidth="520" />
+                <ColumnDefinition Width="264" MinWidth="180" MaxWidth="520" />
                 <ColumnDefinition Width="1" />
                 <ColumnDefinition Width="*" />
             </Grid.ColumnDefinitions>
 
-            <!-- Left column: tree + properties -->
+            <!-- Navigation panel: title, data source, tree, entry card -->
             <Grid Background="{StaticResource Panel}">
                 <Grid.RowDefinitions>
-                    <RowDefinition Height="24" />
+                    <RowDefinition Height="32" />
+                    <RowDefinition Height="Auto" />
                     <RowDefinition Height="*" MinHeight="100" />
                     <RowDefinition Height="1" />
                     <RowDefinition Height="Auto" />
                 </Grid.RowDefinitions>
                 <Border BorderBrush="{StaticResource Border}" BorderThickness="0,0,0,1">
-                    <DockPanel Margin="8,0,2,0">
-                        <Button DockPanel.Dock="Right" Style="{StaticResource FlatButton}" ToolTip="New entry" AutomationProperties.Name="New entry" Click="OnNewMenu">
-                            <Path Data="M5,0 V10 M0,5 H10" Stroke="#B8BCC3" StrokeThickness="1.5" />
+                    <DockPanel Margin="12,0,4,0">
+                        <Button DockPanel.Dock="Right" Style="{StaticResource FlatButton}" Width="26" Padding="0" ToolTip="Collapse all" AutomationProperties.Name="Collapse all folders" Click="OnCollapseAll">
+                            <Path Data="M0,5 L4,1 L8,5" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" StrokeThickness="1.5" />
                         </Button>
-                        <TextBlock Text="Navigation" Style="{StaticResource PaneTitle}" />
+                        <TextBlock Text="{Binding PanelTitle}" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource Muted}" VerticalAlignment="Center"
+                                   Typography.Capitals="AllSmallCaps" />
                     </DockPanel>
                 </Border>
-                <TreeView x:Name="Tree" Grid.Row="1" ItemsSource="{Binding Roots}" ItemContainerStyle="{StaticResource EntryItem}"
-                          Background="Transparent" BorderThickness="0" Padding="0,2"
+
+                <Border Grid.Row="1" Margin="8,8,8,4" Height="30" Background="#1D2125" BorderBrush="{StaticResource InputBorder}" BorderThickness="1" CornerRadius="4"
+                        Visibility="{Binding IsNavPanel, Converter={StaticResource BoolVis}}" ToolTip="{Binding DataSourceText}">
+                    <DockPanel Margin="9,0">
+                        <!-- Database glyph: blue when connected, red when offline -->
+                        <Path Data="M1,3 A6,2.5 0 1 1 13,3 A6,2.5 0 1 1 1,3 Z M1,3 V13 A6,2.5 0 0 0 13,13 V3 M1,8 A6,2.5 0 0 0 13,8"
+                              StrokeThickness="1.3" Margin="0,0,8,0" VerticalAlignment="Center">
+                            <Path.Style>
+                                <Style TargetType="Path">
+                                    <Setter Property="Stroke" Value="{StaticResource Bad}" />
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding DataSourceOk}" Value="True"><Setter Property="Stroke" Value="{StaticResource EntryIcon}" /></DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Path.Style>
+                        </Path>
+                        <TextBlock Text="{Binding DataSourceName}" FontWeight="SemiBold" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                    </DockPanel>
+                </Border>
+
+                <TreeView x:Name="Tree" Grid.Row="2" ItemsSource="{Binding Roots}" ItemContainerStyle="{StaticResource EntryItem}"
+                          Background="Transparent" BorderThickness="0" Padding="0,4"
                           VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling"
                           SelectedItemChanged="OnTreeSelectionChanged" PreviewMouseLeftButtonDown="OnTreeMouseDown"
                           PreviewMouseMove="OnTreeMouseMove" AllowDrop="True" DragOver="OnTreeDragOver" DragLeave="OnTreeDragLeave" Drop="OnTreeDrop"
@@ -179,32 +417,67 @@
                     <!-- Filled per entry when it opens (Views/EntryMenu.cs) -->
                     <TreeView.ContextMenu><ContextMenu /></TreeView.ContextMenu>
                 </TreeView>
-                <GridSplitter Grid.Row="2" HorizontalAlignment="Stretch" Height="1" />
+                <GridSplitter Grid.Row="3" HorizontalAlignment="Stretch" Height="1" />
 
-                <!-- Properties pane -->
-                <Border Grid.Row="3" Background="{StaticResource Panel2}" Visibility="{Binding HasSelection, Converter={StaticResource BoolVis}}">
+                <!-- Entry card -->
+                <Border Grid.Row="4" Background="{StaticResource Panel2}" Padding="12,10,12,12" Visibility="{Binding HasSelection, Converter={StaticResource BoolVis}}">
                     <StackPanel>
-                        <Border Height="24" BorderBrush="{StaticResource BorderSoft}" BorderThickness="0,0,0,1">
-                            <TextBlock Text="Properties" Style="{StaticResource PaneTitle}" Margin="8,0" />
-                        </Border>
-                        <StackPanel Margin="8,6,8,8">
-                            <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
-                                <Path Style="{StaticResource KindIcon}" Tag="{Binding SelectedKindTag}" Margin="0,0,6,0" />
-                                <TextBlock Text="{Binding SelectedName}" FontWeight="SemiBold" Foreground="#E4E6E9" TextTrimming="CharacterEllipsis" />
-                            </StackPanel>
-                            <ItemsControl ItemsSource="{Binding Properties}">
+                        <DockPanel Margin="0,0,0,6">
+                            <Path Style="{StaticResource KindIcon}" Tag="{Binding SelectedKindTag}" Margin="0,0,8,0" />
+                            <TextBlock Text="{Binding SelectedName}" FontWeight="SemiBold" Foreground="{StaticResource TextStrong}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                        </DockPanel>
+                        <ItemsControl ItemsSource="{Binding Properties}" Focusable="False">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <DockPanel Margin="0,2">
+                                        <TextBlock Width="66" Text="{Binding Key}" Style="{StaticResource Muted}" FontSize="11" />
+                                        <TextBlock x:Name="v" Text="{Binding Value}" FontSize="11" TextTrimming="CharacterEllipsis" ToolTip="{Binding Value}" />
+                                    </DockPanel>
+                                    <DataTemplate.Triggers>
+                                        <DataTrigger Binding="{Binding State}" Value="presence"><Setter TargetName="v" Property="Foreground" Value="{StaticResource Presence}" /></DataTrigger>
+                                    </DataTemplate.Triggers>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+
+                        <!-- Zabbix: state, how it matched, open problems -->
+                        <StackPanel Visibility="{Binding SelectedZabbixVisible, Converter={StaticResource BoolVis}}">
+                            <Border Height="1" Background="{StaticResource BorderSoft}" Margin="0,8,0,8" />
+                            <DockPanel>
+                                <TextBlock DockPanel.Dock="Right" VerticalAlignment="Center" FontSize="11" Visibility="{Binding SelectedZabbixLinked, Converter={StaticResource BoolVis}}">
+                                    <Hyperlink Command="{Binding OpenInZabbixCommand}" Foreground="#7FD3C4" ToolTip="Open this host's problems in the Zabbix web UI">Open in Zabbix</Hyperlink>
+                                </TextBlock>
+                                <TextBlock Text="ZABBIX" FontSize="10" FontWeight="SemiBold" Foreground="{StaticResource Muted}" VerticalAlignment="Center" Margin="0,0,8,0" />
+                                <Path Style="{StaticResource HealthGlyph}" Tag="{Binding SelectedZabbixTag}" Margin="0,0,4,0">
+                                    <Path.LayoutTransform><ScaleTransform ScaleX="0.85" ScaleY="0.85" /></Path.LayoutTransform>
+                                </Path>
+                                <TextBlock Text="{Binding SelectedZabbixSummary}" FontSize="11" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                            </DockPanel>
+                            <DockPanel Margin="0,4,0,0" Visibility="{Binding SelectedZabbixLinked, Converter={StaticResource BoolVis}}">
+                                <TextBlock Width="66" Text="Matched" Style="{StaticResource Muted}" FontSize="11" />
+                                <TextBlock Text="{Binding SelectedZabbixMatch}" FontSize="11" TextTrimming="CharacterEllipsis" ToolTip="{Binding SelectedZabbixMatch}" />
+                            </DockPanel>
+                            <ItemsControl ItemsSource="{Binding SelectedProblems}" Focusable="False" Margin="0,4,0,0">
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate>
-                                        <DockPanel Margin="0,1">
-                                            <TextBlock Width="58" Text="{Binding Key}" Style="{StaticResource Muted}" />
-                                            <TextBlock x:Name="v" Text="{Binding Value}" TextTrimming="CharacterEllipsis" ToolTip="{Binding Value}" />
-                                        </DockPanel>
-                                        <DataTemplate.Triggers>
-                                            <DataTrigger Binding="{Binding State}" Value="presence"><Setter TargetName="v" Property="Foreground" Value="{StaticResource Presence}" /></DataTrigger>
-                                        </DataTemplate.Triggers>
+                                        <Border Background="#1A1E22" CornerRadius="4" Padding="6,5" Margin="0,2">
+                                            <DockPanel>
+                                                <Path Style="{StaticResource HealthGlyph}" Tag="{Binding Tag}" VerticalAlignment="Top" Margin="0,0,6,0">
+                                                    <Path.LayoutTransform><ScaleTransform ScaleX="0.8" ScaleY="0.8" /></Path.LayoutTransform>
+                                                </Path>
+                                                <StackPanel>
+                                                    <TextBlock Text="{Binding Name}" FontSize="11" TextWrapping="Wrap" />
+                                                    <TextBlock Text="{Binding Meta}" FontSize="10" Style="{StaticResource Muted}" Margin="0,1,0,0" TextTrimming="CharacterEllipsis" />
+                                                </StackPanel>
+                                            </DockPanel>
+                                        </Border>
                                     </DataTemplate>
                                 </ItemsControl.ItemTemplate>
                             </ItemsControl>
+                            <DockPanel Margin="0,2,0,0" Visibility="{Binding SelectedZabbixUnlinked, Converter={StaticResource BoolVis}}">
+                                <TextBlock DockPanel.Dock="Right" FontSize="11"><Hyperlink Command="{Binding LinkToZabbixCommand}" Foreground="#7FD3C4">Link to Zabbix host</Hyperlink></TextBlock>
+                                <TextBlock Text="No Zabbix host matches this entry." Style="{StaticResource Muted}" FontSize="11" TextTrimming="CharacterEllipsis" />
+                            </DockPanel>
                         </StackPanel>
                     </StackPanel>
                 </Border>
@@ -212,37 +485,83 @@
 
             <GridSplitter Grid.Column="1" Width="1" HorizontalAlignment="Stretch" />
 
-            <!-- Working area -->
-            <DockPanel Grid.Column="2" Background="{StaticResource Work}">
-                <Border DockPanel.Dock="Top" Height="26" Background="{StaticResource Panel}" BorderBrush="{StaticResource Border}" BorderThickness="0,0,0,1">
-                    <ListBox ItemsSource="{Binding Sessions}" SelectedItem="{Binding ActiveSession}" ItemContainerStyle="{StaticResource SessionTab}"
-                             Background="Transparent" BorderThickness="0" ScrollViewer.HorizontalScrollBarVisibility="Hidden">
-                        <ListBox.ItemsPanel><ItemsPanelTemplate><StackPanel Orientation="Horizontal" /></ItemsPanelTemplate></ListBox.ItemsPanel>
-                        <ListBox.ItemTemplate>
-                            <DataTemplate>
-                                <StackPanel Orientation="Horizontal" MouseDown="OnTabMouseDown">
-                                    <Path Style="{StaticResource KindIcon}" Tag="{Binding KindTag}" Margin="0,0,6,0" />
-                                    <TextBlock Text="{Binding Title}" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" VerticalAlignment="Center" />
-                                    <Button Style="{StaticResource FlatButton}" Padding="6,0" MinHeight="18" Margin="4,0,-6,0" Foreground="{StaticResource Faint}"
-                                            Content="×" ToolTip="Close (Ctrl+W)" AutomationProperties.Name="Close tab"
-                                            Command="{Binding DataContext.CloseSessionCommand, RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="{Binding}" />
-                                </StackPanel>
-                            </DataTemplate>
-                        </ListBox.ItemTemplate>
-                    </ListBox>
-                </Border>
-                <Grid>
-                    <TextBlock Text="Double-click an entry to connect" Foreground="{StaticResource Faint}" HorizontalAlignment="Center" VerticalAlignment="Center" />
-                    <ItemsControl ItemsSource="{Binding Sessions}" Focusable="False">
-                        <ItemsControl.ItemsPanel><ItemsPanelTemplate><Grid /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+            <!-- Working area: one or two panes, each with its own tabs -->
+            <Grid Grid.Column="2" Background="{StaticResource Work}">
+                <Grid Margin="4">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="{Binding PaneGapWidth}" />
+                        <ColumnDefinition Width="{Binding RightPaneWidth}" />
+                    </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="34" />
+                        <RowDefinition Height="*" />
+                    </Grid.RowDefinitions>
+
+                    <Border Grid.RowSpan="2" Style="{StaticResource PaneFrame}" Tag="{Binding LeftPaneTag}" />
+                    <Border Grid.Column="2" Grid.RowSpan="2" Style="{StaticResource PaneFrame}" Tag="{Binding RightPaneTag}"
+                            Visibility="{Binding IsSplit, Converter={StaticResource BoolVis}}" />
+
+                    <Border Margin="1,1,1,0" Background="{StaticResource Panel}" BorderBrush="{StaticResource Border}" BorderThickness="0,0,0,1" CornerRadius="3,3,0,0">
+                        <ListBox Style="{StaticResource TabStrip}" Tag="{Binding LeftPaneTag}" ItemsSource="{Binding LeftSessions}" SelectedItem="{Binding LeftActive}"
+                                 PreviewMouseDown="OnLeftPaneMouseDown" AutomationProperties.Name="Left pane tabs" />
+                    </Border>
+                    <Border Grid.Column="2" Margin="1,1,1,0" Background="{StaticResource Panel}" BorderBrush="{StaticResource Border}" BorderThickness="0,0,0,1" CornerRadius="3,3,0,0"
+                            Visibility="{Binding IsSplit, Converter={StaticResource BoolVis}}">
+                        <ListBox Style="{StaticResource TabStrip}" Tag="{Binding RightPaneTag}" ItemsSource="{Binding RightSessions}" SelectedItem="{Binding RightActive}"
+                                 PreviewMouseDown="OnRightPaneMouseDown" AutomationProperties.Name="Right pane tabs" />
+                    </Border>
+
+                    <TextBlock Text="Double-click an entry to connect.&#x0a;It opens in the focused pane.">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock" BasedOn="{StaticResource EmptyHint}">
+                                <Setter Property="Visibility" Value="Collapsed" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding LeftSessions.Count}" Value="0"><Setter Property="Visibility" Value="Visible" /></DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
+                    <TextBlock Grid.Column="2" Text="Click here, then open an entry,&#x0a;or right-click a tab and move it here.">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock" BasedOn="{StaticResource EmptyHint}">
+                                <Setter Property="Visibility" Value="Collapsed" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding RightSessions.Count}" Value="0"><Setter Property="Visibility" Value="Visible" /></DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
+                    <!-- Empty right pane: clicking it focuses it -->
+                    <Border Grid.Row="1" Grid.Column="2" Background="Transparent" MouseDown="OnRightPaneMouseDown" />
+                    <Border Grid.Row="1" Background="Transparent" MouseDown="OnLeftPaneMouseDown" />
+
+                    <!-- All session views live in one panel and only change column, so moving a tab never reconnects it -->
+                    <ItemsControl Grid.Row="1" Grid.ColumnSpan="3" ItemsSource="{Binding Sessions}" Focusable="False">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="{Binding PaneGapWidth}" />
+                                        <ColumnDefinition Width="{Binding RightPaneWidth}" />
+                                    </Grid.ColumnDefinitions>
+                                </Grid>
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
                         <ItemsControl.ItemContainerStyle>
                             <Style TargetType="ContentPresenter">
+                                <Setter Property="Grid.Column" Value="{Binding Column}" />
+                                <Setter Property="Margin" Value="1,0,1,1" />
                                 <Setter Property="Visibility" Value="{Binding IsActive, Converter={StaticResource BoolVis}}" />
+                                <EventSetter Event="GotKeyboardFocus" Handler="OnSessionFocus" />
+                                <EventSetter Event="PreviewMouseDown" Handler="OnSessionMouseDown" />
                             </Style>
                         </ItemsControl.ItemContainerStyle>
                     </ItemsControl>
                 </Grid>
-            </DockPanel>
+            </Grid>
         </Grid>
     </DockPanel>
+    </Border>
 </Window>

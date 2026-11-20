@@ -46,6 +46,9 @@ public sealed class Entry
     /// <summary>Shown under Favorites at the top of the tree.</summary>
     public bool Favorite { get; set; }
 
+    /// <summary>Zabbix host this entry is linked to (set on import or by "Link to Zabbix host"). Wins over automatic matching.</summary>
+    public string? ZabbixHostId { get; set; }
+
     public RdpSettings? Rdp { get; set; }
     /// <summary>Credential entries: the secret itself. Other entries: the login typed into the entry
     /// (<see cref="LoginSource.Embedded"/>).</summary>

@@ -88,7 +88,7 @@ public static class EntryMenu
             move.Items.Add(Item(f.path, null, () => _ = vm.MoveAsync(e.Id, fid), enabled: vm.CanMove(e.Id, fid)));
         }
         menu.Items.Add(move);
-        if (!isFolder) menu.Items.Add(Item(e.Favorite ? "Remove from favorites" : "Add to favorites", "star", () => _ = vm.ToggleFavoriteAsync(e)));
+        if (!isFolder) menu.Items.Add(Item(vm.IsFavorite(e) ? "Remove from favorites" : "Add to favorites", "star", () => vm.ToggleFavoriteCommand.Execute(null)));
 
         // --- copy login details ---
         if (e.IsConnectable || isCred)
@@ -138,7 +138,9 @@ public static class EntryMenu
             if (e.Kind == EntryKind.Ssh) open.Items.Add(Item("Browse files in WinSCP", null, () => _ = vm.OpenInWinScpAsync(e)));
             if (e.Kind == EntryKind.Web) open.Items.Add(Item("Default browser", null, () => _ = vm.ConnectWithAsync(node, new(External: true))));
             open.Items.Add(Item("Ping", null, () => vm.Ping(e)));
+            if (vm.SelectedZabbixLinked) open.Items.Add(Item("Zabbix", null, () => vm.OpenInZabbixCommand.Execute(null)));
             menu.Items.Add(open);
+            if (vm.ZabbixActive) menu.Items.Add(Item(vm.SelectedZabbixLinked ? "Change Zabbix link…" : "Link to Zabbix host…", "link", () => vm.LinkToZabbixCommand.Execute(null)));
         }
 
         // --- details and delete ---

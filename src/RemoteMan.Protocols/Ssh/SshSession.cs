@@ -30,8 +30,8 @@ public sealed class SshSession : IDisposable
 
     public string? NegotiatedSummary { get; private set; }
 
-    public async Task ConnectAsync(HostEndpoint endpoint, ResolvedCredential cred, SshSettings settings, KnownHosts knownHosts,
-        uint cols, uint rows, CancellationToken ct = default)
+    /// <summary>Login methods and algorithm offer for an entry; shared by the shell, SFTP and port tunnels.</summary>
+    public static ConnectionInfo BuildConnectionInfo(HostEndpoint endpoint, ResolvedCredential cred, SshSettings settings)
     {
         var user = cred.UserName ?? Environment.UserName;
         var methods = new List<AuthenticationMethod>();
@@ -64,6 +64,13 @@ public sealed class SshSession : IDisposable
             foreach (var h in LegacyHostKeys) info.HostKeyAlgorithms.Remove(h);
         }
 
+        return info;
+    }
+
+    public async Task ConnectAsync(HostEndpoint endpoint, ResolvedCredential cred, SshSettings settings, KnownHosts knownHosts,
+        uint cols, uint rows, CancellationToken ct = default)
+    {
+        var info = BuildConnectionInfo(endpoint, cred, settings);
         _info = info;
         _client = new SshClient(info);
         if (settings.KeepAliveSeconds > 0) _client.KeepAliveInterval = TimeSpan.FromSeconds(settings.KeepAliveSeconds);

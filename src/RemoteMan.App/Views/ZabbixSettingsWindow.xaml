@@ -1,0 +1,67 @@
+<Window x:Class="RemoteMan.App.Views.ZabbixSettingsWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Zabbix settings" Width="600" Height="600" MinWidth="480" MinHeight="460"
+        Style="{StaticResource RemoteManWindow}" WindowStartupLocation="CenterOwner" ShowInTaskbar="False">
+    <Window.Resources>
+        <Style TargetType="TextBlock" x:Key="Label" BasedOn="{StaticResource Muted}">
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="Margin" Value="0,4,10,4" />
+        </Style>
+        <Style TargetType="TextBlock" x:Key="Hint" BasedOn="{StaticResource Muted}">
+            <Setter Property="FontSize" Value="11" />
+            <Setter Property="TextWrapping" Value="Wrap" />
+            <Setter Property="Margin" Value="0,0,0,6" />
+        </Style>
+    </Window.Resources>
+    <DockPanel>
+        <Border DockPanel.Dock="Bottom" Background="{StaticResource Header}" BorderBrush="{StaticResource Border}" BorderThickness="0,1,0,0" Padding="10,8">
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                <Button Content="Save" MinWidth="76" IsDefault="True" Style="{StaticResource PrimaryButton}" Click="OnSave" />
+                <Button Content="Cancel" MinWidth="76" Margin="6,0,0,0" IsCancel="True" />
+            </StackPanel>
+        </Border>
+        <ScrollViewer VerticalScrollBarVisibility="Auto" Background="{StaticResource Panel}">
+            <StackPanel Margin="14,12">
+                <CheckBox x:Name="EnabledBox" Content="Show Zabbix health on entries" FontWeight="SemiBold" Margin="0,0,0,10" />
+                <Grid>
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="130" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition /><RowDefinition /><RowDefinition /><RowDefinition /><RowDefinition /><RowDefinition /><RowDefinition /><RowDefinition />
+                    </Grid.RowDefinitions>
+                    <TextBlock Text="Zabbix URL" Style="{StaticResource Label}" />
+                    <TextBox x:Name="UrlBox" Grid.Column="1" Margin="0,2" FontFamily="{StaticResource MonoFont}" AutomationProperties.Name="Zabbix URL"
+                             ToolTip="The Zabbix frontend address, e.g. https://zabbix.lab.local/zabbix" />
+                    <TextBlock Grid.Row="1" Text="API token" Style="{StaticResource Label}" />
+                    <PasswordBox x:Name="TokenBox" Grid.Row="1" Grid.Column="1" Margin="0,2" AutomationProperties.Name="API token" />
+                    <TextBlock x:Name="TokenHint" Grid.Row="2" Grid.Column="1" Style="{StaticResource Hint}"
+                               Text="Make one in Zabbix under User settings, API tokens. A read-only user is enough. Saved encrypted for your Windows account." />
+                    <TextBlock Grid.Row="3" Text="Connect through" Style="{StaticResource Label}" />
+                    <ComboBox x:Name="ViaBox" Grid.Row="3" Grid.Column="1" Margin="0,2" DisplayMemberPath="Name" AutomationProperties.Name="Connect through" />
+                    <TextBlock Grid.Row="4" Grid.Column="1" Style="{StaticResource Hint}"
+                               Text="With a jump host, RemoteMan tunnels the API calls through that SSH entry, so only the jump host has to reach Zabbix." />
+                    <TextBlock Grid.Row="5" Text="Certificates" Style="{StaticResource Label}" />
+                    <CheckBox x:Name="IgnoreCertBox" Grid.Row="5" Grid.Column="1" Content="Ignore certificate errors (self-signed)" VerticalAlignment="Center" Margin="0,4" />
+                    <TextBlock Grid.Row="6" Text="Refresh every" Style="{StaticResource Label}" />
+                    <ComboBox x:Name="PollBox" Grid.Row="6" Grid.Column="1" Margin="0,2" Width="140" HorizontalAlignment="Left" DisplayMemberPath="Name" AutomationProperties.Name="Refresh every" />
+                    <TextBlock Grid.Row="7" Text="Show problems from" Style="{StaticResource Label}" />
+                    <ComboBox x:Name="SeverityBox" Grid.Row="7" Grid.Column="1" Margin="0,2" Width="180" HorizontalAlignment="Left" DisplayMemberPath="Name" AutomationProperties.Name="Show problems from" />
+                </Grid>
+
+                <GroupBox Header="Match entries to Zabbix hosts by" Margin="0,12,0,0" BorderBrush="{StaticResource Border}" Foreground="{StaticResource Muted}" Padding="8,6">
+                    <StackPanel>
+                        <CheckBox Content="Saved link (entries imported or linked by hand)" IsChecked="True" IsEnabled="False" Margin="0,3" />
+                        <CheckBox x:Name="ByAddressBox" Content="Host or IP address against Zabbix interfaces" Margin="0,3" />
+                        <CheckBox x:Name="ByNameBox" Content="Entry name against Zabbix host name or visible name" Margin="0,3" />
+                        <CheckBox x:Name="BracketBox" Content="Ignore name suffixes in brackets, like &quot;dc01 (Domain controller)&quot;" Margin="0,3" />
+                    </StackPanel>
+                </GroupBox>
+
+                <DockPanel Margin="0,12,0,0">
+                    <Button x:Name="TestButton" Content="Test connection" MinWidth="120" Click="OnTest" />
+                    <TextBlock x:Name="TestResult" Margin="10,0,0,0" FontSize="11" VerticalAlignment="Center" TextWrapping="Wrap" Style="{StaticResource Muted}" Text="Not tested yet" />
+                </DockPanel>
+            </StackPanel>
+        </ScrollViewer>
+    </DockPanel>
+</Window>

@@ -23,7 +23,12 @@ public abstract partial class SessionViewModel : ObservableObject, IDisposable
     public string KindTag => EntryNode.KindTagFor(Entry.Kind);
 
     [ObservableProperty] private string _title;
+    /// <summary>True while this tab is the visible one in its pane (both panes can show one in split view).</summary>
     [ObservableProperty] private bool _isActive;
+    /// <summary>0 = left pane, 1 = right pane (split view).</summary>
+    [ObservableProperty] [NotifyPropertyChangedFor(nameof(Column))] private int _pane;
+    /// <summary>Grid column in the working area: moving panes only re-lays out the view, it never reconnects.</summary>
+    public int Column => Pane == 0 ? 0 : 2;
     /// <summary>Shown in the status bar while this tab is active.</summary>
     [ObservableProperty] private string _statusText = "";
 

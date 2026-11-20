@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using System.Windows;
 using CommunityToolkit.Mvvm.ComponentModel;
+using RemoteMan.Core.Integrations.Zabbix;
 using RemoteMan.Core.Model;
 using RemoteMan.Core.Security;
 using RemoteMan.Core.Storage;
@@ -26,6 +27,15 @@ public partial class EntryEditorWindow : Window
     /// <summary>Set on OK when "Save as a reusable credential too" was ticked: the caller saves it first.</summary>
     public Entry? NewCredential { get; private set; }
     private string? _certBase64;
+    private ZabbixSnapshot? _zabbix;
+    private string? _zabbixHostId;
+
+    /// <summary>Latest Zabbix data; when set, connection entries get a Zabbix section with the link picker.</summary>
+    public ZabbixSnapshot? Zabbix
+    {
+        get => _zabbix;
+        set { _zabbix = value; ShowZabbix(); }
+    }
 
     public EntryEditorWindow(Entry entry, EntryStore store, ISecretProtector protector)
     {
@@ -40,6 +50,7 @@ public partial class EntryEditorWindow : Window
 
         NameBox.Text = entry.Name;
         TagsBox.Text = entry.Tags;
+        _zabbixHostId = entry.ZabbixHostId;
 
         var connectable = entry.IsConnectable;
         Show(HostsGroup, connectable);
@@ -107,6 +118,36 @@ public partial class EntryEditorWindow : Window
         VncViewerBox.ItemsSource = Enum.GetValues<VncViewer>(); VncViewerBox.SelectedItem = v.Viewer; VncViewOnly.IsChecked = v.ViewOnly;
 
         Loaded += (_, _) => { NameBox.Focus(); NameBox.SelectAll(); };
+    }
+
+    private void ShowZabbix()
+    {
+        Show(ZabbixGroup, _zabbix is not null && _e.IsConnectable);
+        if (_zabbix is null) return;
+        var host = _zabbixHostId is { } id ? _zabbix.Matcher.GetHost(id) : null;
+        if (host is not null) ZabbixCurrent.Text = $"Linked: {host.DisplayName} (hostid {host.HostId})";
+        else if (_zabbixHostId is null && _zabbix.Matcher.Match(_e) is { } m) ZabbixCurrent.Text = $"Matched automatically: {m.Host.DisplayName} ({m.Reason})";
+        else ZabbixCurrent.Text = _zabbixHostId is null ? "Not linked" : "Linked host no longer exists in Zabbix";
+        ZabbixUnlink.IsEnabled = _zabbixHostId is not null;
+    }
+
+    private void OnZabbixLink(object sender, RoutedEventArgs e)
+    {
+        if (_zabbix is null) return;
+        var probe = EntryStore.Clone(_e);
+        probe.Name = NameBox.Text.Trim();
+        probe.ZabbixHostId = _zabbixHostId;
+        probe.Endpoints = _hosts.Where(h => !string.IsNullOrWhiteSpace(h.Host)).Select(h => new HostEndpoint(h.Host.Trim())).ToList();
+        var dlg = new ZabbixLinkWindow(_zabbix, probe) { Owner = this };
+        if (dlg.ShowDialog() != true) return;
+        _zabbixHostId = dlg.ChosenHostId;
+        ShowZabbix();
+    }
+
+    private void OnZabbixUnlink(object sender, RoutedEventArgs e)
+    {
+        _zabbixHostId = null;
+        ShowZabbix();
     }
 
     private static void Show(UIElement el, bool visible) => el.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
@@ -254,6 +295,7 @@ public partial class EntryEditorWindow : Window
         }
         _e.Name = NameBox.Text.Trim();
         _e.Tags = string.IsNullOrWhiteSpace(TagsBox.Text) ? null : TagsBox.Text.Trim();
+        _e.ZabbixHostId = _zabbixHostId;
 
         if (_e.IsConnectable)
         {
