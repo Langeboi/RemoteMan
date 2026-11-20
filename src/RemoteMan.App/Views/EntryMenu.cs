@@ -144,7 +144,8 @@ public static class EntryMenu
         }
 
         // --- details and delete ---
-        menu.Items.Add(Item("Properties and history", "info", () => ChoiceDialog.Show(owner, e.Name, vm.Describe(e), ["Close"], DialogIcon.Info)));
+        // Properties opens the editor, like Edit; created/modified history is shown at its bottom.
+        menu.Items.Add(Item("Properties", "info", () => vm.EditCommand.Execute(null), "Alt+Enter"));
         menu.Items.Add(new Separator());
         var del = Item("Delete", "delete", () => vm.DeleteCommand.Execute(null), "Del");
         del.SetResourceReference(Control.ForegroundProperty, "Bad");

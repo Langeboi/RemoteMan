@@ -655,19 +655,6 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
         catch (Exception ex) { Message = ex.Message; }
     }
 
-    /// <summary>Text for the "Properties and history" dialog.</summary>
-    public string Describe(Entry e)
-    {
-        var lines = new List<string> { $"Type: {e.Kind}" };
-        if (e.ParentId is { } p && _store?.Get(p) is { } folder) lines.Add($"Folder: {FolderPath(folder)}");
-        foreach (var r in Properties) lines.Add($"{r.Key}: {r.Value}");
-        lines.Add("");
-        lines.Add($"Created: {(e.CreatedAt is { } c ? c.ToLocalTime().ToString("g") : "unknown")}{(e.CreatedBy is { } cb ? " by " + cb : "")}");
-        lines.Add($"Last modified: {e.UpdatedAt.ToLocalTime():g}{(e.UpdatedBy is { } ub ? " by " + ub : "")}");
-        lines.Add($"Revision: {e.Revision}");
-        return string.Join("\n", lines.Distinct());
-    }
-
     // ---------------- copy login details ----------------
 
     /// <summary>The credential for the selected entry: its own for credential entries, else the linked one.</summary>

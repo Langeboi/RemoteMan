@@ -49,6 +49,13 @@ public partial class EntryEditorWindow : Window
         Heading.Text = (entry.Revision == 0 ? "New " : "Edit ") + kind.ToString().ToLowerInvariant() + (entry.Name.Length > 0 ? $": {entry.Name}" : "");
         var editing = store.PresenceFor(entry.Id).Where(p => p.State == PresenceState.Editing).Select(p => p.User).ToList();
         OthersEditing.Text = editing.Count > 0 ? $"{string.Join(", ", editing)} also editing" : "";
+        if (entry.Revision > 0)
+        {
+            var created = entry.CreatedAt is { } createdAt ? $"Created {createdAt.ToLocalTime():g}{(entry.CreatedBy is { } cb ? " by " + cb : "")}" : null;
+            var modified = $"Modified {entry.UpdatedAt.ToLocalTime():g}{(entry.UpdatedBy is { } ub ? " by " + ub : "")}";
+            History.Text = string.Join("  ·  ", new[] { created, modified }.Where(x => x is not null));
+            History.ToolTip = History.Text + $"\nRevision {entry.Revision}";
+        }
 
         NameBox.Text = entry.Name;
         TagsBox.Text = entry.Tags;
