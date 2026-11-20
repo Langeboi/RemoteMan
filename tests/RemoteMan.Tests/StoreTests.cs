@@ -86,10 +86,12 @@ public class StoreTests : IDisposable
         await using var b = new EntryStore(new SqliteDataSource(_db), "bob", "pc2");
         await b.OpenAsync();
 
+        // Bob's copy is taken before Alice saves: b's live change feed may pull her edit at any moment after.
+        var bEdit = EntryStore.Clone(b.Get(e.Id)!); bEdit.Name = "bob-edit";
+
         var aEdit = EntryStore.Clone(e); aEdit.Name = "alice-edit";
         await a.SaveAsync(aEdit);
 
-        var bEdit = EntryStore.Clone(b.Get(e.Id)!); bEdit.Name = "bob-edit";
         await Assert.ThrowsAsync<ConcurrencyException>(() => b.SaveAsync(bEdit));
     }
 

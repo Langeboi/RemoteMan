@@ -25,6 +25,7 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
     public MainViewModel(AppSettings settings)
     {
         _settings = settings;
+        _isSplit = settings.SplitView;
     }
 
     // --- dialogs supplied by the window ---
@@ -119,7 +120,13 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
 
         var all = _store.Entries.ToList();
         var filter = SearchText.Trim();
-        if (filter.Length > 0)
+        if (filter.Length == 0 && PanelMode != "nav")
+        {
+            // Favorites, Recent, Credentials: flat lists from the icon rail.
+            foreach (var e in PanelEntries(all))
+                if (!_nodes.ContainsKey(e.Id)) Roots.Add(_nodes[e.Id] = new EntryNode(e, 0));
+        }
+        else if (filter.Length > 0)
         {
             // Flat result list while searching; matches name, host or tags.
             foreach (var e in all.Where(e => e.Kind != EntryKind.Folder && Matches(e, filter)).OrderBy(e => e.Name, StringComparer.OrdinalIgnoreCase))
@@ -178,8 +185,11 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
         {
             n.People.Clear();
             foreach (var p in _store.PresenceFor(n.Id))
-                n.People.Add(new PresenceChip(p.Initials, $"{p.User} ({p.Machine}) is {p.State.ToString().ToLowerInvariant()}"));
+                n.People.Add(new PresenceChip(p.Initials, $"{p.User} ({p.Machine}) is {p.State.ToString().ToLowerInvariant()}", PresenceChip.ColorFor(p.User)));
+            n.Badge = n.People.Count == 0 ? null
+                : n.People[0] with { Initials = n.People[0].Initials[..1], ToolTip = string.Join("\n", n.People.Select(c => c.ToolTip)) };
         }
+        RefreshOnlineUsers();
         var users = _store.Presence.Where(p => p.IsAlive(DateTimeOffset.UtcNow)).Select(p => p.User).Append(_store.User).Distinct().Count();
         OnlineText = _store.Source.SupportsPresence && _store.Source.Kind != DataSourceKind.Sqlite ? $"{users} user{(users == 1 ? "" : "s")} online" : "";
         RefreshProperties();
@@ -399,8 +409,8 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
 
         Message = result.UsedFallback ? $"{result.Attempts[0].Endpoint} {result.Attempts[0].Error}, using fallback {endpoint}" : "";
         s.CloseRequested += (_, _) => CloseSession(s);
-        Sessions.Add(s);
-        ActiveSession = s;
+        AddSession(s);
+        RememberRecent(e);
     }
 
     [RelayCommand]
@@ -410,6 +420,21 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
         if (text.Length == 0) return;
         // A single search hit connects that entry; otherwise treat the text as a host.
         if (Roots.Count == 1 && Roots[0].Entry.IsConnectable) { await ConnectEntryAsync(Roots[0].Entry); return; }
+        await ConnectHostAsync(text);
+    }
+
+    /// <summary>The "Connect" box in the status bar: always a host, never a search.</summary>
+    [RelayCommand]
+    private async Task QuickConnectHostAsync()
+    {
+        var text = QuickHost.Trim();
+        if (text.Length == 0) return;
+        QuickHost = "";
+        await ConnectHostAsync(text);
+    }
+
+    private async Task ConnectHostAsync(string text)
+    {
         var kind = text.StartsWith("rdp://", StringComparison.OrdinalIgnoreCase) ? EntryKind.Rdp
                  : text.StartsWith("http", StringComparison.OrdinalIgnoreCase) ? EntryKind.Web
                  : EntryKind.Ssh;
@@ -417,25 +442,6 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
         if (kind == EntryKind.Web) adhoc.Web = new WebSettings { Url = text };
         else adhoc.Endpoints.Add(EndpointResolver.Parse(text));
         await ConnectEntryAsync(adhoc);
-    }
-
-    partial void OnActiveSessionChanged(SessionViewModel? oldValue, SessionViewModel? newValue)
-    {
-        if (oldValue is not null) oldValue.IsActive = false;
-        if (newValue is not null) newValue.IsActive = true;
-        SessionStatus = newValue?.StatusText ?? "";
-        if (_store is not null && newValue is not null && newValue.Entry.Revision > 0)
-            _ = _store.SetMyPresenceAsync(newValue.Entry.Id, PresenceState.Connected);
-    }
-
-    [RelayCommand]
-    private void CloseSession(SessionViewModel? s)
-    {
-        if (s is null) return;
-        var idx = Sessions.IndexOf(s);
-        Sessions.Remove(s);
-        (s as IDisposable)?.Dispose();
-        if (ActiveSession == s) ActiveSession = Sessions.Count == 0 ? null : Sessions[Math.Min(idx, Sessions.Count - 1)];
     }
 
     [RelayCommand]
