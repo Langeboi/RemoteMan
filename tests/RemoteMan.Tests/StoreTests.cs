@@ -296,6 +296,13 @@ public class StoreTests : IDisposable
 
 public class EndpointTests
 {
+    [Theory]
+    [InlineData("youtube.com", "https://youtube.com/")]
+    [InlineData(" www.youtube.com/watch?v=x ", "https://www.youtube.com/watch?v=x")]
+    [InlineData("http://10.0.0.5:8080", "http://10.0.0.5:8080/")]
+    [InlineData("https://", "https://")]
+    public void WebUrlsGetAScheme(string input, string expected) => Assert.Equal(expected, WebSettings.NormalizeUrl(input));
+
     [Fact]
     public async Task FallsBackToSecondaryWhenPrimaryFails()
     {

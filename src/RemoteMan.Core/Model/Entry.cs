@@ -103,6 +103,15 @@ public enum BrowserKind { Embedded = 0, Edge = 1, Chrome = 2, Firefox = 3, Syste
 
 public sealed class WebSettings
 {
+    /// <summary>"youtube.com" → "https://youtube.com/". Browsers and the shell need a scheme.</summary>
+    public static string NormalizeUrl(string? url)
+    {
+        var u = (url ?? "").Trim();
+        if (u.Length == 0 || u is "https://" or "http://") return u;
+        if (!u.Contains("://", StringComparison.Ordinal)) u = "https://" + u;
+        return Uri.TryCreate(u, UriKind.Absolute, out var parsed) ? parsed.ToString() : u;
+    }
+
     public string Url { get; set; } = "https://";
     public BrowserKind Browser { get; set; } = BrowserKind.Embedded;
     public bool IgnoreCertificateErrors { get; set; } = true;
