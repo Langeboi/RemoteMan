@@ -344,7 +344,8 @@
             <Setter.Value>
                 <ControlTemplate TargetType="TreeViewItem">
                     <StackPanel>
-                        <Border x:Name="row" Height="24" Margin="2,0" Background="Transparent" BorderBrush="Transparent" BorderThickness="2,0,0,0" CornerRadius="{StaticResource Radius}">
+                        <!-- Tight 22px rows, edge to edge: a flat band on hover, a lighter band with a teal edge when selected -->
+                        <Border x:Name="row" Height="22" Background="Transparent" BorderBrush="Transparent" BorderThickness="2,0,0,0">
                             <ContentPresenter ContentSource="Header" VerticalAlignment="Center" Margin="{Binding Indent}" />
                         </Border>
                         <ItemsPresenter x:Name="kids" />
@@ -362,7 +363,7 @@
                             <Setter TargetName="row" Property="BorderThickness" Value="1" />
                         </DataTrigger>
                         <Trigger Property="IsSelected" Value="True">
-                            <Setter TargetName="row" Property="Background" Value="{StaticResource Select}" />
+                            <Setter TargetName="row" Property="Background" Value="#262D33" />
                             <Setter TargetName="row" Property="BorderBrush" Value="{StaticResource Accent}" />
                             <Setter Property="Foreground" Value="{StaticResource TextStrong}" />
                         </Trigger>
@@ -428,6 +429,35 @@
                             <Setter Property="Foreground" Value="{StaticResource Accent}" />
                         </Trigger>
                         <Trigger Property="IsKeyboardFocused" Value="True"><Setter TargetName="b" Property="Background" Value="{StaticResource Hover}" /></Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- Icon tabs in the navigation panel's bottom bar: grey glyph, the active one on a band with a teal underline -->
+    <Style TargetType="RadioButton" x:Key="PanelTab">
+        <Setter Property="Foreground" Value="{StaticResource Muted}" />
+        <Setter Property="Margin" Value="1,0" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="RadioButton">
+                    <Border x:Name="b" Background="Transparent" CornerRadius="{StaticResource Radius}" BorderBrush="Transparent" BorderThickness="0,0,0,2">
+                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="b" Property="Background" Value="{StaticResource Hover}" />
+                            <Setter Property="Foreground" Value="{StaticResource Text}" />
+                        </Trigger>
+                        <Trigger Property="IsKeyboardFocused" Value="True"><Setter TargetName="b" Property="Background" Value="{StaticResource Hover}" /></Trigger>
+                        <Trigger Property="IsChecked" Value="True">
+                            <Setter TargetName="b" Property="Background" Value="{StaticResource Select}" />
+                            <Setter TargetName="b" Property="BorderBrush" Value="{StaticResource Accent}" />
+                            <Setter Property="Foreground" Value="{StaticResource TextStrong}" />
+                        </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>
             </Setter.Value>

@@ -65,10 +65,23 @@ public partial class MainWindow : Window
         SizeChanged += (_, _) => _aiWindow?.Reposition();
         StateChanged += (_, _) => { if (WindowState == WindowState.Minimized) _aiWindow?.HideBox(); else _aiWindow?.Reposition(); };
         Loaded += async (_, _) => await _vm.InitializeAsync();
-        Closing += async (_, _) => await _vm.DisposeAsync();
+        Closing += async (_, _) => { _vm.FreezeOpenSessions(); await _vm.DisposeAsync(); };
+        _vm.AskReopen = AskReopen;
         PreviewKeyDown += OnWindowKeyDown;
         StateChanged += (_, _) => MaxGlyph.Data = Geometry.Parse(WindowState == WindowState.Maximized
             ? "M2.5,0.5 H9.5 V7.5 M0.5,2.5 H7.5 V9.5 H0.5 Z" : "M0.5,0.5 H9.5 V9.5 H0.5 Z");
+    }
+
+    /// <summary>Startup question: reopen what was open when RemoteMan last closed.</summary>
+    private (bool Reopen, bool Remember) AskReopen(IReadOnlyList<string> names)
+    {
+        var shown = names.Take(8).Select(n => "  •  " + n).ToList();
+        if (names.Count > 8) shown.Add($"  …and {names.Count - 8} more");
+        var remember = new CheckBox { Content = "Don't ask again (you can change this under More > On startup)", Margin = new Thickness(0, 12, 0, 0) };
+        var text = (names.Count == 1 ? "This session was open" : $"These {names.Count} sessions were open") +
+                   " when you closed RemoteMan:\n\n" + string.Join("\n", shown);
+        var pick = ChoiceDialog.Show(this, "Reopen last sessions?", text, ["Reopen", "Not now"], DialogIcon.Question, extra: remember);
+        return (pick == 0, remember.IsChecked == true && pick >= 0);
     }
 
     // ---------------- connection notices ----------------
@@ -136,6 +149,14 @@ public partial class MainWindow : Window
         menu.Items.Add(Cmd("Zabbix settings…", _vm.ZabbixSettingsCommand));
         if (_vm.ZabbixActive) menu.Items.Add(Cmd("Import from Zabbix…", _vm.ImportFromZabbixCommand));
         menu.Items.Add(Cmd("Oxidized settings…", _vm.OxidizedSettingsCommand));
+        var startup = new MenuItem { Header = "On startup, reopen last sessions" };
+        foreach (var (mode, label) in new[] { (ReopenMode.Ask, "Ask"), (ReopenMode.Always, "Always"), (ReopenMode.Never, "Never") })
+        {
+            var item = new MenuItem { Header = label, IsCheckable = true, IsChecked = _vm.ReopenSessions == mode };
+            item.Click += (_, _) => _vm.ReopenSessions = mode;
+            startup.Items.Add(item);
+        }
+        menu.Items.Add(startup);
         menu.Items.Add(new Separator());
         var updates = RemoteMan.App.Updates.UpdateService.Instance;
         menu.Items.Add(new MenuItem { Header = "Check for updates", Command = updates.CheckNowCommand });
@@ -200,10 +221,75 @@ public partial class MainWindow : Window
     {
         static void Walk(IEnumerable<EntryNode> nodes)
         {
-            foreach (var n in nodes) { if (n.IsFolder) n.IsExpanded = false; Walk(n.Children); }
+            foreach (var n in nodes) { if (n.IsFolder && !n.IsRoot) n.IsExpanded = false; Walk(n.Children); }
         }
         Walk(_vm.Roots);
     }
+
+    private void OnExpandAll(object sender, RoutedEventArgs e)
+    {
+        static void Walk(IEnumerable<EntryNode> nodes)
+        {
+            foreach (var n in nodes) { if (n.IsFolder) n.IsExpanded = true; Walk(n.Children); }
+        }
+        Walk(_vm.Roots);
+    }
+
+    /// <summary>Clicking a folder's chevron opens or closes it without selecting it.</summary>
+    private void OnChevronDown(object sender, MouseButtonEventArgs e)
+    {
+        if (Keyboard.Modifiers != ModifierKeys.None) return;
+        if ((sender as FrameworkElement)?.DataContext is EntryNode { IsFolder: true } n)
+        {
+            n.IsExpanded = !n.IsExpanded;
+            e.Handled = true;
+        }
+    }
+
+    // ---------------- bottom bar: data source picker and panel tabs ----------------
+
+    private void OnDataSourcePicker(object sender, RoutedEventArgs e)
+    {
+        var menu = new ContextMenu();
+        foreach (var ds in _settings.DataSources)
+        {
+            var name = ds.Name;
+            var item = new MenuItem { Header = $"{ds.Name}  ({ds.Kind})", IsCheckable = true, IsChecked = ds.Name == _settings.Active.Name };
+            item.Click += (_, _) => SwitchDataSource(name);
+            menu.Items.Add(item);
+        }
+        menu.Items.Add(new Separator());
+        var manage = new MenuItem { Header = "Manage data sources…" };
+        manage.Click += OnDataSources;
+        menu.Items.Add(manage);
+        menu.PlacementTarget = (UIElement)sender;
+        menu.Placement = System.Windows.Controls.Primitives.PlacementMode.Top;
+        menu.IsOpen = true;
+    }
+
+    private void SwitchDataSource(string name)
+    {
+        if (name == _settings.Active.Name) return;
+        _settings.ActiveDataSource = name;
+        _settings.Save();
+        Views.ChoiceDialog.Info(this, "Restart to switch", $"Restart RemoteMan to open {name}.");
+    }
+
+    private void OnPanelMore(object sender, RoutedEventArgs e)
+    {
+        var menu = new ContextMenu();
+        void Add(string header, RoutedEventHandler click) { var i = new MenuItem { Header = header }; i.Click += click; menu.Items.Add(i); }
+        Add("Expand all", OnExpandAll);
+        Add("Collapse all", OnCollapseAll);
+        menu.Items.Add(new Separator());
+        Add("Import…", OnImport);
+        Add("Manage data sources…", OnDataSources);
+        menu.PlacementTarget = (UIElement)sender;
+        menu.Placement = System.Windows.Controls.Primitives.PlacementMode.Top;
+        menu.IsOpen = true;
+    }
+
+    private void OnPanelRefresh(object sender, RoutedEventArgs e) => _ = _vm.RefreshAsync();
 
     // ---------------- panes ----------------
 
@@ -269,14 +355,16 @@ public partial class MainWindow : Window
         else if (e.Key == Key.Down) { Tree.Focus(); e.Handled = true; }
     }
 
+    // The data source node can be highlighted but is not an entry: commands see no selection (new, paste go to the top level).
     private void OnTreeSelectionChanged(object sender, RoutedPropertyChangedEventArgs<object> e) =>
-        _vm.Selected = e.NewValue as EntryNode;
+        _vm.Selected = e.NewValue is EntryNode { IsRoot: false } n ? n : null;
 
     /// <summary>Ctrl+click a credential to link it to the selected connection, without changing the selection.</summary>
     private async void OnTreeMouseDown(object sender, MouseButtonEventArgs e)
     {
         _dragStart = e.GetPosition(Tree);
         _dragNode = FindItem(e.OriginalSource as DependencyObject)?.DataContext as EntryNode;
+        if (_dragNode?.IsRoot == true) _dragNode = null;
         if (Keyboard.Modifiers != ModifierKeys.Control) return;
         if (FindItem(e.OriginalSource as DependencyObject)?.DataContext is not EntryNode clicked) return;
         if (clicked.Entry.Kind != Core.Model.EntryKind.Credential) return;
@@ -352,6 +440,7 @@ public partial class MainWindow : Window
     {
         highlight = null;
         if (FindItem(e.OriginalSource as DependencyObject)?.DataContext is not EntryNode target) return null;
+        if (target.IsRoot) { highlight = target; return null; }
         if (target.IsFolder) { highlight = target; return target.Id; }
         if (target.Entry.ParentId is { } p && _vm.FindNode(p) is { } parent) { highlight = parent; return p; }
         return null;
@@ -399,7 +488,12 @@ public partial class MainWindow : Window
 
     private void OnTreeKeyDown(object sender, KeyEventArgs e)
     {
-        if (e.Key == Key.Enter && _vm.Selected is { } n)
+        if (e.Key == Key.Enter && Tree.SelectedItem is EntryNode { IsRoot: true } root)
+        {
+            root.IsExpanded = !root.IsExpanded;
+            e.Handled = true;
+        }
+        else if (e.Key == Key.Enter && _vm.Selected is { } n)
         {
             if (n.Entry.IsConnectable) _vm.ConnectCommand.Execute(n); else n.IsExpanded = !n.IsExpanded;
             e.Handled = true;

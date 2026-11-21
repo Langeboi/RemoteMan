@@ -36,7 +36,7 @@ public sealed partial class MainViewModel
     private void RefreshOverview()
     {
         if (Overview is not { } o || _store is null) return;
-        if (Selected is not { } node || node.Id == FavoritesId)
+        if (Selected is not { } node || node.Id == FavoritesId || node.IsRoot)
         {
             if (Selected is null && o.Node is { } shown && _store.Get(shown.Id) is null) CloseSession(o);
             return;

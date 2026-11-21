@@ -44,6 +44,11 @@ public sealed class AppSettings
     /// <summary>Two panes side by side. Off by default (single pane); a new name so earlier test builds' saved "on" is dropped.</summary>
     public bool SplitPane { get; set; }
 
+    /// <summary>Whether to reopen the tabs and windows that were open when RemoteMan last closed.</summary>
+    public ReopenMode ReopenSessions { get; set; } = ReopenMode.Ask;
+    /// <summary>What was open at the last exit (kept up to date while running, so a crash still leaves it).</summary>
+    public List<OpenSessionRecord> LastSessions { get; set; } = new();
+
     public ZabbixConfig Zabbix { get; set; } = new();
     public OxidizedConfig Oxidized { get; set; } = new();
 
@@ -68,6 +73,16 @@ public sealed class AppSettings
         Directory.CreateDirectory(AppPaths.Root);
         File.WriteAllText(AppPaths.Settings, JsonSerializer.Serialize(this, Json));
     }
+}
+
+public enum ReopenMode { Ask, Always, Never }
+
+/// <summary>One tab or session window that was open: the entry, which pane, and whether it was the shown tab.</summary>
+public sealed class OpenSessionRecord
+{
+    public Guid EntryId { get; set; }
+    public int Pane { get; set; }
+    public bool Active { get; set; }
 }
 
 /// <summary>Per-user Zabbix connection. The links between entries and Zabbix hosts live on the entries, so they are shared.</summary>
