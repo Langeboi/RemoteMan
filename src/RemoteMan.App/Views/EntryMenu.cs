@@ -128,6 +128,7 @@ public static class EntryMenu
             menu.Items.Add(Item(type == CredentialType.Secret ? "Copy secret" : "Copy password", "password", () => vm.CopyPasswordCommand.Execute(null), "Ctrl+Shift+P"));
             if (type == CredentialType.Password)
                 menu.Items.Add(Item("Copy both (paste twice)", "both", () => vm.CopyBothCommand.Execute(null), "Ctrl+Shift+B"));
+            if (vm.HasTotp(e)) menu.Items.Add(Item("Copy 2FA code", "password", () => vm.CopyTotpCommand.Execute(null)));
             if (e.IsConnectable) menu.Items.Add(Item("Copy host", "host", () => vm.CopyHost(e)));
         }
 

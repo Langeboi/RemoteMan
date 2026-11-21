@@ -13,7 +13,7 @@ using RemoteMan.Protocols.Ssh;
 
 namespace RemoteMan.App.ViewModels;
 
-public sealed record PropertyRow(string Key, string Value, string? State = null);
+public sealed record PropertyRow(string Key, string Value, string? State = null, System.Windows.Input.ICommand? Copy = null);
 
 public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
 {
@@ -242,6 +242,19 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
                 Properties.Add(new PropertyRow("Browser", (e.Web?.Browser ?? BrowserKind.Embedded).ToString().ToLowerInvariant()));
                 break;
         }
+        if (e.Kind == EntryKind.Rdp && e.Rdp?.SshTunnelId is { } tid) Properties.Add(new PropertyRow("Tunnel", _store.Get(tid)?.Name ?? "missing SSH entry"));
+        if (e.IsConnectable && e.OpenIn != OpenMode.Tab) Properties.Add(new PropertyRow("Opens", e.OpenIn == OpenMode.Window ? "in its own window" : "full screen"));
+        if (e.Connection is { WakeOnLan: true } wol) Properties.Add(new PropertyRow("Wake", wol.MacAddress ?? "on"));
+        if (e.Ssh?.Forwards is { Count: > 0 } fw) Properties.Add(new PropertyRow("Forwards", string.Join(", ", fw.Where(f => f.Enabled))));
+        if (e.Description is { Length: > 0 } desc) Properties.Add(new PropertyRow("Notes", desc));
+        // Custom fields, each with a copy button; secrets stay hidden and copy like a password.
+        foreach (var f in e.Fields ?? [])
+        {
+            var field = f;
+            var copy = new CommunityToolkit.Mvvm.Input.RelayCommand(() => CopyField(field));
+            Properties.Add(new PropertyRow(f.Name, f.Secret ? (f.Value is null ? "" : "••••••••") : f.Value ?? "", null, f.Value is null ? null : copy));
+        }
+        if (HasTotp(e)) Properties.Add(new PropertyRow("2FA", "code ready", null, new CommunityToolkit.Mvvm.Input.RelayCommand(CopyTotp)));
         var people = _store.PresenceFor(e.Id).Select(p => $"{p.User} ({p.State.ToString().ToLowerInvariant()})").ToList();
         if (people.Count > 0) Properties.Add(new PropertyRow("Users", string.Join(", ", people), "presence"));
         if (e.CreatedBy is not null) Properties.Add(new PropertyRow("Created", $"{e.CreatedAt?.ToLocalTime():g} by {e.CreatedBy}"));
@@ -337,8 +350,28 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
         return cred;
     }
 
+    /// <summary>Shows a session in its own window (set by the main window). Null: everything opens in tabs.</summary>
+    public Action<SessionViewModel>? OpenWindow { get; set; }
+
     private async Task ConnectEntryAsync(Entry e)
     {
+        // Sections ticked "Folder" come from the folder.
+        if (_store is not null) e = _store.Effective(e);
+        var conn = e.Connection;
+        var fields = _protector is null ? new Dictionary<string, string>() : Secrets.FieldValues(e, _protector);
+
+        if (conn?.RunBefore is { Length: > 0 } before)
+        {
+            Message = $"{e.Name}: running \"{before}\"…";
+            if (await LocalCommand.RunAsync(before, conn.WaitForRunBefore, fields) is { } err)
+                Notify(new ConnectionProblem("Command before connecting failed", $"\"{before}\": {err}.", "Connecting anyway.", null), e);
+        }
+        if (conn is { WakeOnLan: true, MacAddress: { Length: > 0 } mac })
+        {
+            try { await RemoteMan.Core.Networking.WakeOnLan.SendAsync(mac, conn.WakeBroadcast); Message = $"Wake-on-LAN sent to {mac}"; }
+            catch (Exception ex) { Notify(new ConnectionProblem("Wake-on-LAN failed", ex.Message, "Check the MAC address under Advanced > Connection.", null), e); }
+        }
+
         var probe = EntryStore.Clone(e);
         if (probe.Kind == EntryKind.Web && probe.Endpoints.Count == 0 && WebSettings.NormalizeUrl(probe.Web?.Url) is { Length: > 0 } url)
             probe.Endpoints.Add(EndpointResolver.Parse(url) is var ep && ep.Port == 0
@@ -354,7 +387,8 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
             Message = "";
             serial.CloseRequested += (_, _) => CloseSession(serial);
             TrackFailures(serial);
-            AddSession(serial);
+            Prepare(serial, e, fields);
+            Show(serial);
             RememberRecent(e);
             return;
         }
@@ -386,12 +420,29 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
             Message = "";
             jumped.CloseRequested += (_, _) => CloseSession(jumped);
             TrackFailures(jumped);
-            Sessions.Add(jumped);
-            ActiveSession = jumped;
+            Prepare(jumped, e, fields);
+            Show(jumped);
+            return;
+        }
+
+        // RDP through an SSH tunnel: the target is reached from the SSH server, so it isn't probed from here.
+        if (e.Kind == EntryKind.Rdp && e.Rdp?.SshTunnelId is { } tunnelId && _store is not null && _protector is not null)
+        {
+            await ConnectRdpTunnelledAsync(e, tunnelId, resolver, fields);
             return;
         }
 
         var result = await resolver.ResolveAsync(probe);
+        if (!result.Success && conn is { WaitUntilUp: true })
+        {
+            var deadline = DateTime.UtcNow.AddSeconds(Math.Clamp(conn.WaitSeconds, 5, 3600));
+            while (!result.Success && DateTime.UtcNow < deadline)
+            {
+                Message = $"Waiting for {e.Name} to answer… {(int)(deadline - DateTime.UtcNow).TotalSeconds} s left";
+                await Task.Delay(2000);
+                result = await resolver.ResolveAsync(probe);
+            }
+        }
         if (!result.Success)
         {
             Message = $"{e.Name}: no host answered ({string.Join("; ", result.Attempts.Select(a => $"{a.Endpoint} {a.Error}"))})";
@@ -402,6 +453,19 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
 
         if (ResolveForConnect(e) is not { } cred) { Message = ""; return; }
         var endpoint = result.Endpoint!;
+
+        // More than one monitor: Windows' own client spans them; the embedded control can't.
+        if (e.Kind == EntryKind.Rdp && e.Rdp is { Monitors: not RdpMonitors.One })
+        {
+            try
+            {
+                await RdpFiles.LaunchMstscAsync(RdpFiles.Write(e, endpoint, cred), endpoint, cred);
+                Message = $"Opened {e.Name} on {(e.Rdp.Monitors == RdpMonitors.All ? "all monitors" : "the chosen monitors")} in Remote Desktop Connection";
+                RememberRecent(e);
+            }
+            catch (Exception ex) { Message = ex.Message; }
+            return;
+        }
 
         // Chosen external browser missing: offer to install it or use the built-in one, never just fail.
         if (e.Kind == EntryKind.Web && e.Web is { Browser: BrowserKind.Chrome or BrowserKind.Edge or BrowserKind.Brave } ws
@@ -437,7 +501,7 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
             EntryKind.Ssh or EntryKind.Telnet => new SshSessionViewModel(e, endpoint, cred, result.UsedFallback),
             EntryKind.Sftp or EntryKind.Ftp => new FilesSessionViewModel(e, endpoint, cred, result.UsedFallback),
             EntryKind.Proxmox => new WebSessionViewModel(e, endpoint, cred, result.UsedFallback),
-            EntryKind.Rdp => new RdpSessionViewModel(e, endpoint, cred, result.UsedFallback),
+            EntryKind.Rdp => new RdpSessionViewModel(e, endpoint, cred, result.UsedFallback) { GatewayCredential = GatewayLogin(e) },
             EntryKind.Web when (e.Web?.Browser ?? BrowserKind.Embedded) == BrowserKind.Embedded => new WebSessionViewModel(e, endpoint, cred, result.UsedFallback),
             _ => null,
         };
@@ -471,7 +535,70 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
         Message = result.UsedFallback ? $"{result.Attempts[0].Endpoint} {result.Attempts[0].Error}, using fallback {endpoint}" : "";
         s.CloseRequested += (_, _) => CloseSession(s);
         TrackFailures(s);
+        Prepare(s, e, fields);
+        Show(s);
+        RememberRecent(e);
+    }
+
+    private RemoteMan.Protocols.ResolvedCredential? GatewayLogin(Entry e) =>
+        e.Rdp?.GatewayCredentialId is { } gid && _store?.Get(gid) is { } g && _protector is not null ? Secrets.Resolve(g, _store, _protector) : null;
+
+    /// <summary>Custom fields and the "after closing" command.</summary>
+    private void Prepare(SessionViewModel s, Entry e, IReadOnlyDictionary<string, string> fields)
+    {
+        s.FieldValues = fields;
+        if (e.Connection?.RunAfter is { Length: > 0 } after)
+            s.Closed += closed => { _ = LocalCommand.RunAsync(after, wait: false, fields); };
+    }
+
+    /// <summary>A tab, or its own window / full screen as the entry's Misc tab says. RDP full screen is the
+    /// control's own (blue bar to restore it into the tab); other kinds get a borderless window.</summary>
+    private void Show(SessionViewModel s)
+    {
+        var mode = s.Entry.OpenIn;
+        if (mode == OpenMode.FullScreen && s is RdpSessionViewModel) { s.FullScreen = true; mode = OpenMode.Tab; }
+        if (mode != OpenMode.Tab && OpenWindow is { } open)
+        {
+            s.FullScreen = mode == OpenMode.FullScreen;
+            open(s);
+            return;
+        }
         AddSession(s);
+    }
+
+    private async Task ConnectRdpTunnelledAsync(Entry e, Guid tunnelId, EndpointResolver resolver, IReadOnlyDictionary<string, string> fields)
+    {
+        if (_store!.Get(tunnelId) is not { Kind: EntryKind.Ssh } hopEntry) { Message = $"{e.Name}: its SSH tunnel entry no longer exists"; return; }
+        var hop = _store.Effective(hopEntry);
+        var hopProbe = new Entry { Kind = EntryKind.Ssh, Endpoints = hop.Endpoints.Where(x => !string.IsNullOrWhiteSpace(x.Host)).Select(x => x.Port > 0 ? x : x with { Port = 22 }).ToList() };
+        var hopResult = await resolver.ResolveAsync(hopProbe);
+        if (!hopResult.Success) { Message = $"SSH tunnel {hop.Name}: no host answered"; Notify(ConnectionProblem.FromAttempts(hopResult.Attempts), hop); return; }
+        var target = e.Endpoints.FirstOrDefault(x => !string.IsNullOrWhiteSpace(x.Host));
+        if (target is null) { Message = $"{e.Name} has no host"; return; }
+        if (target.Port == 0) target = target with { Port = 3389 };
+        if (ResolveForConnect(e) is not { } cred) { Message = ""; return; }
+
+        Message = $"Opening an SSH tunnel through {hop.Name}…";
+        SshTunnel tunnel;
+        try
+        {
+            tunnel = await SshTunnel.OpenAsync(hopResult.Endpoint!, Secrets.Resolve(hop, _store, _protector!), hop.Ssh ?? new SshSettings(),
+                new KnownHosts(AppPaths.KnownHosts), target.Host, target.Port);
+        }
+        catch (Exception ex)
+        {
+            Message = $"SSH tunnel {hop.Name}: {ex.Message}";
+            Notify(ConnectionProblem.FromException(ex, EntryKind.Ssh), hop);
+            return;
+        }
+        var local = new HostEndpoint("127.0.0.1", tunnel.LocalEndPoint.Port);
+        var s = new RdpSessionViewModel(e, local, cred, false) { GatewayCredential = GatewayLogin(e), Via = $"{target} via {hop.Name}" };
+        s.Owned.Add(tunnel);
+        Message = "";
+        s.CloseRequested += (_, _) => CloseSession(s);
+        TrackFailures(s);
+        Prepare(s, e, fields);
+        Show(s);
         RememberRecent(e);
     }
 
@@ -792,6 +919,36 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
         if (SelectedCredential() is not { Password: { } pw }) { Message = "No password stored"; return; }
         CredentialClipboard.CopyText(pw, secret: true);
         Message = $"Password copied, clears in {CredentialClipboard.ClearAfter.TotalSeconds:0} s";
+    }
+
+    private void CopyField(CustomField f)
+    {
+        if (f.Value is null || _protector is null) return;
+        try
+        {
+            if (f.Secret) { CredentialClipboard.CopyText(_protector.Unprotect(f.Value), secret: true); Message = $"{f.Name} copied, clears in {CredentialClipboard.ClearAfter.TotalSeconds:0} s"; }
+            else { CredentialClipboard.CopyText(f.Value, secret: false); Message = $"{f.Name} copied"; }
+        }
+        catch (Exception ex) { Message = $"Couldn't read {f.Name}: {ex.Message}"; }
+    }
+
+    /// <summary>True when the entry's login (own, saved or from the folder) has a two-factor secret.</summary>
+    public bool HasTotp(Entry e)
+    {
+        if (_store is null) return false;
+        if (e.Kind == EntryKind.Credential) return e.Credential?.ProtectedTotpSecret is not null;
+        var (_, holder) = _store.ResolveLogin(e);
+        return holder?.Credential?.ProtectedTotpSecret is not null;
+    }
+
+    [RelayCommand]
+    private void CopyTotp()
+    {
+        if (_store is null || _protector is null || Selected?.Entry is not { } e) return;
+        var secret = Secrets.Resolve(e, _store, _protector).TotpSecret;
+        if (secret is null || !RemoteMan.Core.Security.Totp.IsValid(secret)) { Message = $"{e.Name} has no 2FA secret"; return; }
+        CredentialClipboard.CopyText(RemoteMan.Core.Security.Totp.Code(secret), secret: true);
+        Message = $"2FA code copied, valid for {RemoteMan.Core.Security.Totp.SecondsLeft(secret)} s";
     }
 
     [RelayCommand]

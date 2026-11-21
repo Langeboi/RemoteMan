@@ -6,6 +6,7 @@ using RemoteMan.Core.Integrations.Zabbix;
 using RemoteMan.Core.Model;
 using RemoteMan.Core.Security;
 using RemoteMan.Core.Storage;
+using System.Windows.Controls.Primitives;
 
 namespace RemoteMan.App.Views;
 
@@ -14,6 +15,64 @@ public sealed partial class HostRow : ObservableObject
     [ObservableProperty] private string _host = "";
     [ObservableProperty] private string _port = "";
     [ObservableProperty] private string _role = "";
+}
+
+/// <summary>One port forward row on the Advanced tab.</summary>
+public sealed partial class ForwardRow : ObservableObject
+{
+    public static IReadOnlyList<string> Kinds { get; } = ["Local", "Remote", "SOCKS"];
+    [ObservableProperty] [NotifyPropertyChangedFor(nameof(HasDestination))] private string _kind = "Local";
+    [ObservableProperty] private string _listenHost = "127.0.0.1";
+    [ObservableProperty] private string _listenPort = "";
+    [ObservableProperty] private string? _destHost;
+    [ObservableProperty] private string _destPort = "";
+    [ObservableProperty] private bool _enabled = true;
+    public bool HasDestination => Kind != "SOCKS";
+
+    public static ForwardRow From(PortForward f) => new()
+    {
+        Kind = f.Kind switch { ForwardKind.Remote => "Remote", ForwardKind.Dynamic => "SOCKS", _ => "Local" },
+        ListenHost = f.ListenHost, ListenPort = f.ListenPort > 0 ? f.ListenPort.ToString() : "", DestHost = f.DestHost,
+        DestPort = f.DestPort > 0 ? f.DestPort.ToString() : "", Enabled = f.Enabled,
+    };
+
+    public PortForward? ToForward() => !int.TryParse(ListenPort, out var lp) || lp <= 0 ? null : new PortForward
+    {
+        Kind = Kind switch { "Remote" => ForwardKind.Remote, "SOCKS" => ForwardKind.Dynamic, _ => ForwardKind.Local },
+        ListenHost = string.IsNullOrWhiteSpace(ListenHost) ? "127.0.0.1" : ListenHost.Trim(), ListenPort = lp,
+        DestHost = HasDestination && !string.IsNullOrWhiteSpace(DestHost) ? DestHost.Trim() : null,
+        DestPort = HasDestination && int.TryParse(DestPort, out var dp) ? dp : 0, Enabled = Enabled,
+    };
+}
+
+/// <summary>One "wait for / then type" step of a login script.</summary>
+public sealed partial class StepRow : ObservableObject
+{
+    [ObservableProperty] private string? _waitFor;
+    [ObservableProperty] private string? _send;
+}
+
+/// <summary>A custom field. A stored secret stays encrypted (and hidden) until "show" is pressed.</summary>
+public sealed partial class FieldRow : ObservableObject
+{
+    private readonly Func<string, string> _unprotect;
+    public FieldRow(Func<string, string> unprotect) => _unprotect = unprotect;
+    /// <summary>The encrypted value as saved; null for a new or plain field.</summary>
+    public string? Stored { get; init; }
+    [ObservableProperty] private string _name = "";
+    [ObservableProperty] private string? _value;
+    [ObservableProperty] [NotifyPropertyChangedFor(nameof(ShowValue), nameof(HideValue))] private bool _secret;
+    [ObservableProperty] [NotifyPropertyChangedFor(nameof(ShowValue), nameof(HideValue))] private bool _revealed;
+    public bool ShowValue => !Secret || Stored is null || Revealed;
+    public bool HideValue => !ShowValue;
+
+    public void Reveal()
+    {
+        if (Stored is not null && !Revealed) { try { Value = _unprotect(Stored); } catch (Exception) { Value = ""; } }
+        Revealed = true;
+    }
+
+    partial void OnSecretChanged(bool value) { if (!value) Reveal(); }
 }
 
 /// <summary>Edits an <see cref="Entry"/> in place; the caller saves it on OK.</summary>
@@ -27,6 +86,14 @@ public partial class EntryEditorWindow : Window
     public sealed record JumpChoice(Guid? Id, string Name) { public override string ToString() => Name; }
     public sealed record BrowserChoice(BrowserKind Kind, string Label) { public override string ToString() => Label; }
     public sealed record LoginChoice(LoginSource Source, string Name) { public override string ToString() => Name; }
+    /// <summary>A combo box item: the stored value and the words shown for it.</summary>
+    public sealed record Opt(object Value, string Label) { public override string ToString() => Label; }
+    private readonly ObservableCollection<ForwardRow> _forwards = new();
+    private readonly ObservableCollection<StepRow> _steps = new();
+    private readonly ObservableCollection<FieldRow> _fields = new();
+    private readonly System.Windows.Threading.DispatcherTimer _totpTimer = new() { Interval = TimeSpan.FromSeconds(1) };
+    private string? _tabColor;
+    private bool _loaded;
     /// <summary>Set on OK when "Save as a reusable credential too" was ticked: the caller saves it first.</summary>
     public Entry? NewCredential { get; private set; }
     private string? _certBase64;
@@ -64,18 +131,13 @@ public partial class EntryEditorWindow : Window
         _zabbixHostId = entry.ZabbixHostId;
 
         var connectable = entry.IsConnectable;
+        var folder = kind == EntryKind.Folder;
         Show(HostsGroup, connectable && kind != EntryKind.Serial);
         Show(UrlLabel, kind == EntryKind.Web); Show(UrlBox, kind == EntryKind.Web);
-        var hasLogin = connectable || kind == EntryKind.Folder;
+        var hasLogin = connectable || folder;
         Show(CredLabel, hasLogin); Show(LoginBox, hasLogin);
-        Show(RdpGroup, kind == EntryKind.Rdp);
-        Show(SshGroup, kind == EntryKind.Ssh);
-        Show(WebGroup, kind == EntryKind.Web);
-        Show(VncGroup, kind == EntryKind.Vnc);
         Show(SerialGroup, kind == EntryKind.Serial);
-        Show(FtpGroup, kind == EntryKind.Ftp);
         Show(ProxmoxGroup, kind == EntryKind.Proxmox);
-        Show(PsGroup, kind == EntryKind.PowerShell);
 
         var serial = entry.Serial ?? new SerialSettings();
         var ports = RemoteMan.Protocols.Terminal.SerialChannel.PortNames().ToList();
@@ -131,13 +193,10 @@ public partial class EntryEditorWindow : Window
         OnKeyFromDisk(this, new RoutedEventArgs());
         UpdateLoginUi();
 
-        var r = entry.Rdp ?? new RdpSettings();
-        RdpIgnoreCert.IsChecked = r.IgnoreCertificateErrors; RdpSmart.IsChecked = r.SmartSizing; RdpClipboard.IsChecked = r.RedirectClipboard;
-        RdpDrives.IsChecked = r.RedirectDrives; RdpCopySelect.IsChecked = r.CopyOnSelect; RdpAdmin.IsChecked = r.AdminSession; RdpGateway.Text = r.GatewayHost;
+        LoadMisc(entry);
+        LoadAdvanced(entry, store);
 
         var s = entry.Ssh ?? new SshSettings();
-        SshAutoAccept.IsChecked = s.AutoAcceptHostKey; SshLegacy.IsChecked = s.AllowLegacyAlgorithms; SshStartup.Text = s.StartupCommand;
-        SshCopySelect.IsChecked = s.CopyOnSelect; SshDownloads.Text = s.DownloadFolder;
         var jumps = new List<JumpChoice> { new(null, "None (direct)") };
         jumps.AddRange(store.Entries.Where(x => x.Kind == EntryKind.Ssh && x.Id != entry.Id).OrderBy(x => x.Name)
             .Select(x => new JumpChoice(x.Id, $"{x.Name} ({x.Endpoints.FirstOrDefault()?.ToString() ?? "no host"})")));
@@ -156,20 +215,31 @@ public partial class EntryEditorWindow : Window
         };
         WebBrowser.ItemsSource = browsers; WebBrowser.DisplayMemberPath = nameof(BrowserChoice.Label);
         WebBrowser.SelectedItem = browsers.FirstOrDefault(b => b.Kind == w.Browser) ?? browsers[0];
-        WebIgnoreCert.IsChecked = w.IgnoreCertificateErrors; WebAutoFill.IsChecked = w.AutoFill; WebAutoSubmit.IsChecked = w.AutoSubmit;
+        WebAutoFill.IsChecked = w.AutoFill; WebAutoSubmit.IsChecked = w.AutoSubmit; WebFillTotp.IsChecked = w.FillTotp;
         WebPreset.ItemsSource = new[] { "Automatic" }.Concat(RemoteMan.Protocols.Web.AutoFillScript.Presets.Select(p => p.Name)).Append("Custom").ToList();
-        WebUserSel.Text = w.UserFieldSelector; WebPassSel.Text = w.PasswordFieldSelector; WebSubmitSel.Text = w.SubmitSelector; WebCopySelect.IsChecked = w.CopyOnSelect;
+        WebUserSel.Text = w.UserFieldSelector; WebPassSel.Text = w.PasswordFieldSelector; WebSubmitSel.Text = w.SubmitSelector;
         MatchWebPreset();
 
         var v = entry.Vnc ?? new VncSettings();
         VncViewerBox.ItemsSource = Enum.GetValues<VncViewer>(); VncViewerBox.SelectedItem = v.Viewer; VncViewOnly.IsChecked = v.ViewOnly;
 
-        Loaded += (_, _) => { NameBox.Focus(); NameBox.SelectAll(); };
+        ShowSections(entry);
+        AdvancedPage.AddHandler(System.Windows.Controls.Primitives.ToggleButton.CheckedEvent, new RoutedEventHandler((_, _) => UpdateSummaries()), true);
+        AdvancedPage.AddHandler(System.Windows.Controls.Primitives.ToggleButton.UncheckedEvent, new RoutedEventHandler((_, _) => UpdateSummaries()), true);
+        AdvancedPage.AddHandler(TextBoxBase.TextChangedEvent, new TextChangedEventHandler((_, _) => UpdateSummaries()), true);
+        AdvancedPage.AddHandler(System.Windows.Controls.Primitives.Selector.SelectionChangedEvent, new SelectionChangedEventHandler((_, _) => UpdateSummaries()), true);
+        _forwards.CollectionChanged += (_, _) => UpdateSummaries();
+        _steps.CollectionChanged += (_, _) => UpdateSummaries();
+        _fields.CollectionChanged += (_, _) => UpdateSummaries();
+        _totpTimer.Tick += (_, _) => UpdateTotp();
+        Closed += (_, _) => _totpTimer.Stop();
+        Loaded += (_, _) => { _loaded = true; UpdateSummaries(); UpdateTotp(); _totpTimer.Start(); NameBox.Focus(); NameBox.SelectAll(); };
     }
 
     private void ShowZabbix()
     {
-        Show(ZabbixGroup, _zabbix is not null && _e.IsConnectable);
+        Show(SecZabbix, _zabbix is not null && _e.IsConnectable);
+        UpdateAdvancedTab();
         if (_zabbix is null) return;
         var host = _zabbixHostId is { } id ? _zabbix.Matcher.GetHost(id) : null;
         if (host is not null) ZabbixCurrent.Text = $"Linked: {host.DisplayName} (hostid {host.HostId})";
@@ -282,6 +352,7 @@ public partial class EntryEditorWindow : Window
         Show(PasswordRow, t is CredentialType.Password or CredentialType.Certificate or CredentialType.Secret);
         PasswordLabel.Text = t switch { CredentialType.Secret => "Secret", CredentialType.Certificate => "Password", _ => "Password" };
         Show(AskPasswordBox, t == CredentialType.Password);
+        Show(TotpRow, t is CredentialType.Password or CredentialType.SshKey);
         Show(NotesRow, t == CredentialType.Secret || isCred);
     }
 
@@ -419,6 +490,9 @@ public partial class EntryEditorWindow : Window
         }
         _e.Name = NameBox.Text.Trim();
         _e.Tags = string.IsNullOrWhiteSpace(TagsBox.Text) ? null : TagsBox.Text.Trim();
+        if (_e.Kind == EntryKind.Ssh && JumpPath.Text.Contains("loop")) { TabAdvanced.IsChecked = true; SecJump.IsOpen = true; JumpBox.Focus(); return; }
+        if (TotpBox.Password.Trim().Length > 0 && !Totp.IsValid(TotpBox.Password)) { TabGeneral.IsChecked = true; TotpBox.Focus(); TotpNow.Text = "not a valid secret"; return; }
+        if (!SaveMisc()) return;
         _e.ZabbixHostId = _zabbixHostId;
 
         if (_e.IsConnectable)
@@ -456,36 +530,35 @@ public partial class EntryEditorWindow : Window
         {
             case EntryKind.Rdp:
                 _e.Rdp ??= new();
+                SaveDisplay(_e.Rdp); SaveResources(_e.Rdp); SaveGateway(_e.Rdp);
                 _e.Rdp.IgnoreCertificateErrors = RdpIgnoreCert.IsChecked == true;
-                _e.Rdp.SmartSizing = RdpSmart.IsChecked == true;
-                _e.Rdp.RedirectClipboard = RdpClipboard.IsChecked == true;
-                _e.Rdp.RedirectDrives = RdpDrives.IsChecked == true;
-                _e.Rdp.CopyOnSelect = RdpCopySelect.IsChecked == true;
                 _e.Rdp.AdminSession = RdpAdmin.IsChecked == true;
-                _e.Rdp.GatewayHost = string.IsNullOrWhiteSpace(RdpGateway.Text) ? null : RdpGateway.Text.Trim();
-                _e.Rdp.UseRdGateway = _e.Rdp.GatewayHost is not null;
                 break;
             case EntryKind.Ssh:
-                if (JumpPath.Text.Contains("loop")) { JumpBox.Focus(); return; }
                 _e.Ssh ??= new();
-                _e.Ssh.AutoAcceptHostKey = SshAutoAccept.IsChecked == true;
-                _e.Ssh.AllowLegacyAlgorithms = SshLegacy.IsChecked == true;
+                SaveTerminal(_e.Ssh); SaveAuth(_e.Ssh); SaveScript(_e.Ssh);
                 _e.Ssh.StartupCommand = string.IsNullOrWhiteSpace(SshStartup.Text) ? null : SshStartup.Text;
-                _e.Ssh.CopyOnSelect = SshCopySelect.IsChecked == true;
                 _e.Ssh.DownloadFolder = string.IsNullOrWhiteSpace(SshDownloads.Text) ? null : SshDownloads.Text.Trim();
                 _e.Ssh.JumpHostId = (JumpBox.SelectedItem as JumpChoice)?.Id;
+                var forwards = _forwards.Select(f => f.ToForward()).OfType<PortForward>().ToList();
+                _e.Ssh.Forwards = forwards.Count > 0 ? forwards : null;
                 break;
             case EntryKind.Web:
                 _e.Web ??= new();
                 _e.Web.Url = WebSettings.NormalizeUrl(UrlBox.Text);
-                _e.Web.Browser = (WebBrowser.SelectedItem as BrowserChoice)?.Kind ?? BrowserKind.Embedded;
-                _e.Web.IgnoreCertificateErrors = WebIgnoreCert.IsChecked == true;
+                SaveBrowser(_e.Web);
                 _e.Web.AutoFill = WebAutoFill.IsChecked == true;
                 _e.Web.AutoSubmit = WebAutoSubmit.IsChecked == true;
+                _e.Web.FillTotp = WebFillTotp.IsChecked == true;
                 _e.Web.UserFieldSelector = string.IsNullOrWhiteSpace(WebUserSel.Text) ? null : WebUserSel.Text.Trim();
                 _e.Web.PasswordFieldSelector = string.IsNullOrWhiteSpace(WebPassSel.Text) ? null : WebPassSel.Text.Trim();
                 _e.Web.SubmitSelector = string.IsNullOrWhiteSpace(WebSubmitSel.Text) ? null : WebSubmitSel.Text.Trim();
-                _e.Web.CopyOnSelect = WebCopySelect.IsChecked == true;
+                break;
+            case EntryKind.Folder:
+                // Defaults for the entries inside that tick "Folder" on a section.
+                _e.Rdp ??= new(); SaveDisplay(_e.Rdp); SaveResources(_e.Rdp); SaveGateway(_e.Rdp);
+                _e.Ssh ??= new(); SaveTerminal(_e.Ssh); SaveAuth(_e.Ssh);
+                _e.Web ??= new(); SaveBrowser(_e.Web);
                 break;
             case EntryKind.Vnc:
                 _e.Vnc ??= new();
@@ -505,6 +578,7 @@ public partial class EntryEditorWindow : Window
                 _e.Serial.Parity = SerialParityBox.SelectedItem as string ?? "None";
                 _e.Serial.StopBits = SerialStopBox.SelectedItem as string ?? "One";
                 _e.Serial.FlowControl = SerialFlowBox.SelectedItem as string ?? "None";
+                SaveTerminal(_e.Ssh); SaveScript(_e.Ssh);
                 break;
             case EntryKind.Ftp:
                 _e.Ftp ??= new();
@@ -525,7 +599,11 @@ public partial class EntryEditorWindow : Window
                 _e.PowerShell.UseSsl = PsSsl.IsChecked == true;
                 _e.PowerShell.ConfigurationName = string.IsNullOrWhiteSpace(PsConfig.Text) ? null : PsConfig.Text.Trim();
                 break;
-            case EntryKind.Telnet or EntryKind.Sftp:
+            case EntryKind.Telnet:
+                _e.Ssh ??= new();
+                SaveTerminal(_e.Ssh); SaveScript(_e.Ssh);
+                break;
+            case EntryKind.Sftp:
                 _e.Ssh ??= new();
                 break;
         }
@@ -562,5 +640,7 @@ public partial class EntryEditorWindow : Window
             if (PassphraseBox.Password.Length > 0) c.ProtectedPassphrase = _protector.Protect(PassphraseBox.Password);
         }
         if (t == CredentialType.Certificate && _certBase64 is not null) c.ProtectedCertificate = _protector.Protect(_certBase64);
+        if (t is not (CredentialType.Password or CredentialType.SshKey)) c.ProtectedTotpSecret = null;
+        else if (TotpBox.Password.Trim().Length > 0) c.ProtectedTotpSecret = _protector.Protect(TotpBox.Password.Trim());
     }
 }

@@ -1,6 +1,7 @@
 <Window x:Class="RemoteMan.App.Views.EntryEditorWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="clr-namespace:RemoteMan.App.Views"
         Title="Edit entry" Width="640" Height="600" MinWidth="520" MinHeight="420"
         Style="{StaticResource RemoteManWindow}" WindowStartupLocation="CenterOwner" ShowInTaskbar="False">
     <Window.Resources>
@@ -37,6 +38,87 @@
                 </Setter.Value>
             </Setter>
         </Style>
+        <!-- Editor tabs: General / Misc / Advanced, an underline on the chosen one -->
+        <Style TargetType="RadioButton" x:Key="EditorTab">
+            <Setter Property="Foreground" Value="{StaticResource Muted}" />
+            <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="RadioButton">
+                        <Border x:Name="b" Background="Transparent" Padding="14,7" BorderBrush="Transparent" BorderThickness="0,0,0,2">
+                            <ContentPresenter VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True"><Setter Property="Foreground" Value="{StaticResource Text}" /></Trigger>
+                            <Trigger Property="IsKeyboardFocused" Value="True"><Setter TargetName="b" Property="Background" Value="{StaticResource Hover}" /></Trigger>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="b" Property="BorderBrush" Value="{StaticResource Accent}" />
+                                <Setter Property="Foreground" Value="{StaticResource TextStrong}" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <!-- Advanced sections: closed by default, summary on the header line, optional "Folder" tick -->
+        <Style TargetType="local:SettingsSection">
+            <Setter Property="Margin" Value="0,6,0,0" />
+            <Setter Property="Focusable" Value="False" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="local:SettingsSection">
+                        <Border BorderBrush="{StaticResource Border}" BorderThickness="1" CornerRadius="{StaticResource Radius}">
+                            <DockPanel>
+                                <Border DockPanel.Dock="Top" Background="{StaticResource Panel2}" CornerRadius="{StaticResource Radius}">
+                                    <DockPanel>
+                                        <CheckBox x:Name="inherit" DockPanel.Dock="Right" Content="Folder" Margin="8,0,10,0" VerticalAlignment="Center"
+                                                  IsChecked="{Binding IsInherited, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay}"
+                                                  ToolTip="Use the folder's settings for this section. Set them once on the folder (Edit the folder > Advanced)." />
+                                        <ToggleButton IsChecked="{Binding IsOpen, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay}" HorizontalContentAlignment="Stretch" Cursor="Hand">
+                                            <ToggleButton.Template>
+                                                <ControlTemplate TargetType="ToggleButton">
+                                                    <Border x:Name="hb" Background="Transparent" Padding="8,6">
+                                                        <ContentPresenter />
+                                                    </Border>
+                                                    <ControlTemplate.Triggers>
+                                                        <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="hb" Property="Background" Value="{StaticResource Hover}" /></Trigger>
+                                                        <Trigger Property="IsKeyboardFocused" Value="True"><Setter TargetName="hb" Property="Background" Value="{StaticResource Hover}" /></Trigger>
+                                                    </ControlTemplate.Triggers>
+                                                </ControlTemplate>
+                                            </ToggleButton.Template>
+                                            <DockPanel>
+                                                <Path x:Name="chev" Data="M0,0 L4,4 L0,8" Stroke="{StaticResource Muted}" StrokeThickness="1.3" Width="6" Height="9" Margin="2,0,8,0"
+                                                      VerticalAlignment="Center" RenderTransformOrigin="0.5,0.5">
+                                                </Path>
+                                                <TextBlock Text="{TemplateBinding Title}" Foreground="{StaticResource TextStrong}" VerticalAlignment="Center" />
+                                                <TextBlock Text="{TemplateBinding Summary}" Style="{StaticResource MutedText}" FontSize="11" Margin="10,0,0,0"
+                                                           VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                                            </DockPanel>
+                                        </ToggleButton>
+                                    </DockPanel>
+                                </Border>
+                                <ContentPresenter x:Name="body" Margin="10,8,10,10" />
+                            </DockPanel>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsOpen" Value="False"><Setter TargetName="body" Property="Visibility" Value="Collapsed" /></Trigger>
+                            <Trigger Property="IsOpen" Value="True"><Setter TargetName="chev" Property="RenderTransform"><Setter.Value><RotateTransform Angle="90" /></Setter.Value></Setter></Trigger>
+                            <Trigger Property="CanInherit" Value="False"><Setter TargetName="inherit" Property="Visibility" Value="Collapsed" /></Trigger>
+                            <Trigger Property="IsInherited" Value="True">
+                                <Setter TargetName="body" Property="IsEnabled" Value="False" />
+                                <Setter TargetName="body" Property="Opacity" Value="0.45" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <BooleanToVisibilityConverter x:Key="VisibleIf" />
+        <Style TargetType="TextBlock" x:Key="Hint" BasedOn="{StaticResource MutedText}">
+            <Setter Property="FontSize" Value="11" />
+            <Setter Property="TextWrapping" Value="Wrap" />
+            <Setter Property="Margin" Value="0,2,0,4" />
+        </Style>
     </Window.Resources>
     <DockPanel>
         <Border DockPanel.Dock="Top" Height="28" Background="{StaticResource Header}" BorderBrush="{StaticResource Border}" BorderThickness="0,0,0,1">
@@ -55,11 +137,22 @@
             </DockPanel>
         </Border>
 
-        <ScrollViewer VerticalScrollBarVisibility="Auto" Background="{StaticResource Panel}">
+        <!-- General / Misc / Advanced -->
+        <Border DockPanel.Dock="Top" Background="{StaticResource Panel2}" BorderBrush="{StaticResource Border}" BorderThickness="0,0,0,1" Padding="6,0">
+            <StackPanel Orientation="Horizontal">
+                <RadioButton x:Name="TabGeneral" GroupName="tabs" Content="General" Style="{StaticResource EditorTab}" IsChecked="True" Checked="OnTab" />
+                <RadioButton x:Name="TabMisc" GroupName="tabs" Content="Misc" Style="{StaticResource EditorTab}" Checked="OnTab" />
+                <RadioButton x:Name="TabAdvanced" GroupName="tabs" Content="Advanced" Style="{StaticResource EditorTab}" Checked="OnTab" />
+            </StackPanel>
+        </Border>
+
+        <Grid Background="{StaticResource Panel}">
+        <!-- ===== General: what every entry needs ===== -->
+        <ScrollViewer x:Name="GeneralPage" VerticalScrollBarVisibility="Auto">
             <StackPanel Margin="12,10">
                 <Grid>
                     <Grid.ColumnDefinitions><ColumnDefinition Width="90" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
-                    <Grid.RowDefinitions><RowDefinition /><RowDefinition /><RowDefinition /><RowDefinition /><RowDefinition /><RowDefinition /></Grid.RowDefinitions>
+                    <Grid.RowDefinitions><RowDefinition /><RowDefinition /><RowDefinition /><RowDefinition /><RowDefinition /></Grid.RowDefinitions>
                     <TextBlock Text="Name" Style="{StaticResource Label}" />
                     <DockPanel Grid.Column="1">
                         <Button x:Name="IconButton" DockPanel.Dock="Right" Margin="6,2,0,2" Padding="8,0" Click="OnChangeIcon" ToolTip="Icon and colour in the tree"
@@ -71,14 +164,12 @@
                         </Button>
                         <TextBox x:Name="NameBox" Margin="0,2" />
                     </DockPanel>
-                    <TextBlock Grid.Row="1" Text="Tags" Style="{StaticResource Label}" />
-                    <TextBox x:Name="TagsBox" Grid.Row="1" Grid.Column="1" Margin="0,2" />
-                    <TextBlock x:Name="UrlLabel" Grid.Row="2" Text="URL" Style="{StaticResource Label}" />
-                    <TextBox x:Name="UrlBox" Grid.Row="2" Grid.Column="1" Margin="0,2" FontFamily="{StaticResource MonoFont}" />
-                    <TextBlock x:Name="CredLabel" Grid.Row="3" Text="Login" Style="{StaticResource Label}" />
-                    <ComboBox x:Name="LoginBox" Grid.Row="3" Grid.Column="1" Margin="0,2" DisplayMemberPath="Name" SelectionChanged="OnLoginChanged" />
-                    <ComboBox x:Name="CredBox" Grid.Row="4" Grid.Column="1" Margin="0,2" DisplayMemberPath="Name" />
-                    <TextBlock x:Name="LoginHint" Grid.Row="5" Grid.Column="1" Style="{StaticResource MutedText}" FontSize="11" Margin="0,2" TextWrapping="Wrap" />
+                    <TextBlock x:Name="UrlLabel" Grid.Row="1" Text="URL" Style="{StaticResource Label}" />
+                    <TextBox x:Name="UrlBox" Grid.Row="1" Grid.Column="1" Margin="0,2" FontFamily="{StaticResource MonoFont}" />
+                    <TextBlock x:Name="CredLabel" Grid.Row="2" Text="Login" Style="{StaticResource Label}" />
+                    <ComboBox x:Name="LoginBox" Grid.Row="2" Grid.Column="1" Margin="0,2" DisplayMemberPath="Name" SelectionChanged="OnLoginChanged" />
+                    <ComboBox x:Name="CredBox" Grid.Row="3" Grid.Column="1" Margin="0,2" DisplayMemberPath="Name" />
+                    <TextBlock x:Name="LoginHint" Grid.Row="4" Grid.Column="1" Style="{StaticResource MutedText}" FontSize="11" Margin="0,2" TextWrapping="Wrap" />
                 </Grid>
 
                 <!-- Hosts with fallback order -->
@@ -101,7 +192,6 @@
                     </StackPanel>
                 </GroupBox>
 
-                <!-- Login: a credential entry's own secret, or a login typed into this entry -->
                 <GroupBox x:Name="CredGroup" Header="Login">
                     <StackPanel>
                         <DockPanel Margin="0,0,0,6">
@@ -154,6 +244,12 @@
                             <PasswordBox x:Name="PassphraseBox" />
                         </DockPanel>
                         <TextBlock x:Name="CertInfo" Style="{StaticResource MutedText}" FontSize="11" Margin="90,2,0,2" TextWrapping="Wrap" />
+                        <DockPanel x:Name="TotpRow" Margin="0,2">
+                            <TextBlock Text="2FA secret" Width="90" Style="{StaticResource Label}" />
+                            <Button DockPanel.Dock="Right" x:Name="TotpCopy" Content="Copy code" Margin="6,0,0,0" Click="OnCopyTotp" ToolTip="Copy the current 6-digit code" />
+                            <TextBlock DockPanel.Dock="Right" x:Name="TotpNow" Margin="8,0,0,0" VerticalAlignment="Center" FontFamily="{StaticResource MonoFont}" FontSize="14" Foreground="{StaticResource TextStrong}" />
+                            <PasswordBox x:Name="TotpBox" PasswordChanged="OnTotpChanged" ToolTip="The text under the QR code (base32), or an otpauth:// link. Leave empty to keep the stored one." />
+                        </DockPanel>
                         <CheckBox x:Name="AskPasswordBox" Content="Ask for the password when connecting instead of storing it" Margin="90,4,0,0" />
                         <DockPanel x:Name="NotesRow" Margin="0,2">
                             <TextBlock Text="Notes" Width="90" Style="{StaticResource Label}" VerticalAlignment="Top" />
@@ -161,85 +257,6 @@
                         </DockPanel>
                         <CheckBox x:Name="SaveAsCredential" Content="Save as a reusable credential too" Margin="90,6,0,0" />
                     </StackPanel>
-                </GroupBox>
-
-                <GroupBox x:Name="RdpGroup" Header="RDP options">
-                    <StackPanel>
-                        <CheckBox x:Name="RdpIgnoreCert" Content="Skip certificate warnings" />
-                        <CheckBox x:Name="RdpSmart" Content="Fit desktop to tab (smart sizing)" />
-                        <CheckBox x:Name="RdpClipboard" Content="Redirect clipboard (text and files, both ways)" />
-                        <CheckBox x:Name="RdpCopySelect" Content="Copy text as soon as it is selected" />
-                        <CheckBox x:Name="RdpDrives" Content="Redirect local drives" />
-                        <CheckBox x:Name="RdpAdmin" Content="Admin (console) session" />
-                        <DockPanel Margin="0,4,0,0">
-                            <TextBlock Text="RD Gateway" Width="90" Style="{StaticResource Label}" />
-                            <TextBox x:Name="RdpGateway" ToolTip="Leave empty for a direct connection" />
-                        </DockPanel>
-                    </StackPanel>
-                </GroupBox>
-
-                <GroupBox x:Name="SshGroup" Header="SSH options">
-                    <StackPanel>
-                        <DockPanel Margin="0,0,0,4">
-                            <TextBlock Text="Jump host" Width="90" Style="{StaticResource Label}" />
-                            <ComboBox x:Name="JumpBox" DisplayMemberPath="Name" SelectionChanged="OnJumpChanged"
-                                      ToolTip="Connect through another SSH entry (ProxyJump). It logs in with its own credential and fallback hosts." />
-                        </DockPanel>
-                        <TextBlock x:Name="JumpPath" Style="{StaticResource MutedText}" FontFamily="{StaticResource MonoFont}" FontSize="11" Margin="90,0,0,4" TextWrapping="Wrap" />
-                        <CheckBox x:Name="SshAutoAccept" Content="Accept host keys automatically (logged)" />
-                        <CheckBox x:Name="SshLegacy" Content="Allow legacy algorithms (ssh-rsa, DH group1/14-sha1, CBC, 3DES)" />
-                        <CheckBox x:Name="SshCopySelect" Content="Copy text as soon as it is selected" />
-                        <DockPanel Margin="0,4,0,0">
-                            <TextBlock Text="Downloads to" Width="90" Style="{StaticResource Label}" />
-                            <TextBox x:Name="SshDownloads" ToolTip="Leave empty for your Downloads folder" />
-                        </DockPanel>
-                        <DockPanel Margin="0,4,0,0">
-                            <TextBlock Text="Run on login" Width="90" Style="{StaticResource Label}" />
-                            <TextBox x:Name="SshStartup" FontFamily="{StaticResource MonoFont}" />
-                        </DockPanel>
-                    </StackPanel>
-                </GroupBox>
-
-                <GroupBox x:Name="WebGroup" Header="Web options">
-                    <StackPanel>
-                        <DockPanel>
-                            <TextBlock Text="Browser" Width="90" Style="{StaticResource Label}" />
-                            <ComboBox x:Name="WebBrowser" Width="230" HorizontalAlignment="Left" />
-                        </DockPanel>
-                        <CheckBox x:Name="WebIgnoreCert" Content="Ignore certificate errors" />
-                        <CheckBox x:Name="WebAutoFill" Content="Fill in the login form automatically" />
-                        <CheckBox x:Name="WebAutoSubmit" Content="Then press the login button" Margin="18,3,0,3" />
-                        <DockPanel Margin="0,8,0,2">
-                            <TextBlock Text="Login form" Width="90" Style="{StaticResource Label}" />
-                            <Button DockPanel.Dock="Right" Content="Pick on page…" Margin="6,0,0,0" Click="OnPickFields"
-                                    ToolTip="Open the page and click the user name box, the password box and the login button" />
-                            <ComboBox x:Name="WebPreset" Width="230" HorizontalAlignment="Left" SelectionChanged="OnWebPreset"
-                                      ToolTip="Known login pages, or Automatic to let RemoteMan find the fields" />
-                        </DockPanel>
-                        <TextBlock Text="Which boxes on the page get the user name and password. Leave empty to detect them automatically." Style="{StaticResource MutedText}" FontSize="11" TextWrapping="Wrap" Margin="90,0,0,4" />
-                        <DockPanel Margin="0,2">
-                            <TextBlock Text="User field" Width="90" Style="{StaticResource Label}" />
-                            <TextBox x:Name="WebUserSel" TextChanged="OnWebSelectorChanged" FontFamily="{StaticResource MonoFont}" FontSize="11" ToolTip="e.g. #username or input[name=login]" />
-                        </DockPanel>
-                        <DockPanel Margin="0,2">
-                            <TextBlock Text="Password field" Width="90" Style="{StaticResource Label}" />
-                            <TextBox x:Name="WebPassSel" TextChanged="OnWebSelectorChanged" FontFamily="{StaticResource MonoFont}" FontSize="11" ToolTip="e.g. #password" />
-                        </DockPanel>
-                        <DockPanel Margin="0,2">
-                            <TextBlock Text="Login button" Width="90" Style="{StaticResource Label}" />
-                            <TextBox x:Name="WebSubmitSel" TextChanged="OnWebSelectorChanged" FontFamily="{StaticResource MonoFont}" FontSize="11" ToolTip="e.g. button#login" />
-                        </DockPanel>
-                        <CheckBox x:Name="WebCopySelect" Content="Copy text as soon as it is selected" />
-                    </StackPanel>
-                </GroupBox>
-
-                <!-- Zabbix: which host's health shows on this entry -->
-                <GroupBox x:Name="ZabbixGroup" Header="Zabbix" Visibility="Collapsed">
-                    <DockPanel>
-                        <Button x:Name="ZabbixUnlink" DockPanel.Dock="Right" Content="Unlink" MinWidth="70" Margin="6,0,0,0" Click="OnZabbixUnlink" />
-                        <Button DockPanel.Dock="Right" Content="Link to Zabbix host…" Margin="6,0,0,0" Click="OnZabbixLink" />
-                        <TextBlock x:Name="ZabbixCurrent" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Foreground="{StaticResource Text}" />
-                    </DockPanel>
                 </GroupBox>
 
                 <GroupBox x:Name="SerialGroup" Header="Serial port">
@@ -268,17 +285,6 @@
                     </StackPanel>
                 </GroupBox>
 
-                <GroupBox x:Name="FtpGroup" Header="FTP options">
-                    <StackPanel>
-                        <CheckBox x:Name="FtpTls" Content="Use TLS (FTPS, explicit)" />
-                        <CheckBox x:Name="FtpIgnoreCert" Content="Ignore certificate errors" />
-                        <DockPanel Margin="0,4,0,0">
-                            <TextBlock Text="Start folder" Width="90" Style="{StaticResource Label}" />
-                            <TextBox x:Name="FtpStart" ToolTip="Empty = the server's default folder" />
-                        </DockPanel>
-                    </StackPanel>
-                </GroupBox>
-
                 <GroupBox x:Name="ProxmoxGroup" Header="Proxmox console">
                     <StackPanel>
                         <DockPanel Margin="0,2">
@@ -294,28 +300,367 @@
                         <TextBlock Text="Signs in with the entry's login (for example root@pam) and opens the console in a tab. The host is the Proxmox server, port 8006." Style="{StaticResource MutedText}" FontSize="11" TextWrapping="Wrap" Margin="0,4,0,0" />
                     </StackPanel>
                 </GroupBox>
+            </StackPanel>
+        </ScrollViewer>
 
-                <GroupBox x:Name="PsGroup" Header="PowerShell remoting">
+        <!-- ===== Misc ===== -->
+        <ScrollViewer x:Name="MiscPage" VerticalScrollBarVisibility="Auto" Visibility="Collapsed">
+            <StackPanel Margin="12,10">
+                <DockPanel x:Name="OpenRow" Margin="0,2">
+                            <TextBlock Text="Open in" Width="110" Style="{StaticResource Label}" />
+                            <ComboBox x:Name="OpenInBox" Width="230" HorizontalAlignment="Left" ToolTip="A tab, its own window, or full screen (F11 switches a window to full screen and back)" />
+                        </DockPanel>
+                <DockPanel x:Name="SizeRow" Margin="0,2">
+                            <TextBlock Text="Size" Width="110" Style="{StaticResource Label}" />
+                            <ComboBox x:Name="SizeBox" Width="230" HorizontalAlignment="Left" IsEditable="True" ToolTip="Fit to tab, or a fixed size such as 1600 x 900" />
+                        </DockPanel>
+                <DockPanel x:Name="BrowserRow" Margin="0,2">
+                            <TextBlock Text="Browser" Width="110" Style="{StaticResource Label}" />
+                            <ComboBox x:Name="WebBrowser" Width="230" HorizontalAlignment="Left" />
+                        </DockPanel>
+                <DockPanel x:Name="TabColorRow" Margin="0,2">
+                            <TextBlock Text="Tab colour" Width="110" Style="{StaticResource Label}" />
+                            <WrapPanel x:Name="TabColors" VerticalAlignment="Center" />
+                        </DockPanel>
+                <DockPanel Margin="0,2">
+                            <TextBlock Text="Tags" Width="110" Style="{StaticResource Label}" />
+                            <TextBox x:Name="TagsBox" ToolTip="Comma separated; the search box finds them" />
+                        </DockPanel>
+                <DockPanel Margin="0,2">
+                            <TextBlock Text="Description" Width="110" Style="{StaticResource Label}" VerticalAlignment="Top" Margin="0,5,8,3" />
+                            <TextBox x:Name="DescBox" Height="70" AcceptsReturn="True" TextWrapping="Wrap" VerticalContentAlignment="Top" ToolTip="Shown in the info panel" />
+                        </DockPanel>
+                <CheckBox x:Name="FavoriteBox" Content="Favorite (shown at the top of the tree)" Margin="110,6,0,0" />
+            </StackPanel>
+        </ScrollViewer>
+
+        <!-- ===== Advanced: everything else, in closed sections ===== -->
+        <ScrollViewer x:Name="AdvancedPage" VerticalScrollBarVisibility="Auto" Visibility="Collapsed">
+            <StackPanel x:Name="AdvancedList" Margin="12,6,12,10">
+                <TextBlock x:Name="AdvancedHint" Style="{StaticResource Hint}" Margin="0,4,0,2"
+                           Text="Open a section to change it. The line next to its name shows what's set. Folder uses the folder's settings for that section." />
+
+                <local:SettingsSection x:Name="SecConnection" Title="Connection" CanInherit="True">
+                    <StackPanel>
+                        <CheckBox x:Name="ConnWol" Content="Wake-on-LAN before connecting" />
+                        <DockPanel Margin="0,2">
+                            <TextBlock Text="MAC address" Width="110" Style="{StaticResource Label}" />
+                            <StackPanel Orientation="Horizontal"><TextBox x:Name="ConnMac" Width="150" FontFamily="{StaticResource MonoFont}" ToolTip="For example 3C:52:82:1A:4F:09" /><TextBlock Text="Send to" Style="{StaticResource Label}" Margin="12,0,6,0" /><TextBox x:Name="ConnBroadcast" Width="130" FontFamily="{StaticResource MonoFont}" ToolTip="Broadcast address of the machine&apos;s network, e.g. 10.0.10.255. Empty = 255.255.255.255" /></StackPanel>
+                        </DockPanel>
+                        <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
+                            <CheckBox x:Name="ConnWait" Content="Wait until it answers, up to" VerticalAlignment="Center" />
+                            <TextBox x:Name="ConnWaitSecs" Width="50" Margin="6,0" />
+                            <TextBlock Text="seconds" Style="{StaticResource Label}" />
+                        </StackPanel>
+                        <TextBlock Style="{StaticResource Hint}" Margin="22,0,0,4" Text="Keeps trying instead of failing at once. Handy after a reboot, a snapshot revert or Wake-on-LAN." />
+                        <CheckBox x:Name="ConnReconnect" Content="Reconnect when the connection drops" />
+                        <DockPanel Margin="0,2">
+                            <TextBlock Text="Run before" Width="110" Style="{StaticResource Label}" />
+                            <TextBox x:Name="ConnBefore" FontFamily="{StaticResource MonoFont}" ToolTip="A command on this PC (cmd.exe), e.g. to start a VPN. {field:Name} puts in a custom field." />
+                        </DockPanel>
+                        <CheckBox x:Name="ConnBeforeWait" Content="Wait for it to finish (up to two minutes)" Margin="110,0,0,4" />
+                        <DockPanel Margin="0,2">
+                            <TextBlock Text="Run after" Width="110" Style="{StaticResource Label}" />
+                            <TextBox x:Name="ConnAfter" FontFamily="{StaticResource MonoFont}" ToolTip="A command on this PC after the session closes" />
+                        </DockPanel>
+                    </StackPanel>
+                </local:SettingsSection>
+
+                <!-- RDP -->
+                <local:SettingsSection x:Name="SecDisplay" Title="Display" CanInherit="True">
+                    <StackPanel>
+                        <DockPanel Margin="0,2">
+                            <TextBlock Text="Monitors" Width="110" Style="{StaticResource Label}" />
+                            <StackPanel Orientation="Horizontal"><ComboBox x:Name="RdpMonitorsBox" Width="200" SelectionChanged="OnAnySelection" /><TextBox x:Name="RdpMonitorList" Width="90" Margin="6,0,0,0" ToolTip="Monitor numbers, e.g. 0,1 (mstsc /l lists them)" /></StackPanel>
+                        </DockPanel>
+                        <TextBlock x:Name="RdpMonitorsHint" Style="{StaticResource Hint}" Margin="110,0,0,4" Text="More than one monitor opens in Windows' Remote Desktop Connection, which can span them." />
+                        <DockPanel Margin="0,2">
+                            <TextBlock Text="Scaling" Width="110" Style="{StaticResource Label}" />
+                            <ComboBox x:Name="RdpScale" Width="200" HorizontalAlignment="Left" />
+                        </DockPanel>
+                        <DockPanel Margin="0,2">
+                            <TextBlock Text="Colours" Width="110" Style="{StaticResource Label}" />
+                            <ComboBox x:Name="RdpColors" Width="200" HorizontalAlignment="Left" />
+                        </DockPanel>
+                        <DockPanel Margin="0,2">
+                            <TextBlock Text="Speed" Width="110" Style="{StaticResource Label}" />
+                            <ComboBox x:Name="RdpSpeedBox" Width="200" HorizontalAlignment="Left" ToolTip="Slow turns off wallpaper, themes and animations for VPN and mobile links" />
+                        </DockPanel>
+                        <CheckBox x:Name="RdpSmart" Content="Fit desktop to tab (smart sizing)" />
+                    </StackPanel>
+                </local:SettingsSection>
+                <local:SettingsSection x:Name="SecResources" Title="Local resources" CanInherit="True">
+                    <StackPanel>
+                        <DockPanel Margin="0,2">
+                            <TextBlock Text="Sound" Width="110" Style="{StaticResource Label}" />
+                            <StackPanel Orientation="Horizontal"><ComboBox x:Name="RdpAudioBox" Width="200" /><CheckBox x:Name="RdpMic" Content="Microphone" Margin="12,0,0,0" VerticalAlignment="Center" /></StackPanel>
+                        </DockPanel>
+                        <CheckBox x:Name="RdpClipboard" Content="Redirect clipboard (text and files, both ways)" />
+                        <CheckBox x:Name="RdpCopySelect" Content="Copy text as soon as it is selected" />
+                        <CheckBox x:Name="RdpPrinters" Content="Printers" />
+                        <StackPanel Orientation="Horizontal">
+                            <CheckBox x:Name="RdpDrives" Content="Drives:" VerticalAlignment="Center" />
+                            <TextBox x:Name="RdpDriveList" Width="120" Margin="8,0,0,0" ToolTip="Letters, e.g. C, E. Empty = all drives" />
+                            <TextBlock Text="empty = all" Style="{StaticResource Label}" Margin="8,0,0,0" />
+                        </StackPanel>
+                        <DockPanel Margin="0,2">
+                            <TextBlock Text="Windows keys" Width="110" Style="{StaticResource Label}" />
+                            <ComboBox x:Name="RdpKeysBox" Width="230" HorizontalAlignment="Left" ToolTip="Where Alt+Tab, the Windows key and similar go" />
+                        </DockPanel>
+                    </StackPanel>
+                </local:SettingsSection>
+                <local:SettingsSection x:Name="SecGateway" Title="Gateway and tunnel" CanInherit="True">
+                    <StackPanel>
+                        <DockPanel Margin="0,2">
+                            <TextBlock Text="RD Gateway" Width="110" Style="{StaticResource Label}" />
+                            <TextBox x:Name="RdpGateway" ToolTip="Leave empty for a direct connection" />
+                        </DockPanel>
+                        <DockPanel Margin="0,2">
+                            <TextBlock Text="Gateway login" Width="110" Style="{StaticResource Label}" />
+                            <ComboBox x:Name="RdpGatewayLogin" DisplayMemberPath="Name" />
+                        </DockPanel>
+                        <CheckBox x:Name="RdpGatewayBypass" Content="Skip the gateway for local addresses" Margin="110,0,0,4" />
+                        <DockPanel Margin="0,2">
+                            <TextBlock Text="SSH tunnel" Width="110" Style="{StaticResource Label}" />
+                            <ComboBox x:Name="RdpTunnel" DisplayMemberPath="Name" ToolTip="Connect through an SSH entry: a hidden port forward on that server carries the RDP connection" />
+                        </DockPanel>
+                        <TextBlock Style="{StaticResource Hint}" Margin="110,0,0,0" Text="Reach a Windows machine behind a server where only SSH is open. The host above is as the SSH server sees it." />
+                    </StackPanel>
+                </local:SettingsSection>
+                <local:SettingsSection x:Name="SecRdpSecurity" Title="Security">
+                    <StackPanel>
+                        <CheckBox x:Name="RdpIgnoreCert" Content="Skip certificate warnings" />
+                        <CheckBox x:Name="RdpAdmin" Content="Admin (console) session" />
+                    </StackPanel>
+                </local:SettingsSection>
+
+                <!-- SSH, Telnet, serial -->
+                <local:SettingsSection x:Name="SecTerminal" Title="Terminal" CanInherit="True">
+                    <StackPanel>
+                        <DockPanel Margin="0,2">
+                            <TextBlock Text="Theme" Width="110" Style="{StaticResource Label}" />
+                            <ComboBox x:Name="TermTheme" Width="200" HorizontalAlignment="Left" />
+                        </DockPanel>
+                        <DockPanel Margin="0,2">
+                            <TextBlock Text="Font size" Width="110" Style="{StaticResource Label}" />
+                            <StackPanel Orientation="Horizontal"><ComboBox x:Name="TermFont" Width="90" /><TextBlock Text="Scrollback" Style="{StaticResource Label}" Margin="16,0,8,0" /><ComboBox x:Name="TermScroll" Width="120" /></StackPanel>
+                        </DockPanel>
+                        <DockPanel Margin="0,2">
+                            <TextBlock Text="Encoding" Width="110" Style="{StaticResource Label}" />
+                            <ComboBox x:Name="TermEncoding" Width="260" HorizontalAlignment="Left" DisplayMemberPath="Label" />
+                        </DockPanel>
+                        <CheckBox x:Name="TermBackspace" Content="Backspace sends Ctrl+H (^H) instead of DEL" />
+                        <CheckBox x:Name="SshCopySelect" Content="Copy text as soon as it is selected" />
+                        <DockPanel x:Name="SshStartupRow" Margin="0,2">
+                            <TextBlock Text="Run on login" Width="110" Style="{StaticResource Label}" />
+                            <TextBox x:Name="SshStartup" FontFamily="{StaticResource MonoFont}" />
+                        </DockPanel>
+                        <DockPanel x:Name="SshDownloadsRow" Margin="0,2">
+                            <TextBlock Text="Downloads to" Width="110" Style="{StaticResource Label}" />
+                            <TextBox x:Name="SshDownloads" ToolTip="Leave empty for your Downloads folder" />
+                        </DockPanel>
+                        <CheckBox x:Name="TermLog" Content="Save the session to a log file (with timestamps)" Margin="0,6,0,0" />
+                        <DockPanel Margin="0,2">
+                            <TextBlock Text="Log folder" Width="110" Style="{StaticResource Label}" />
+                            <TextBox x:Name="TermLogFolder" ToolTip="Empty = Documents\RemoteMan logs. One file per session." />
+                        </DockPanel>
+                    </StackPanel>
+                </local:SettingsSection>
+                <local:SettingsSection x:Name="SecForwards" Title="Port forwards">
+                    <StackPanel>
+                        <TextBlock Style="{StaticResource Hint}" Text="Start with the session and stop when it closes. Local: a port on this PC reaches a host as the server sees it. Remote: a port on the server reaches this PC. SOCKS: a proxy on this PC for a browser." />
+                        <ItemsControl x:Name="ForwardsList">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <DockPanel Margin="0,2">
+                                        <Button DockPanel.Dock="Right" Content="×" Width="24" Margin="4,0,0,0" ToolTip="Remove" Click="OnRemoveForward" />
+                                        <CheckBox DockPanel.Dock="Right" IsChecked="{Binding Enabled}" VerticalAlignment="Center" Margin="6,0,0,0" ToolTip="On" />
+                                        <ComboBox DockPanel.Dock="Left" Width="76" ItemsSource="{Binding Kinds}" SelectedItem="{Binding Kind}" />
+                                        <TextBox DockPanel.Dock="Left" Width="90" Margin="4,0,0,0" Text="{Binding ListenHost, UpdateSourceTrigger=PropertyChanged}" FontFamily="{StaticResource MonoFont}" ToolTip="Listen on" />
+                                        <TextBox DockPanel.Dock="Left" Width="52" Margin="2,0,0,0" Text="{Binding ListenPort, UpdateSourceTrigger=PropertyChanged}" FontFamily="{StaticResource MonoFont}" ToolTip="Port" />
+                                        <TextBlock DockPanel.Dock="Left" Text="→" Margin="6,0" VerticalAlignment="Center" Foreground="{StaticResource Muted}" />
+                                        <TextBox DockPanel.Dock="Right" Width="52" Margin="2,0,0,0" Text="{Binding DestPort, UpdateSourceTrigger=PropertyChanged}" FontFamily="{StaticResource MonoFont}" ToolTip="Port" IsEnabled="{Binding HasDestination}" />
+                                        <TextBox Text="{Binding DestHost, UpdateSourceTrigger=PropertyChanged}" FontFamily="{StaticResource MonoFont}" ToolTip="Goes to (host)" IsEnabled="{Binding HasDestination}" />
+                                    </DockPanel>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                        <Button Content="Add forward" HorizontalAlignment="Left" Margin="0,6,0,0" Click="OnAddForward" />
+                    </StackPanel>
+                </local:SettingsSection>
+                <local:SettingsSection x:Name="SecScript" Title="Login script">
+                    <StackPanel>
+                        <TextBlock Style="{StaticResource Hint}" Text="After login, wait for text and type a reply (and Enter). {secret:Name} or {field:Name} puts in a custom field, {totp} the 2FA code. Leave Wait for empty to type at once." />
+                        <ItemsControl x:Name="ScriptList">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <DockPanel Margin="0,2">
+                                        <Button DockPanel.Dock="Right" Content="×" Width="24" Margin="4,0,0,0" ToolTip="Remove" Click="OnRemoveStep" />
+                                        <TextBox DockPanel.Dock="Left" Width="150" Text="{Binding WaitFor, UpdateSourceTrigger=PropertyChanged}" FontFamily="{StaticResource MonoFont}" ToolTip="Wait for (e.g. Password: or #)" />
+                                        <TextBlock DockPanel.Dock="Left" Text="then type" Margin="8,0" VerticalAlignment="Center" Foreground="{StaticResource Muted}" />
+                                        <TextBox Text="{Binding Send, UpdateSourceTrigger=PropertyChanged}" FontFamily="{StaticResource MonoFont}" />
+                                    </DockPanel>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                        <WrapPanel Margin="0,6,0,0">
+                            <Button Content="Add step" Click="OnAddStep" Margin="0,0,6,0" />
+                            <Button Content="Cisco enable example" Click="OnCiscoExample" ToolTip="Adds: wait for &gt; type enable, wait for Password: type {secret:enable}, wait for # type terminal length 0" />
+                        </WrapPanel>
+                    </StackPanel>
+                </local:SettingsSection>
+                <local:SettingsSection x:Name="SecAuth" Title="Authentication" CanInherit="True">
+                    <StackPanel>
+                        <CheckBox x:Name="SshAutoAccept" Content="Accept host keys automatically (logged)" />
+                        <CheckBox x:Name="SshLegacy" Content="Allow legacy algorithms (ssh-rsa, DH group1/14-sha1, CBC, 3DES)" />
+                        <DockPanel Margin="0,2">
+                            <TextBlock Text="Try in order" Width="110" Style="{StaticResource Label}" />
+                            <ComboBox x:Name="SshAuthOrder" Width="300" HorizontalAlignment="Left" />
+                        </DockPanel>
+                        <TextBlock Style="{StaticResource Hint}" Margin="0,8,0,2" Text="Only if a device still won't connect: offer only these algorithms, in this order (comma separated). Empty = automatic." />
+                        <DockPanel Margin="0,2">
+                            <TextBlock Text="Key exchange" Width="110" Style="{StaticResource Label}" />
+                            <TextBox x:Name="SshKex" FontFamily="{StaticResource MonoFont}" FontSize="11" ToolTip="e.g. diffie-hellman-group1-sha1" />
+                        </DockPanel>
+                        <DockPanel Margin="0,2">
+                            <TextBlock Text="Cipher" Width="110" Style="{StaticResource Label}" />
+                            <TextBox x:Name="SshCiphers" FontFamily="{StaticResource MonoFont}" FontSize="11" ToolTip="e.g. aes128-cbc,3des-cbc" />
+                        </DockPanel>
+                        <DockPanel Margin="0,2">
+                            <TextBlock Text="Host key type" Width="110" Style="{StaticResource Label}" />
+                            <TextBox x:Name="SshHostKeys" FontFamily="{StaticResource MonoFont}" FontSize="11" ToolTip="e.g. ssh-rsa" />
+                        </DockPanel>
+                    </StackPanel>
+                </local:SettingsSection>
+                <local:SettingsSection x:Name="SecJump" Title="Jump host">
+                    <StackPanel>
+                        <DockPanel Margin="0,2">
+                            <TextBlock Text="Jump host" Width="110" Style="{StaticResource Label}" />
+                            <ComboBox x:Name="JumpBox" DisplayMemberPath="Name" SelectionChanged="OnJumpChanged" ToolTip="Connect through another SSH entry (ProxyJump). It logs in with its own credential and fallback hosts." />
+                        </DockPanel>
+                        <TextBlock x:Name="JumpPath" Style="{StaticResource MutedText}" FontFamily="{StaticResource MonoFont}" FontSize="11" Margin="110,0,0,4" TextWrapping="Wrap" />
+                    </StackPanel>
+                </local:SettingsSection>
+
+                <!-- Web -->
+                <local:SettingsSection x:Name="SecBrowser" Title="Browser" CanInherit="True">
+                    <StackPanel>
+                        <CheckBox x:Name="WebIgnoreCert" Content="Ignore certificate errors" />
+                        <DockPanel Margin="0,2">
+                            <TextBlock Text="Zoom" Width="110" Style="{StaticResource Label}" />
+                            <ComboBox x:Name="WebZoom" Width="120" HorizontalAlignment="Left" />
+                        </DockPanel>
+                        <DockPanel Margin="0,2">
+                            <TextBlock Text="Cookies" Width="110" Style="{StaticResource Label}" />
+                            <ComboBox x:Name="WebProfileBox" Width="300" HorizontalAlignment="Left" />
+                        </DockPanel>
+                        <TextBlock Style="{StaticResource Hint}" Margin="110,0,0,4" Text="An own profile lets you be signed in to two FortiGates or portals as different users at the same time." />
+                        <CheckBox x:Name="WebBasicAuth" Content="Answer the browser's login pop-up (basic auth) with the entry's login" />
+                        <StackPanel Orientation="Horizontal" Margin="0,2">
+                            <CheckBox x:Name="WebKeepAlive" Content="Stay signed in: reload the page every" VerticalAlignment="Center" />
+                            <TextBox x:Name="WebKeepMinutes" Width="40" Margin="6,0" />
+                            <TextBlock Text="minutes" Style="{StaticResource Label}" />
+                        </StackPanel>
+                        <DockPanel Margin="0,2">
+                            <TextBlock Text="After login go to" Width="110" Style="{StaticResource Label}" />
+                            <TextBox x:Name="WebAfterLogin" FontFamily="{StaticResource MonoFont}" ToolTip="A path such as /ng/system/dashboard, or a full URL" />
+                        </DockPanel>
+                        <CheckBox x:Name="WebCopySelect" Content="Copy text as soon as it is selected" />
+                    </StackPanel>
+                </local:SettingsSection>
+                <local:SettingsSection x:Name="SecLoginForm" Title="Login form">
+                    <StackPanel>
+                        <CheckBox x:Name="WebAutoFill" Content="Fill in the login form automatically" />
+                        <CheckBox x:Name="WebAutoSubmit" Content="Then press the login button" Margin="18,3,0,3" />
+                        <CheckBox x:Name="WebFillTotp" Content="Fill in the two-factor code when the page asks for it (the credential needs a 2FA secret)" Margin="18,0,0,3" />
+                        <DockPanel Margin="0,8,0,2">
+                            <TextBlock Text="Login form" Width="110" Style="{StaticResource Label}" />
+                            <Button DockPanel.Dock="Right" Content="Pick on page…" Margin="6,0,0,0" Click="OnPickFields"
+                                    ToolTip="Open the page and click the user name box, the password box and the login button" />
+                            <ComboBox x:Name="WebPreset" Width="230" HorizontalAlignment="Left" SelectionChanged="OnWebPreset"
+                                      ToolTip="Known login pages, or Automatic to let RemoteMan find the fields" />
+                        </DockPanel>
+                        <TextBlock Text="Which boxes on the page get the user name and password. Leave empty to detect them automatically." Style="{StaticResource Hint}" Margin="110,0,0,4" />
+                        <DockPanel Margin="0,2">
+                            <TextBlock Text="User field" Width="110" Style="{StaticResource Label}" />
+                            <TextBox x:Name="WebUserSel" TextChanged="OnWebSelectorChanged" FontFamily="{StaticResource MonoFont}" FontSize="11" ToolTip="e.g. #username or input[name=login]" />
+                        </DockPanel>
+                        <DockPanel Margin="0,2">
+                            <TextBlock Text="Password field" Width="110" Style="{StaticResource Label}" />
+                            <TextBox x:Name="WebPassSel" TextChanged="OnWebSelectorChanged" FontFamily="{StaticResource MonoFont}" FontSize="11" ToolTip="e.g. #password" />
+                        </DockPanel>
+                        <DockPanel Margin="0,2">
+                            <TextBlock Text="Login button" Width="110" Style="{StaticResource Label}" />
+                            <TextBox x:Name="WebSubmitSel" TextChanged="OnWebSelectorChanged" FontFamily="{StaticResource MonoFont}" FontSize="11" ToolTip="e.g. button#login" />
+                        </DockPanel>
+                    </StackPanel>
+                </local:SettingsSection>
+
+                <!-- Other protocols -->
+                <local:SettingsSection x:Name="SecFtp" Title="FTP">
+                    <StackPanel>
+                        <CheckBox x:Name="FtpTls" Content="Use TLS (FTPS, explicit)" />
+                        <CheckBox x:Name="FtpIgnoreCert" Content="Ignore certificate errors" />
+                        <DockPanel Margin="0,2">
+                            <TextBlock Text="Start folder" Width="110" Style="{StaticResource Label}" />
+                            <TextBox x:Name="FtpStart" ToolTip="Empty = the server&apos;s default folder" />
+                        </DockPanel>
+                    </StackPanel>
+                </local:SettingsSection>
+                <local:SettingsSection x:Name="SecPowerShell" Title="PowerShell remoting">
                     <StackPanel>
                         <CheckBox x:Name="PsSsl" Content="Use HTTPS (port 5986)" />
-                        <DockPanel Margin="0,4,0,0">
-                            <TextBlock Text="Configuration" Width="90" Style="{StaticResource Label}" />
+                        <DockPanel Margin="0,2">
+                            <TextBlock Text="Configuration" Width="110" Style="{StaticResource Label}" />
                             <TextBox x:Name="PsConfig" ToolTip="Optional session configuration (JEA endpoint), for example Microsoft.PowerShell" />
                         </DockPanel>
-                        <TextBlock Text="Opens a PowerShell window with Enter-PSSession. WinRM must be enabled on the server (Enable-PSRemoting)." Style="{StaticResource MutedText}" FontSize="11" TextWrapping="Wrap" Margin="0,4,0,0" />
+                        <TextBlock Text="Opens a PowerShell window with Enter-PSSession. WinRM must be enabled on the server (Enable-PSRemoting)." Style="{StaticResource Hint}" />
                     </StackPanel>
-                </GroupBox>
-
-                <GroupBox x:Name="VncGroup" Header="VNC options">
+                </local:SettingsSection>
+                <local:SettingsSection x:Name="SecVnc" Title="VNC">
                     <StackPanel>
-                        <DockPanel>
-                            <TextBlock Text="Viewer" Width="90" Style="{StaticResource Label}" />
+                        <DockPanel Margin="0,2">
+                            <TextBlock Text="Viewer" Width="110" Style="{StaticResource Label}" />
                             <ComboBox x:Name="VncViewerBox" Width="160" HorizontalAlignment="Left" />
                         </DockPanel>
                         <CheckBox x:Name="VncViewOnly" Content="View only" />
                     </StackPanel>
-                </GroupBox>
+                </local:SettingsSection>
+
+                <local:SettingsSection x:Name="SecFields" Title="Custom fields">
+                    <StackPanel>
+                        <TextBlock Style="{StaticResource Hint}" Text="Your own name and value pairs (iDRAC address, VLAN, licence key). They show in the info panel with a copy button. Secret ones are stored encrypted." />
+                        <ItemsControl x:Name="FieldsList">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <DockPanel Margin="0,2">
+                                        <Button DockPanel.Dock="Right" Content="×" Width="24" Margin="4,0,0,0" ToolTip="Remove" Click="OnRemoveField" />
+                                        <CheckBox DockPanel.Dock="Right" Content="Secret" IsChecked="{Binding Secret}" VerticalAlignment="Center" Margin="6,0,0,0" />
+                                        <TextBox DockPanel.Dock="Left" Width="140" Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}" ToolTip="Name" />
+                                        <Grid Margin="4,0,0,0">
+                                            <TextBox Text="{Binding Value, UpdateSourceTrigger=PropertyChanged}" FontFamily="{StaticResource MonoFont}" ToolTip="Value"
+                                                     Visibility="{Binding ShowValue, Converter={StaticResource VisibleIf}}" />
+                                            <Button Content="•••••••• (show)" HorizontalContentAlignment="Left" Click="OnRevealField"
+                                                    Visibility="{Binding HideValue, Converter={StaticResource VisibleIf}}" ToolTip="Show and edit the secret" />
+                                        </Grid>
+                                    </DockPanel>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                        <Button Content="Add field" HorizontalAlignment="Left" Margin="0,6,0,0" Click="OnAddField" />
+                    </StackPanel>
+                </local:SettingsSection>
+
+                <!-- Zabbix: which host's health shows on this entry -->
+                <local:SettingsSection x:Name="SecZabbix" Title="Zabbix" Visibility="Collapsed">
+                    <DockPanel>
+                        <Button x:Name="ZabbixUnlink" DockPanel.Dock="Right" Content="Unlink" MinWidth="70" Margin="6,0,0,0" Click="OnZabbixUnlink" />
+                        <Button DockPanel.Dock="Right" Content="Link to Zabbix host…" Margin="6,0,0,0" Click="OnZabbixLink" />
+                        <TextBlock x:Name="ZabbixCurrent" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Foreground="{StaticResource Text}" />
+                    </DockPanel>
+                </local:SettingsSection>
             </StackPanel>
         </ScrollViewer>
+        </Grid>
     </DockPanel>
 </Window>

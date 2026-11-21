@@ -81,6 +81,17 @@ public sealed class Entry
     /// <summary>Any entry: icon colour as #RRGGBB; null = the normal colour for the kind.</summary>
     public string? IconColor { get; set; }
 
+    /// <summary>Where a connection opens: a tab, its own window, or full screen (Misc tab).</summary>
+    public OpenMode OpenIn { get; set; }
+    /// <summary>Colour stripe on the session tab as #RRGGBB; null = none.</summary>
+    public string? TabColor { get; set; }
+    /// <summary>Wake-on-LAN, waiting for the host, reconnecting and local commands (Advanced > Connection).</summary>
+    public ConnectionSettings? Connection { get; set; }
+    /// <summary>Your own name/value pairs (iDRAC address, VLAN, licence key). Secret values are protected.</summary>
+    public List<CustomField>? Fields { get; set; }
+    /// <summary>Settings sections taken from the nearest parent folder instead of this entry.</summary>
+    public InheritSections Inherit { get; set; }
+
     // --- sync metadata (owned by the data source) ---
     public DateTimeOffset? CreatedAt { get; set; }
     public string? CreatedBy { get; set; }
@@ -113,6 +124,57 @@ public sealed class Entry
     };
 }
 
+public enum OpenMode { Tab = 0, Window = 1, FullScreen = 2 }
+
+/// <summary>Groups of settings an entry can take from its folder ("Folder" on an Advanced section).</summary>
+[Flags]
+public enum InheritSections
+{
+    None = 0,
+    Connection = 1,
+    /// <summary>RDP: size, monitors, scaling, colours, speed, smart sizing.</summary>
+    Display = 2,
+    /// <summary>RDP: sound, microphone, clipboard, printers, drives, Windows keys.</summary>
+    Resources = 4,
+    /// <summary>RDP: RD Gateway and SSH tunnel.</summary>
+    Gateway = 8,
+    /// <summary>SSH, Telnet, serial: theme, font, scrollback, encoding, backspace, session log.</summary>
+    Terminal = 16,
+    /// <summary>SSH: host keys, algorithms, auth order.</summary>
+    Authentication = 32,
+    /// <summary>Web: certificates, zoom, cookies, basic auth, staying signed in.</summary>
+    Browser = 64,
+}
+
+public sealed class ConnectionSettings
+{
+    public bool WakeOnLan { get; set; }
+    /// <summary>MAC address of the machine to wake, any common notation.</summary>
+    public string? MacAddress { get; set; }
+    /// <summary>Where the magic packet goes: a broadcast address (default 255.255.255.255) or a relay host.</summary>
+    public string? WakeBroadcast { get; set; }
+    /// <summary>Keep probing the hosts until one answers, instead of failing at once.</summary>
+    public bool WaitUntilUp { get; set; }
+    public int WaitSeconds { get; set; } = 120;
+    /// <summary>Reconnect when an established session drops (not when you close it).</summary>
+    public bool AutoReconnect { get; set; } = true;
+    /// <summary>Command run on this PC before connecting (cmd.exe /c).</summary>
+    public string? RunBefore { get; set; }
+    public bool WaitForRunBefore { get; set; } = true;
+    /// <summary>Command run on this PC after the session closes.</summary>
+    public string? RunAfter { get; set; }
+
+    public ConnectionSettings Copy() => (ConnectionSettings)MemberwiseClone();
+}
+
+public sealed class CustomField
+{
+    public string Name { get; set; } = "";
+    /// <summary>Plain text, or protected with the data source's protector when <see cref="Secret"/>.</summary>
+    public string? Value { get; set; }
+    public bool Secret { get; set; }
+}
+
 public sealed record HostEndpoint(string Host, int Port = 0)
 {
     public override string ToString() => Port > 0 ? $"{Host}:{Port}" : Host;
@@ -133,7 +195,40 @@ public sealed class RdpSettings
     public bool CopyOnSelect { get; set; } = true;
     /// <summary>Connect without prompting on certificate/identity warnings.</summary>
     public bool IgnoreCertificateErrors { get; set; } = true;
+
+    // --- Display ---
+    /// <summary>One monitor in a tab, or all/some monitors (opens in Remote Desktop Connection).</summary>
+    public RdpMonitors Monitors { get; set; }
+    /// <summary>Monitor numbers for <see cref="RdpMonitors.Selected"/>, e.g. "0,1".</summary>
+    public string? SelectedMonitors { get; set; }
+    /// <summary>Remote scaling in percent; 0 = same as this PC.</summary>
+    public int ScalePercent { get; set; }
+    public int ColorDepth { get; set; } = 32;
+    public RdpSpeed Speed { get; set; }
+
+    // --- Local resources ---
+    public RdpAudio Audio { get; set; }
+    public bool Microphone { get; set; }
+    public bool RedirectPrinters { get; set; }
+    /// <summary>Drive letters to redirect, e.g. "C,E"; empty = all drives (when <see cref="RedirectDrives"/>).</summary>
+    public string? Drives { get; set; }
+    public RdpKeys WindowsKeys { get; set; } = RdpKeys.FullScreenOnly;
+
+    // --- Gateway and tunnel ---
+    /// <summary>Own login for the RD Gateway; null = the entry's login.</summary>
+    public Guid? GatewayCredentialId { get; set; }
+    /// <summary>Connect directly to local addresses (gateway usage "detect").</summary>
+    public bool GatewayBypassLocal { get; set; } = true;
+    /// <summary>SSH entry to tunnel the connection through (local port forward).</summary>
+    public Guid? SshTunnelId { get; set; }
 }
+
+public enum RdpMonitors { One = 0, All = 1, Selected = 2 }
+/// <summary>Auto = let RDP detect the link (default); the others fix the experience flags.</summary>
+public enum RdpSpeed { Auto = 0, Lan = 1, Broadband = 2, Slow = 3 }
+public enum RdpAudio { Local = 0, Remote = 1, Off = 2 }
+/// <summary>Values match the control's KeyboardHookMode.</summary>
+public enum RdpKeys { Local = 0, Remote = 1, FullScreenOnly = 2 }
 
 public sealed class SshSettings
 {
@@ -148,6 +243,62 @@ public sealed class SshSettings
     public string? DownloadFolder { get; set; }
     /// <summary>Another SSH entry to connect through (ProxyJump). That entry may have its own jump host.</summary>
     public Guid? JumpHostId { get; set; }
+
+    // --- Terminal (null/0 = the app-wide terminal look) ---
+    public string? Theme { get; set; }
+    public int FontSize { get; set; }
+    public int Scrollback { get; set; }
+    /// <summary>Character set of the remote side, e.g. "iso-8859-1" for old switches; null = UTF-8.</summary>
+    public string? Encoding { get; set; }
+    /// <summary>Backspace sends Ctrl+H (^H) instead of DEL (^?).</summary>
+    public bool BackspaceCtrlH { get; set; }
+
+    // --- Session log ---
+    public bool LogSession { get; set; }
+    /// <summary>Folder for logs; empty = Documents\RemoteMan logs. A file per session: name_yyyy-MM-dd_HHmmss.log.</summary>
+    public string? LogFolder { get; set; }
+
+    /// <summary>Port forwards that start with the session.</summary>
+    public List<PortForward>? Forwards { get; set; }
+    /// <summary>Wait-for / type steps run after login (SSH, Telnet, serial).</summary>
+    public List<ScriptStep>? LoginScript { get; set; }
+
+    // --- Authentication ---
+    /// <summary>Order to try login methods, e.g. "publickey,keyboard-interactive,password"; null = key first.</summary>
+    public string? AuthOrder { get; set; }
+    /// <summary>Comma lists: only offer these (in this order). Null = automatic.</summary>
+    public string? KexAlgorithms { get; set; }
+    public string? Ciphers { get; set; }
+    public string? HostKeyAlgorithms { get; set; }
+}
+
+public enum ForwardKind { Local = 0, Remote = 1, Dynamic = 2 }
+
+/// <summary>Local: this PC listens and the server connects onward. Remote: the server listens and this PC
+/// connects onward. Dynamic: a SOCKS proxy on this PC.</summary>
+public sealed class PortForward
+{
+    public ForwardKind Kind { get; set; }
+    public string ListenHost { get; set; } = "127.0.0.1";
+    public int ListenPort { get; set; }
+    public string? DestHost { get; set; }
+    public int DestPort { get; set; }
+    public bool Enabled { get; set; } = true;
+
+    public override string ToString() => Kind switch
+    {
+        ForwardKind.Dynamic => $"SOCKS {ListenHost}:{ListenPort}",
+        ForwardKind.Remote => $"server {ListenHost}:{ListenPort} → {DestHost}:{DestPort}",
+        _ => $"{ListenHost}:{ListenPort} → {DestHost}:{DestPort}",
+    };
+}
+
+/// <summary>Wait until the output contains <see cref="WaitFor"/> (empty = don't wait), then type <see cref="Send"/>
+/// and Enter. {field:Name} and {secret:Name} put in a custom field of the entry; {totp} the current 2FA code.</summary>
+public sealed class ScriptStep
+{
+    public string? WaitFor { get; set; }
+    public string? Send { get; set; }
 }
 
 public sealed class SerialSettings
@@ -247,7 +398,23 @@ public sealed class WebSettings
     public string? PasswordFieldSelector { get; set; }
     public string? SubmitSelector { get; set; }
     public bool CopyOnSelect { get; set; } = true;
+
+    /// <summary>Page zoom in percent.</summary>
+    public int Zoom { get; set; } = 100;
+    public WebProfile Profile { get; set; }
+    /// <summary>Answer the browser's own login pop-up (HTTP basic auth) with the entry's login.</summary>
+    public bool AnswerBasicAuth { get; set; } = true;
+    /// <summary>Path or URL to open once the login went through, e.g. /ng/system/dashboard.</summary>
+    public string? AfterLoginUrl { get; set; }
+    /// <summary>Reload the page every N minutes while the tab is open; 0 = never.</summary>
+    public int KeepAliveMinutes { get; set; }
+    /// <summary>Fill the credential's two-factor code into the code box after the password.</summary>
+    public bool FillTotp { get; set; } = true;
 }
+
+/// <summary>Shared: cookies shared by all built-in web tabs. Own: a profile for this entry only (sign in to two
+/// systems as different users). Private: nothing kept after the tab closes.</summary>
+public enum WebProfile { Shared = 0, Own = 1, Private = 2 }
 
 public enum VncViewer { TightVnc, TigerVnc, RealVnc, UltraVnc }
 
@@ -299,5 +466,7 @@ public sealed class CredentialData
     public string? ProtectedCertificate { get; set; }
     /// <summary>Don't store a password; ask for it on connect.</summary>
     public bool AskPassword { get; set; }
+    /// <summary>Two-factor (TOTP) secret, base32 as shown under the QR code; protected like the password.</summary>
+    public string? ProtectedTotpSecret { get; set; }
     public string? Notes { get; set; }
 }

@@ -30,8 +30,18 @@ public partial class WebSessionView : UserControl
         if (Uri.TryCreate(vm.Settings.Url, UriKind.Absolute, out var entryUri)) hosts.Add(entryUri.Host);
         foreach (var ep in vm.Entry.Endpoints) hosts.Add(ep.Host);
         var sso = vm.Credential.UseWindowsLogin;
-        await Web.EnsureCoreWebView2Async(sso ? await WebViewEnvironment.GetSsoAsync(hosts) : await WebViewEnvironment.GetAsync());
+        var env = sso ? await WebViewEnvironment.GetSsoAsync(hosts) : await WebViewEnvironment.GetAsync();
+        // Cookies: shared by all web tabs, a profile of this entry's own, or private (nothing kept).
+        CoreWebView2ControllerOptions? options = null;
+        if (vm.Settings.Profile != WebProfile.Shared && vm.Entry.Kind == EntryKind.Web)
+        {
+            options = env.CreateCoreWebView2ControllerOptions();
+            if (vm.Settings.Profile == WebProfile.Private) options.IsInPrivateModeEnabled = true;
+            else options.ProfileName = "entry-" + vm.Entry.Id.ToString("N")[..16];
+        }
+        await Web.EnsureCoreWebView2Async(env, options);
         var core = Web.CoreWebView2;
+        if (vm.Settings.Zoom is > 0 and not 100) Web.ZoomFactor = Math.Clamp(vm.Settings.Zoom, 25, 500) / 100.0;
 
         core.ServerCertificateErrorDetected += (_, a) =>
         {
@@ -58,7 +68,7 @@ public partial class WebSessionView : UserControl
 
         core.BasicAuthenticationRequested += (_, a) =>
         {
-            if (!sso && vm.Credential.UserName is { } u) { a.Response.UserName = u; a.Response.Password = vm.Credential.Password ?? ""; }
+            if (!sso && vm.Settings.AnswerBasicAuth && vm.Credential.UserName is { } u) { a.Response.UserName = u; a.Response.Password = vm.Credential.Password ?? ""; }
         };
         core.SourceChanged += (_, _) => Address.Text = core.Source;
         core.DocumentTitleChanged += (_, _) => vm.StatusText = core.DocumentTitle;
@@ -67,7 +77,47 @@ public partial class WebSessionView : UserControl
         {
             var s = vm.Settings;
             await core.AddScriptToExecuteOnDocumentCreatedAsync(AutoFillScript.Build(vm.Credential.UserName, vm.Credential.Password,
-                new AutoLoginOptions(hosts, s.AutoSubmit, Blank(s.UserFieldSelector), Blank(s.PasswordFieldSelector), Blank(s.SubmitSelector))));
+                new AutoLoginOptions(hosts, s.AutoSubmit, Blank(s.UserFieldSelector), Blank(s.PasswordFieldSelector), Blank(s.SubmitSelector),
+                    Totp: s.FillTotp && vm.Credential.TotpSecret is { Length: > 0 })));
+        }
+        // The fill script asks for the two-factor code when it finds the code box; it's made fresh here.
+        core.WebMessageReceived += (_, a) =>
+        {
+            try
+            {
+                if (!a.WebMessageAsJson.Contains("rmTotp")) return;
+                if (vm.Credential.TotpCode is { } code) core.PostWebMessageAsJson(System.Text.Json.JsonSerializer.Serialize(new { rmTotp = code }));
+            }
+            catch (Exception) { }
+        };
+
+        // After login: go to a chosen page once the login page is behind us.
+        if (vm.Settings.AfterLoginUrl is { Length: > 0 } after)
+        {
+            var target = after.Contains("://") ? after : new Uri(new Uri(vm.Url), after).ToString();
+            var loginHost = new Uri(vm.Url).Host;
+            var done = false;
+            core.NavigationCompleted += async (_, a) =>
+            {
+                if (done || !a.IsSuccess) return;
+                // Give a script-built login form a moment to appear; a page with a password box isn't past the login yet.
+                await Task.Delay(1500);
+                if (done || Web.CoreWebView2 is null) return;
+                if (await core.ExecuteScriptAsync("!!document.querySelector('input[type=password]')") == "true") return;
+                done = true;
+                if (Uri.TryCreate(core.Source, UriKind.Absolute, out var u) && u.Host == loginHost
+                    && !u.ToString().StartsWith(target, StringComparison.OrdinalIgnoreCase))
+                    core.Navigate(target);
+            };
+        }
+
+        // Stay signed in: reload now and then while the tab is open.
+        if (vm.Settings.KeepAliveMinutes > 0)
+        {
+            var keep = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromMinutes(vm.Settings.KeepAliveMinutes) };
+            keep.Tick += (_, _) => { try { core.Reload(); } catch (Exception) { keep.Stop(); } };
+            keep.Start();
+            vm.Disposed += (_, _) => keep.Stop();
         }
         core.NewWindowRequested += (_, a) => { a.Handled = true; core.Navigate(a.Uri); };
 

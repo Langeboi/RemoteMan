@@ -62,6 +62,19 @@ public static class Secrets
         return new AesGcmSecretProtector(pass);
     }
 
+    /// <summary>Custom field values by name, secret ones decrypted (for login scripts and copying).</summary>
+    public static Dictionary<string, string> FieldValues(Entry entry, ISecretProtector protector)
+    {
+        var d = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var f in entry.Fields ?? [])
+        {
+            if (string.IsNullOrWhiteSpace(f.Name) || f.Value is null) continue;
+            try { d[f.Name.Trim()] = f.Secret ? protector.Unprotect(f.Value) : f.Value; }
+            catch (Exception) { /* secret from another vault key: left out */ }
+        }
+        return d;
+    }
+
     /// <summary>Decrypts the login for an entry, following "inherited" up the folders and
     /// "saved" to the credential entry (credential entries resolve to themselves).</summary>
     public static ResolvedCredential Resolve(Entry entry, EntryStore store, ISecretProtector protector)
@@ -79,6 +92,6 @@ public static class Secrets
         }
         var cert = c.Type == CredentialType.Certificate && Un(c.ProtectedCertificate) is { } b64 ? Convert.FromBase64String(b64) : null;
         return new ResolvedCredential(c.UserName, c.Domain, Un(c.ProtectedPassword), key, Un(c.ProtectedPassphrase),
-            Certificate: cert, AskPassword: c.AskPassword && c.Type == CredentialType.Password);
+            Certificate: cert, AskPassword: c.AskPassword && c.Type == CredentialType.Password, TotpSecret: Un(c.ProtectedTotpSecret));
     }
 }
