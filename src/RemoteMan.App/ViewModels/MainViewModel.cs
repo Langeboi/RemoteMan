@@ -156,7 +156,15 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
                     if (e.Kind == EntryKind.Folder) Add(e.Id, n.Children, depth + 1);
                 }
             }
-            Add(null, Roots, 0);
+            // The data source is the top node, like a drive in Explorer; everything stored sits under it.
+            var root = new EntryNode(new Entry { Id = DataSourceRootId, Kind = EntryKind.Folder, Name = _settings.Active.Name }, 0)
+            {
+                IsRoot = true,
+                IsExpanded = _rootExpanded,
+            };
+            root.PropertyChanged += (_, a) => { if (a.PropertyName == nameof(EntryNode.IsExpanded)) _rootExpanded = root.IsExpanded; };
+            Roots.Add(root);
+            Add(null, root.Children, 1);
 
         }
 
@@ -166,6 +174,10 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
         ApplyZabbix();
         ApplyOxidized();
     }
+
+    /// <summary>Id of the data source node at the top of the tree (never stored).</summary>
+    public static readonly Guid DataSourceRootId = new("d5000000-0000-4000-8000-000000000001");
+    private bool _rootExpanded = true;
 
     /// <summary>Id of the virtual Favorites group (never stored).</summary>
     public static readonly Guid FavoritesId = new("f4f0a7e0-0000-4000-8000-000000000001");
