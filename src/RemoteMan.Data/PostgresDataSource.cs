@@ -47,6 +47,7 @@ public sealed class PostgresDataSource : SqlDataSource
     ];
 
     protected override string? CurrentUserSql => "SELECT session_user";
+    protected override bool IsPermissionDenied(DbException ex) => ex is PostgresException { SqlState: PostgresErrorCodes.InsufficientPrivilege };
 
     protected override string NextRevisionSql => "UPDATE remoteman_meta SET rev = rev + 1 WHERE id = 1 RETURNING rev";
     protected override string? AfterEntryWriteSql => $"SELECT pg_notify('{Channel}', 'e:' || @rev::text)";

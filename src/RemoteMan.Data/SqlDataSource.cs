@@ -84,19 +84,37 @@ public abstract class SqlDataSource : IDataSource
 
     public string? DatabaseUser { get; private set; }
 
+    /// <summary>True when the server refused a write because of the login's rights (a read-only login).</summary>
+    protected virtual bool IsPermissionDenied(DbException ex) => false;
+
+    /// <summary>The login can read but not change anything; known after <see cref="InitializeAsync"/>.</summary>
+    public bool IsReadOnly { get; private set; }
+
+    private Exception ReadOnlyError() => new UnauthorizedAccessException(
+        $"Your database login{(DatabaseUser is { } u ? $" ({u})" : "")} can only read. Ask whoever runs the database for edit rights.");
+
     public virtual async Task InitializeAsync(CancellationToken ct = default)
     {
         await using var c = await OpenAsync(ct);
+        // A read-only login can't create or upgrade the tables. That's fine as long as they exist:
+        // it then works read-only. If they don't exist yet, someone with edit rights has to connect first.
+        var denied = false;
         foreach (var sql in SchemaStatements)
         {
-            await using var cmd = Cmd(c, sql);
-            await cmd.ExecuteNonQueryAsync(ct);
+            try { await using var cmd = Cmd(c, sql); await cmd.ExecuteNonQueryAsync(ct); }
+            catch (DbException ex) when (IsPermissionDenied(ex)) { denied = true; }
         }
         foreach (var (sql, ignore) in MigrationStatements)
         {
             try { await using var cmd = Cmd(c, sql); await cmd.ExecuteNonQueryAsync(ct); }
-            catch (DbException) when (ignore) { }
+            catch (DbException ex) when (ignore || IsPermissionDenied(ex)) { denied |= !ignore; }
         }
+        if (denied)
+        {
+            await using var probe = Cmd(c, "SELECT COUNT(*) FROM remoteman_meta");
+            await probe.ExecuteScalarAsync(ct);   // throws if the tables aren't there (or can't be read)
+        }
+        IsReadOnly = denied;
         if (CurrentUserSql is { } who)
         {
             await using var cmd = Cmd(c, who);
@@ -146,6 +164,14 @@ public abstract class SqlDataSource : IDataSource
     }
 
     public async Task<Entry> SaveAsync(Entry entry, string user, long? expectedRevision = null, CancellationToken ct = default)
+    {
+        if (IsReadOnly) throw ReadOnlyError();
+        try { return await SaveCoreAsync(entry, user, expectedRevision, ct); }
+        // Not a connection problem, so it must not take the data source offline.
+        catch (DbException ex) when (IsPermissionDenied(ex)) { IsReadOnly = true; throw ReadOnlyError(); }
+    }
+
+    private async Task<Entry> SaveCoreAsync(Entry entry, string user, long? expectedRevision, CancellationToken ct)
     {
         // On a shared server, the login the server reports is who made the change.
         user = DatabaseUser ?? user;
@@ -216,6 +242,13 @@ public abstract class SqlDataSource : IDataSource
 
     public async Task HeartbeatPresenceAsync(Presence p, CancellationToken ct = default)
     {
+        // A login that may not write presence just doesn't show up as connected.
+        try { await HeartbeatCoreAsync(p, ct); }
+        catch (DbException ex) when (IsPermissionDenied(ex)) { }
+    }
+
+    private async Task HeartbeatCoreAsync(Presence p, CancellationToken ct)
+    {
         await using var c = await OpenAsync(ct);
         await using var tx = await c.BeginTransactionAsync(ct);
         var args = new (string, object?)[]
@@ -244,7 +277,8 @@ public abstract class SqlDataSource : IDataSource
     {
         await using var c = await OpenAsync(ct);
         await using var cmd = Cmd(c, "DELETE FROM remoteman_presence WHERE user_name=@user AND machine=@machine", null, ("@user", user), ("@machine", machine));
-        await cmd.ExecuteNonQueryAsync(ct);
+        try { await cmd.ExecuteNonQueryAsync(ct); }
+        catch (DbException ex) when (IsPermissionDenied(ex)) { }
     }
 
     public async Task<IReadOnlyList<Presence>> GetPresenceAsync(CancellationToken ct = default)

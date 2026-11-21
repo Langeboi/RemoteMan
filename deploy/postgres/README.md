@@ -44,6 +44,34 @@ Both servers get a `remoteman-db` command:
 | `sudo remoteman-db promote` | Make the standby the primary (manual failover) |
 | `sudo remoteman-db rejoin` | Turn this server into the standby of the other one |
 | `remoteman-db conn` | The connection string for RemoteMan (without the password) |
+| `sudo remoteman-db user …` | Personal logins, see below |
+
+## Logins: one per person
+
+Setup creates one shared login, `remoteman`. Give each person their own instead, so RemoteMan shows
+their name on what they change and on who's connected, and so you can shut one person out without
+changing everyone's password. Run these on the **primary** (logins reach the standby by themselves):
+
+| Command | What it does |
+| --- | --- |
+| `sudo remoteman-db user add anna` | New login that can edit. Prints a password and Anna's connection string |
+| `sudo remoteman-db user add bo --read-only` | New login that can see everything but change nothing |
+| `sudo remoteman-db user list` | Everyone, their access, whether they're connected now, and their last change |
+| `sudo remoteman-db user passwd anna` | New password (prints a new connection string) |
+| `sudo remoteman-db user remove anna` | Removes the login and closes their open connections. Their name stays on past changes |
+
+Add `--password <pw>` to `add` or `passwd` to choose the password instead of getting a random one.
+
+Each person puts their own connection string into RemoteMan's data source. The saved passwords in
+RemoteMan are still encrypted with the team vault passphrase, so everyone also needs that. A
+read-only person gets a short "can only read" message if they try to save.
+
+When everyone has their own login, turn the shared one off with `sudo remoteman-db user remove remoteman`.
+It keeps owning the data but can't log in any more; `user passwd remoteman` turns it back on.
+
+**Already set up before logins existed?** Copy the new `remoteman-db.sh` to both servers and run
+`sudo bash remoteman-db.sh update` on each. It updates the `remoteman-db` command and lets the new
+logins through.
 
 ## What happens when a server goes down
 

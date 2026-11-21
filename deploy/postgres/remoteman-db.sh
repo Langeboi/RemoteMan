@@ -13,6 +13,7 @@
 #   remoteman-db promote     make this standby the primary (manual failover)
 #   remoteman-db rejoin      turn this server back into a standby of the other one
 #   remoteman-db conn        the connection string to paste into RemoteMan
+#   remoteman-db user ...    personal logins: add, list, passwd, remove (run on the primary)
 #
 # RemoteMan gets one connection string with both hosts and "Target Session Attributes=primary",
 # so it always talks to whichever server is the primary at the moment.
@@ -83,6 +84,7 @@ ensure_cluster() {
 # Settings shared by both servers, in Debian's conf.d (outside the data directory, so a rewind or a
 # base backup never overwrites them).
 write_settings() {
+    RO_GROUP="${APP_USER}_readonly"
     mkdir -p "$(etc_dir)/conf.d"
     cat > "$(etc_dir)/conf.d/remoteman.conf" <<EOF
 # Written by remoteman-db.sh
@@ -107,8 +109,10 @@ EOF
 # remoteman-db begin
 host  replication  $REPL_USER  $PEER_HOST/32  scram-sha-256
 host  postgres     $REPL_USER  $PEER_HOST/32  scram-sha-256
-host  $DB_NAME     $APP_USER   0.0.0.0/0      scram-sha-256
-host  $DB_NAME     $APP_USER   ::/0           scram-sha-256
+host  $DB_NAME     +$APP_USER   0.0.0.0/0     scram-sha-256
+host  $DB_NAME     +$APP_USER   ::/0          scram-sha-256
+host  $DB_NAME     +$RO_GROUP   0.0.0.0/0     scram-sha-256
+host  $DB_NAME     +$RO_GROUP   ::/0          scram-sha-256
 # remoteman-db end
 EOF
     # The peer's replication password, for streaming, status checks and rewinds.
@@ -225,6 +229,7 @@ cmd_first() {
         GRANT EXECUTE ON FUNCTION pg_read_binary_file(text) TO $REPL_USER;
         GRANT EXECUTE ON FUNCTION pg_read_binary_file(text, bigint, bigint, boolean) TO $REPL_USER;" >/dev/null
     local_sql "SELECT pg_create_physical_replication_slot('$SLOT') WHERE NOT EXISTS (SELECT FROM pg_replication_slots WHERE slot_name = '$SLOT')" >/dev/null
+    ensure_groups
 
     install_helper
 
@@ -244,6 +249,7 @@ cmd_first() {
     echo "    Host=$me:$PORT,$PEER_HOST:$PEER_PORT;Database=$DB_NAME;Username=$APP_USER;Password=$APP_PASSWORD;Target Session Attributes=primary"
     echo
     echo "  The password for $APP_USER is shown only now. 'remoteman-db conn' prints the string without it."
+    echo "  Give each person their own login instead with 'remoteman-db user add <name>'."
 }
 
 # ---------------------------------------------------------------- second server
@@ -410,7 +416,147 @@ cmd_conn() {
     echo "Host=$me:$PORT,$PEER_HOST:$PEER_PORT;Database=$DB_NAME;Username=$APP_USER;Password=<password>;Target Session Attributes=primary"
 }
 
-usage() { sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//'; }
+# ---------------------------------------------------------------- personal logins
+# Everyone with edit rights is a member of the shared login ($APP_USER), which owns the database
+# and its tables, and switches to it on connect (so tables RemoteMan creates stay owned by it).
+# Read-only people are members of ${APP_USER}_readonly instead. RemoteMan records the login you
+# connect with (session_user), so changes and "who's connected" show the person's own name.
+# Logins live in the database, so they reach the standby by replication: add them once, on the primary.
+
+valid_name() { [[ "$1" =~ ^[a-z_][a-z0-9_]{0,62}$ ]] || die "Login names: lowercase letters, digits and _ only (got '$1')."; }
+sql_quote()  { printf "%s" "${1//\'/\'\'}"; }
+db_sql()     { pg psql -X -At -v ON_ERROR_STOP=1 -p "$PORT" -d "$DB_NAME" -c "$1"; }
+role_exists(){ [[ "$(local_sql "SELECT 1 FROM pg_roles WHERE rolname = '$1'")" == 1 ]]; }
+
+need_primary() {
+    is_running || die "PostgreSQL isn't running here."
+    in_recovery && die "This server is the standby. Run this on the primary ($PEER_HOST); logins reach this server by themselves."
+    return 0
+}
+
+# The read-only group and what it may touch. Safe to run again any time.
+ensure_groups() {
+    local ro="${APP_USER}_readonly"
+    role_exists "$ro" || local_sql "CREATE ROLE $ro NOLOGIN" >/dev/null
+    db_sql "GRANT CONNECT ON DATABASE $DB_NAME TO $ro;
+        GRANT USAGE ON SCHEMA public TO $ro;
+        GRANT SELECT ON ALL TABLES IN SCHEMA public TO $ro;
+        ALTER DEFAULT PRIVILEGES FOR ROLE $APP_USER IN SCHEMA public GRANT SELECT ON TABLES TO $ro;" >/dev/null
+    # Read-only people still show up as connected in RemoteMan.
+    if [[ "$(db_sql "SELECT to_regclass('public.remoteman_presence') IS NOT NULL")" == t ]]; then
+        db_sql "GRANT SELECT, INSERT, UPDATE, DELETE ON remoteman_presence TO $ro" >/dev/null
+    fi
+}
+
+print_conn() {  # name password
+    local me pw="$2"; me="$(hostname -I | awk '{print $1}')"
+    [[ "$pw" =~ [\;\'\"[:space:]] ]] && pw="\"${pw//\"/\"\"}\""   # quoted when it has ; ' " or spaces
+    echo "    Host=$me:$PORT,$PEER_HOST:$PEER_PORT;Database=$DB_NAME;Username=$1;Password=$pw;Target Session Attributes=primary"
+}
+
+cmd_user() {
+    need_root "user $*"; load_conf
+    RO_GROUP="${APP_USER}_readonly"
+    local sub="${1:-list}"; shift || true
+    case "$sub" in
+        add)
+            local name="${1:-}" ro=no pw=""; shift || true
+            while [[ $# -gt 0 ]]; do
+                case "$1" in
+                    --read-only) ro=yes; shift ;;
+                    --password) pw="$2"; shift 2 ;;
+                    *) die "Unknown option $1" ;;
+                esac
+            done
+            [[ -n "$name" ]] || die "Use: remoteman-db user add <name> [--read-only] [--password <pw>]"
+            valid_name "$name"; need_primary; ensure_groups
+            [[ "$name" == "$APP_USER" || "$name" == "$REPL_USER" || "$name" == "$RO_GROUP" || "$name" == postgres ]] && die "'$name' is reserved."
+            role_exists "$name" && die "$name already exists. Use 'remoteman-db user passwd $name' for a new password."
+            pw="${pw:-$(rand 20)}"
+            local_sql "CREATE ROLE $name LOGIN PASSWORD '$(sql_quote "$pw")'" >/dev/null
+            if [[ "$ro" == yes ]]; then
+                local_sql "GRANT $RO_GROUP TO $name" >/dev/null
+            else
+                local_sql "GRANT $APP_USER TO $name; ALTER ROLE $name IN DATABASE $DB_NAME SET role = '$APP_USER'" >/dev/null
+            fi
+            say "Added $name ($( [[ $ro == yes ]] && echo read-only || echo can edit ))."
+            echo
+            echo "  $name's connection string for RemoteMan (the password is shown only now):"
+            echo
+            print_conn "$name" "$pw"
+            echo
+            ;;
+        list)
+            is_running || die "PostgreSQL isn't running here."
+            printf '%-24s %-10s %-10s %s\n' LOGIN ACCESS "ONLINE" "LAST CHANGE IN REMOTEMAN"
+            local has_entries; has_entries="$(db_sql "SELECT to_regclass('public.remoteman_entries') IS NOT NULL")"
+            local last="NULL"
+            [[ "$has_entries" == t ]] && last="(SELECT to_char(to_timestamp(max(updated_at) / 1000.0), 'YYYY-MM-DD HH24:MI') FROM remoteman_entries WHERE updated_by = r.rolname)"
+            db_sql "SELECT r.rolname,
+                       CASE WHEN NOT r.rolcanlogin THEN 'disabled'
+                            WHEN r.rolname = '$APP_USER' THEN 'shared'
+                            WHEN pg_has_role(r.oid, '$APP_USER', 'MEMBER') THEN 'edit'
+                            ELSE 'read-only' END,
+                       (SELECT count(*) FROM pg_stat_activity a WHERE a.usename = r.rolname AND a.datname = '$DB_NAME'),
+                       COALESCE($last, '-')
+                FROM pg_roles r
+                WHERE NOT r.rolsuper AND (r.rolname = '$APP_USER' OR pg_has_role(r.oid, '$APP_USER', 'MEMBER') OR pg_has_role(r.oid, '$RO_GROUP', 'MEMBER'))
+                ORDER BY r.rolname <> '$APP_USER', r.rolname" \
+                | awk -F'|' '$1 != "'"$RO_GROUP"'" { printf "%-24s %-10s %-10s %s\n", $1, $2, ($3 > 0 ? "yes (" $3 ")" : "no"), $4 }'
+            if in_recovery; then echo "(This is the standby: the list is the same as on the primary.)"; fi
+            ;;
+        passwd)
+            local name="${1:-}" pw=""; shift || true
+            [[ "${1:-}" == --password ]] && pw="${2:-}"
+            [[ -n "$name" ]] || die "Use: remoteman-db user passwd <name> [--password <pw>]"
+            valid_name "$name"; need_primary
+            role_exists "$name" || die "There's no login called $name."
+            [[ "$name" == "$REPL_USER" || "$name" == "$RO_GROUP" ]] && die "'$name' isn't a person's login."
+            pw="${pw:-$(rand 20)}"
+            local_sql "ALTER ROLE $name LOGIN PASSWORD '$(sql_quote "$pw")'" >/dev/null
+            say "New password for $name. Their connection string (shown only now):"
+            echo
+            print_conn "$name" "$pw"
+            echo
+            ;;
+        remove)
+            local name="${1:-}"
+            [[ -n "$name" ]] || die "Use: remoteman-db user remove <name>"
+            valid_name "$name"; need_primary
+            role_exists "$name" || die "There's no login called $name."
+            [[ "$name" == "$REPL_USER" || "$name" == "$RO_GROUP" || "$name" == postgres ]] && die "'$name' can't be removed."
+            if [[ "$name" == "$APP_USER" ]]; then
+                # It owns the data, so it stays; it just can't be logged in with any more.
+                local_sql "ALTER ROLE $APP_USER NOLOGIN" >/dev/null
+                local_sql "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE usename = '$APP_USER'" >/dev/null
+                say "The shared login $APP_USER is disabled. 'remoteman-db user passwd $APP_USER' turns it back on."
+                return
+            fi
+            local_sql "ALTER ROLE $name NOLOGIN" >/dev/null
+            local_sql "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE usename = '$name'" >/dev/null
+            if local_sql "DROP ROLE $name" >/dev/null 2>&1; then
+                say "Removed $name and closed their open connections. Their name stays on the changes they made."
+            else
+                say "Disabled $name and closed their open connections (they own something in the database, so the login is kept but can't log in)."
+            fi
+            ;;
+        *) die "Use: remoteman-db user add|list|passwd|remove" ;;
+    esac
+}
+
+# After copying a newer remoteman-db.sh to a server that is already set up: refresh the helper,
+# the access rules and the watcher. Run it on both servers.
+cmd_update() {
+    need_root update; load_conf
+    write_settings
+    install_helper
+    systemctl restart remoteman-db-watch.service 2>/dev/null || true
+    is_running && cluster reload
+    if is_running && ! in_recovery; then ensure_groups; fi
+    say "Updated $(hostname -s)."
+}
+
+usage() { sed -n '2,21p' "$0" | sed 's/^# \{0,1\}//'; }
 
 case "${1:-}" in
     first) shift; cmd_first "$@" ;;
@@ -421,5 +567,7 @@ case "${1:-}" in
     pre-start) cmd_pre_start ;;
     watch) cmd_watch ;;
     conn) cmd_conn ;;
+    user) shift; cmd_user "$@" ;;
+    update) cmd_update ;;
     *) usage ;;
 esac
