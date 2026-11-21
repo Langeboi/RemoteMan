@@ -41,6 +41,9 @@ public sealed partial class EntryNode : ObservableObject
     /// <summary>Zabbix glyph on the right of the row: ok, warn, high, unreach, maint, or null for none.</summary>
     [ObservableProperty] private string? _health;
     [ObservableProperty] private string? _healthTip;
+    /// <summary>Oxidized: the last config backup of this device failed (small orange dot on the row).</summary>
+    [ObservableProperty] private bool _backupFailed;
+    [ObservableProperty] private string? _backupTip;
     /// <summary>Folders: hosts with problems inside (any depth). 0 hides the count.</summary>
     [ObservableProperty] [NotifyPropertyChangedFor(nameof(HasProblemCount))] private int _problemCount;
     [ObservableProperty] private bool _problemCountHigh;

@@ -1,0 +1,68 @@
+<Window x:Class="RemoteMan.App.Views.OxidizedSettingsWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Oxidized settings" Width="600" Height="600" MinWidth="480" MinHeight="460"
+        Style="{StaticResource RemoteManWindow}" WindowStartupLocation="CenterOwner" ShowInTaskbar="False">
+    <Window.Resources>
+        <Style TargetType="TextBlock" x:Key="Label" BasedOn="{StaticResource MutedText}">
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="Margin" Value="0,4,10,4" />
+        </Style>
+        <Style TargetType="TextBlock" x:Key="Hint" BasedOn="{StaticResource MutedText}">
+            <Setter Property="FontSize" Value="11" />
+            <Setter Property="TextWrapping" Value="Wrap" />
+            <Setter Property="Margin" Value="0,0,0,6" />
+        </Style>
+    </Window.Resources>
+    <DockPanel>
+        <Border DockPanel.Dock="Bottom" Background="{StaticResource Header}" BorderBrush="{StaticResource Border}" BorderThickness="0,1,0,0" Padding="10,8">
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                <Button Content="Save" MinWidth="76" IsDefault="True" Style="{StaticResource PrimaryButton}" Click="OnSave" />
+                <Button Content="Cancel" MinWidth="76" Margin="6,0,0,0" IsCancel="True" />
+            </StackPanel>
+        </Border>
+        <ScrollViewer VerticalScrollBarVisibility="Auto" Background="{StaticResource Panel}">
+            <StackPanel Margin="14,12">
+                <CheckBox x:Name="EnabledBox" Content="Show config backups on entries" FontWeight="SemiBold" Margin="0,0,0,10" />
+                <Grid>
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="130" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition /><RowDefinition /><RowDefinition /><RowDefinition /><RowDefinition /><RowDefinition /><RowDefinition /><RowDefinition /><RowDefinition />
+                    </Grid.RowDefinitions>
+                    <TextBlock Text="Oxidized URL" Style="{StaticResource Label}" />
+                    <TextBox x:Name="UrlBox" Grid.Column="1" Margin="0,2" FontFamily="{StaticResource MonoFont}" AutomationProperties.Name="Oxidized URL"
+                             ToolTip="Oxidized's web page, e.g. https://oxidized.lab.local or http://10.0.0.5:8888" />
+                    <TextBlock Grid.Row="1" Grid.Column="1" Style="{StaticResource Hint}" Text="The address of Oxidized's web page (oxidized-web), for example http://10.0.0.5:8888." />
+                    <TextBlock Grid.Row="2" Text="Username" Style="{StaticResource Label}" />
+                    <TextBox x:Name="UserBox" Grid.Row="2" Grid.Column="1" Margin="0,2" AutomationProperties.Name="Username" />
+                    <TextBlock Grid.Row="3" Text="Password" Style="{StaticResource Label}" />
+                    <PasswordBox x:Name="PasswordBox" Grid.Row="3" Grid.Column="1" Margin="0,2" AutomationProperties.Name="Password" />
+                    <TextBlock x:Name="PasswordHint" Grid.Row="4" Grid.Column="1" Style="{StaticResource Hint}"
+                               Text="Only if Oxidized sits behind a login (basic auth in nginx or Apache). Leave both empty otherwise. Saved encrypted for your Windows account." />
+                    <TextBlock Grid.Row="5" Text="Connect through" Style="{StaticResource Label}" />
+                    <ComboBox x:Name="ViaBox" Grid.Row="5" Grid.Column="1" Margin="0,2" DisplayMemberPath="Name" AutomationProperties.Name="Connect through" />
+                    <TextBlock Grid.Row="6" Grid.Column="1" Style="{StaticResource Hint}"
+                               Text="With a jump host, RemoteMan tunnels the calls through that SSH entry, so only the jump host has to reach Oxidized." />
+                    <TextBlock Grid.Row="7" Text="Certificates" Style="{StaticResource Label}" />
+                    <CheckBox x:Name="IgnoreCertBox" Grid.Row="7" Grid.Column="1" Content="Ignore certificate errors (self-signed)" VerticalAlignment="Center" Margin="0,4" />
+                    <TextBlock Grid.Row="8" Text="Refresh every" Style="{StaticResource Label}" />
+                    <ComboBox x:Name="PollBox" Grid.Row="8" Grid.Column="1" Margin="0,2" Width="140" HorizontalAlignment="Left" DisplayMemberPath="Name" AutomationProperties.Name="Refresh every" />
+                </Grid>
+
+                <GroupBox Header="Match entries to Oxidized devices by" Margin="0,12,0,0" BorderBrush="{StaticResource Border}" Foreground="{StaticResource Muted}" Padding="8,6">
+                    <StackPanel>
+                        <CheckBox Content="Saved link (entries linked by hand)" IsChecked="True" IsEnabled="False" Margin="0,3" />
+                        <CheckBox x:Name="ByAddressBox" Content="Host or IP address against the device's IP" Margin="0,3" />
+                        <CheckBox x:Name="ByNameBox" Content="Entry name against the device name" Margin="0,3" />
+                        <CheckBox x:Name="BracketBox" Content="Ignore name suffixes in brackets, like &quot;core-sw01 (Core)&quot;" Margin="0,3" />
+                    </StackPanel>
+                </GroupBox>
+
+                <DockPanel Margin="0,12,0,0">
+                    <Button x:Name="TestButton" Content="Test connection" MinWidth="120" Click="OnTest" />
+                    <TextBlock x:Name="TestResult" Margin="10,0,0,0" FontSize="11" VerticalAlignment="Center" TextWrapping="Wrap" Style="{StaticResource MutedText}" Text="Not tested yet" />
+                </DockPanel>
+            </StackPanel>
+        </ScrollViewer>
+    </DockPanel>
+</Window>
