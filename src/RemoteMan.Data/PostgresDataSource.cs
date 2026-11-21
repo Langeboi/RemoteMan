@@ -38,20 +38,12 @@ public sealed class PostgresDataSource : SqlDataSource
         """,
         "CREATE TABLE IF NOT EXISTS remoteman_meta (id INT PRIMARY KEY, rev BIGINT NOT NULL)",
         "INSERT INTO remoteman_meta (id, rev) VALUES (1, 0) ON CONFLICT (id) DO NOTHING",
-        """
-        CREATE TABLE IF NOT EXISTS remoteman_history (
-            revision BIGINT PRIMARY KEY, entry_id VARCHAR(36) NOT NULL, parent_id VARCHAR(36) NULL, kind INT NOT NULL, name VARCHAR(400) NOT NULL,
-            payload TEXT NULL, changed_at BIGINT NOT NULL, changed_by VARCHAR(200) NULL, deleted INT NOT NULL DEFAULT 0,
-            action INT NOT NULL DEFAULT 0, fields TEXT NULL)
-        """,
-        "CREATE INDEX IF NOT EXISTS ix_remoteman_history_entry ON remoteman_history (entry_id, revision)",
     ];
 
     protected override IEnumerable<(string, bool)> MigrationStatements =>
     [
         ("ALTER TABLE remoteman_entries ADD COLUMN IF NOT EXISTS created_at BIGINT NULL", false),
         ("ALTER TABLE remoteman_entries ADD COLUMN IF NOT EXISTS created_by VARCHAR(200) NULL", false),
-        ("ALTER TABLE remoteman_presence ADD COLUMN IF NOT EXISTS sessions TEXT NULL", false),
     ];
 
     protected override string? CurrentUserSql => "SELECT session_user";

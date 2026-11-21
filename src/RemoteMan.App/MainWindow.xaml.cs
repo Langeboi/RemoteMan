@@ -44,9 +44,6 @@ public partial class MainWindow : Window
         };
         _vm.ZabbixSettingsDialog = () =>
             new ZabbixSettingsWindow(_settings, _vm.Store, _vm.Protector) { Owner = this }.ShowDialog() == true;
-        _vm.ReserveDialog = entry => TeamDialogs.Reserve(this, entry);
-        _vm.MergeDialog = (merge, who) => TeamDialogs.Merge(this, merge, who);
-        _vm.HistoryDialog = entry => HistoryWindow.Show(this, _vm, entry);
         DataContext = _vm;
         SetUpNotices();
 
@@ -194,18 +191,6 @@ public partial class MainWindow : Window
     }
 
     private void OnQPopupClosed(object? sender, EventArgs e) => QButton.IsChecked = false;
-
-    // ---------------- Team list (title bar) ----------------
-
-    private void OnTeamPopupClosed(object? sender, EventArgs e) => TeamButton.IsChecked = false;
-    private void OnTeamPopupOpened(object? sender, EventArgs e) { if (_vm.TeamShowsActivity) _vm.LoadActivityCommand.Execute(null); }
-    private void OnTeamTab(object sender, RoutedEventArgs e)
-    {
-        if (_vm is null) return; // the first tab is checked while the window is still being built
-        _vm.TeamShowsActivity = ReferenceEquals(sender, TeamActivityTab);
-    }
-    /// <summary>After jumping to an entry the list closes, so the tree is visible.</summary>
-    private void OnTeamLine(object sender, RoutedEventArgs e) => Dispatcher.BeginInvoke(() => TeamButton.IsChecked = false);
     private void OnZPopupClosed(object? sender, EventArgs e) => ZButton.IsChecked = false;
     private void OnZPopupButton(object sender, RoutedEventArgs e) => ZButton.IsChecked = false;
 

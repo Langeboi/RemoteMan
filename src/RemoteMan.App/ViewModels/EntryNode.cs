@@ -6,8 +6,7 @@ using RemoteMan.Core.Model;
 namespace RemoteMan.App.ViewModels;
 
 /// <summary>A colored initials circle: who is on an entry, or who is online.</summary>
-/// <param name="Hollow">Only looking (an outline); filled means connected or editing.</param>
-public sealed record PresenceChip(string Initials, string ToolTip, string Color = "#5B9BEA", bool Hollow = false)
+public sealed record PresenceChip(string Initials, string ToolTip, string Color = "#5B9BEA")
 {
     private static readonly string[] Palette = ["#D98C5F", "#B48AE6", "#5B9BEA", "#54C08A", "#E0A84A", "#3FB8A4", "#E57A9A"];
 
@@ -38,10 +37,6 @@ public sealed partial class EntryNode : ObservableObject
     /// <summary>Tiny initials badge on the corner of the protocol icon: the first person on this entry, tooltip lists everyone.</summary>
     [ObservableProperty] private PresenceChip? _badge;
     [ObservableProperty] private bool _isDropTarget;
-    /// <summary>Someone reserved the entry: the lock's tooltip ("Reserved by … until …"). Null hides the lock.</summary>
-    [ObservableProperty] private string? _reservedTip;
-    /// <summary>The reservation is yours (the lock is drawn in the accent colour instead of amber).</summary>
-    [ObservableProperty] private bool _reservedByMe;
 
     /// <summary>Zabbix glyph on the right of the row: ok, warn, high, unreach, maint, or null for none.</summary>
     [ObservableProperty] private string? _health;

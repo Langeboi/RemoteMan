@@ -66,12 +66,6 @@ public static class Secrets
     /// "saved" to the credential entry (credential entries resolve to themselves).</summary>
     public static ResolvedCredential Resolve(Entry entry, EntryStore store, ISecretProtector protector)
     {
-        // Your own login for this entry, kept on this PC only, wins over the shared one.
-        if (entry.IsConnectable && MyLogins.Active(entry.Id) is { } mine)
-        {
-            var pw = MyLogins.Password(mine);
-            return new ResolvedCredential(mine.UserName, mine.Domain, pw, null, null, AskPassword: pw is null);
-        }
         var (source, holder) = store.ResolveLogin(entry);
         if (source == LoginSource.WindowsLogin) return ResolvedCredential.WindowsLogin();
         if (holder?.Credential is not { } c) return ResolvedCredential.None;

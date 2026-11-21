@@ -44,20 +44,12 @@ public sealed class SqliteDataSource : SqlDataSource
         """,
         "CREATE TABLE IF NOT EXISTS remoteman_meta (id INTEGER PRIMARY KEY, rev INTEGER NOT NULL)",
         "INSERT OR IGNORE INTO remoteman_meta (id, rev) VALUES (1, 0)",
-        """
-        CREATE TABLE IF NOT EXISTS remoteman_history (
-            revision INTEGER PRIMARY KEY, entry_id TEXT NOT NULL, parent_id TEXT NULL, kind INTEGER NOT NULL, name TEXT NOT NULL,
-            payload TEXT NULL, changed_at INTEGER NOT NULL, changed_by TEXT NULL, deleted INTEGER NOT NULL DEFAULT 0,
-            action INTEGER NOT NULL DEFAULT 0, fields TEXT NULL)
-        """,
-        "CREATE INDEX IF NOT EXISTS ix_remoteman_history_entry ON remoteman_history (entry_id, revision)",
     ];
 
     protected override IEnumerable<(string, bool)> MigrationStatements =>
     [
         ("ALTER TABLE remoteman_entries ADD COLUMN created_at INTEGER NULL", true),
         ("ALTER TABLE remoteman_entries ADD COLUMN created_by TEXT NULL", true),
-        ("ALTER TABLE remoteman_presence ADD COLUMN sessions TEXT NULL", true),
     ];
 
     protected override string NextRevisionSql => "UPDATE remoteman_meta SET rev = rev + 1 WHERE id = 1 RETURNING rev";
