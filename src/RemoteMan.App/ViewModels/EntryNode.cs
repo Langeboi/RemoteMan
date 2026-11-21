@@ -28,7 +28,7 @@ public sealed partial class EntryNode : ObservableObject
         Depth = depth;
     }
 
-    [ObservableProperty] [NotifyPropertyChangedFor(nameof(Name), nameof(KindTag), nameof(IsFolder), nameof(HasLinkedCredential), nameof(FolderGlyph), nameof(FolderBrush), nameof(HasCustomIcon), nameof(IconImage), nameof(KindName))]
+    [ObservableProperty] [NotifyPropertyChangedFor(nameof(Name), nameof(KindTag), nameof(IsFolder), nameof(HasLinkedCredential), nameof(FolderGlyph), nameof(FolderBrush), nameof(FolderFill), nameof(HasCustomIcon), nameof(IconImage), nameof(KindName))]
     private Entry _entry;
 
     [ObservableProperty] private bool _isExpanded = true;
@@ -50,7 +50,10 @@ public sealed partial class EntryNode : ObservableObject
     public bool HasProblemCount => ProblemCount > 0;
 
     public int Depth { get; }
-    public Thickness Indent => new(8 + Depth * 16, 0, 8, 0);
+    /// <summary>18px per level; the chevron column sits inside the row template.</summary>
+    public Thickness Indent => new(4 + Depth * 18, 0, 6, 0);
+    /// <summary>The data source itself, shown as the top node of the navigation tree (not a stored entry).</summary>
+    public bool IsRoot { get; init; }
     public string Name => Entry.Name;
     public bool IsFolder => Entry.Kind == EntryKind.Folder;
     public bool HasLinkedCredential => Entry.CredentialId is not null;
@@ -59,6 +62,8 @@ public sealed partial class EntryNode : ObservableObject
     /// <summary>Folder icon chosen in the folder icon picker (plain folder by default).</summary>
     public System.Windows.Media.Geometry FolderGlyph => RemoteMan.App.Views.FolderIcons.GlyphFor(Entry.Icon);
     public System.Windows.Media.Brush FolderBrush => RemoteMan.App.Views.FolderIcons.BrushFor(Entry.IconColor);
+    /// <summary>Plain folders are drawn filled in their colour; folders with a glyph (server, network…) stay outlined.</summary>
+    public System.Windows.Media.Brush? FolderFill => Entry.Icon is null or "" or "folder" ? FolderBrush : null;
     /// <summary>Any entry: a glyph or vendor mark picked with Change icon, shown instead of the protocol or folder icon.</summary>
     public bool HasCustomIcon => RemoteMan.App.Views.EntryIcons.IsCustom(Entry.Icon, Entry.IconColor, IsFolder);
     public System.Windows.Media.ImageSource? IconImage =>

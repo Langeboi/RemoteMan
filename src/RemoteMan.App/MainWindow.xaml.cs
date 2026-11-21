@@ -200,10 +200,75 @@ public partial class MainWindow : Window
     {
         static void Walk(IEnumerable<EntryNode> nodes)
         {
-            foreach (var n in nodes) { if (n.IsFolder) n.IsExpanded = false; Walk(n.Children); }
+            foreach (var n in nodes) { if (n.IsFolder && !n.IsRoot) n.IsExpanded = false; Walk(n.Children); }
         }
         Walk(_vm.Roots);
     }
+
+    private void OnExpandAll(object sender, RoutedEventArgs e)
+    {
+        static void Walk(IEnumerable<EntryNode> nodes)
+        {
+            foreach (var n in nodes) { if (n.IsFolder) n.IsExpanded = true; Walk(n.Children); }
+        }
+        Walk(_vm.Roots);
+    }
+
+    /// <summary>Clicking a folder's chevron opens or closes it without selecting it.</summary>
+    private void OnChevronDown(object sender, MouseButtonEventArgs e)
+    {
+        if (Keyboard.Modifiers != ModifierKeys.None) return;
+        if ((sender as FrameworkElement)?.DataContext is EntryNode { IsFolder: true } n)
+        {
+            n.IsExpanded = !n.IsExpanded;
+            e.Handled = true;
+        }
+    }
+
+    // ---------------- bottom bar: data source picker and panel tabs ----------------
+
+    private void OnDataSourcePicker(object sender, RoutedEventArgs e)
+    {
+        var menu = new ContextMenu();
+        foreach (var ds in _settings.DataSources)
+        {
+            var name = ds.Name;
+            var item = new MenuItem { Header = $"{ds.Name}  ({ds.Kind})", IsCheckable = true, IsChecked = ds.Name == _settings.Active.Name };
+            item.Click += (_, _) => SwitchDataSource(name);
+            menu.Items.Add(item);
+        }
+        menu.Items.Add(new Separator());
+        var manage = new MenuItem { Header = "Manage data sources…" };
+        manage.Click += OnDataSources;
+        menu.Items.Add(manage);
+        menu.PlacementTarget = (UIElement)sender;
+        menu.Placement = System.Windows.Controls.Primitives.PlacementMode.Top;
+        menu.IsOpen = true;
+    }
+
+    private void SwitchDataSource(string name)
+    {
+        if (name == _settings.Active.Name) return;
+        _settings.ActiveDataSource = name;
+        _settings.Save();
+        Views.ChoiceDialog.Info(this, "Restart to switch", $"Restart RemoteMan to open {name}.");
+    }
+
+    private void OnPanelMore(object sender, RoutedEventArgs e)
+    {
+        var menu = new ContextMenu();
+        void Add(string header, RoutedEventHandler click) { var i = new MenuItem { Header = header }; i.Click += click; menu.Items.Add(i); }
+        Add("Expand all", OnExpandAll);
+        Add("Collapse all", OnCollapseAll);
+        menu.Items.Add(new Separator());
+        Add("Import…", OnImport);
+        Add("Manage data sources…", OnDataSources);
+        menu.PlacementTarget = (UIElement)sender;
+        menu.Placement = System.Windows.Controls.Primitives.PlacementMode.Top;
+        menu.IsOpen = true;
+    }
+
+    private void OnPanelRefresh(object sender, RoutedEventArgs e) => _ = _vm.RefreshAsync();
 
     // ---------------- panes ----------------
 
@@ -269,14 +334,16 @@ public partial class MainWindow : Window
         else if (e.Key == Key.Down) { Tree.Focus(); e.Handled = true; }
     }
 
+    // The data source node can be highlighted but is not an entry: commands see no selection (new, paste go to the top level).
     private void OnTreeSelectionChanged(object sender, RoutedPropertyChangedEventArgs<object> e) =>
-        _vm.Selected = e.NewValue as EntryNode;
+        _vm.Selected = e.NewValue is EntryNode { IsRoot: false } n ? n : null;
 
     /// <summary>Ctrl+click a credential to link it to the selected connection, without changing the selection.</summary>
     private async void OnTreeMouseDown(object sender, MouseButtonEventArgs e)
     {
         _dragStart = e.GetPosition(Tree);
         _dragNode = FindItem(e.OriginalSource as DependencyObject)?.DataContext as EntryNode;
+        if (_dragNode?.IsRoot == true) _dragNode = null;
         if (Keyboard.Modifiers != ModifierKeys.Control) return;
         if (FindItem(e.OriginalSource as DependencyObject)?.DataContext is not EntryNode clicked) return;
         if (clicked.Entry.Kind != Core.Model.EntryKind.Credential) return;
@@ -333,6 +400,7 @@ public partial class MainWindow : Window
     {
         highlight = null;
         if (FindItem(e.OriginalSource as DependencyObject)?.DataContext is not EntryNode target) return null;
+        if (target.IsRoot) { highlight = target; return null; }
         if (target.IsFolder) { highlight = target; return target.Id; }
         if (target.Entry.ParentId is { } p && _vm.FindNode(p) is { } parent) { highlight = parent; return p; }
         return null;
@@ -380,7 +448,12 @@ public partial class MainWindow : Window
 
     private void OnTreeKeyDown(object sender, KeyEventArgs e)
     {
-        if (e.Key == Key.Enter && _vm.Selected is { } n)
+        if (e.Key == Key.Enter && Tree.SelectedItem is EntryNode { IsRoot: true } root)
+        {
+            root.IsExpanded = !root.IsExpanded;
+            e.Handled = true;
+        }
+        else if (e.Key == Key.Enter && _vm.Selected is { } n)
         {
             if (n.Entry.IsConnectable) _vm.ConnectCommand.Execute(n); else n.IsExpanded = !n.IsExpanded;
             e.Handled = true;

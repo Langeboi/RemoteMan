@@ -8,7 +8,7 @@ public static class FolderIcons
     public sealed record Glyph16(string Key, string Name, Geometry Data);
     public sealed record Swatch(string Name, string Hex, Brush Brush);
 
-    public const string DefaultColor = "#7D8A99";
+    public const string DefaultColor = "#D6B85A";
 
     public static readonly IReadOnlyList<Glyph16> Glyphs =
     [
@@ -28,11 +28,11 @@ public static class FolderIcons
 
     public static readonly IReadOnlyList<Swatch> Colors =
     [
-        S("Grey (default)", DefaultColor),
+        S("Yellow (default)", DefaultColor),
+        S("Grey", "#7D8A99"),
         S("Blue", "#5B9BEA"),
         S("Teal", "#3FB8A4"),
         S("Green", "#6CC070"),
-        S("Yellow", "#D6C25E"),
         S("Orange", "#E0904F"),
         S("Red", "#E5605B"),
         S("Purple", "#B48CE6"),

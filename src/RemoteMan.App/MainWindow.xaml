@@ -27,11 +27,35 @@
 
         <HierarchicalDataTemplate DataType="{x:Type vm:EntryNode}" ItemsSource="{Binding Children}">
             <DockPanel LastChildFill="True">
-                <Path x:Name="chevron" Width="9" Height="9" Margin="0,0,5,0" Stretch="Uniform" Stroke="{StaticResource Faint}" StrokeThickness="1.6"
-                      Data="M0,0 L4,4 L8,0" Visibility="Collapsed" VerticalAlignment="Center" />
-                <Path x:Name="folder" Width="16" Height="16" Margin="-1,0,6,0" Stretch="None" Stroke="{Binding FolderBrush}" StrokeThickness="1.3"
+                <!-- Chevron column: always takes its space so icons line up; only folders show (and click) it -->
+                <Border x:Name="chevBox" Width="16" Height="16" Margin="0,0,2,0" Background="Transparent" Visibility="Hidden" VerticalAlignment="Center"
+                        MouseLeftButtonDown="OnChevronDown" Cursor="Hand">
+                    <Path x:Name="chevron" Width="8" Height="8" Stretch="Uniform" Stroke="{StaticResource Faint}" StrokeThickness="1.5"
+                          StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round"
+                          Data="M0,0 L4,4 L8,0" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                </Border>
+                <!-- Plain folders are filled in their colour; glyph folders (server, network…) stay outlined -->
+                <Path x:Name="folder" Width="16" Height="16" Margin="0,0,7,0" Stretch="None" Stroke="{Binding FolderBrush}" Fill="{Binding FolderFill}" StrokeThickness="1.3"
                       StrokeLineJoin="Round" StrokeStartLineCap="Round" StrokeEndLineCap="Round"
                       Data="{Binding FolderGlyph}" Visibility="Collapsed" VerticalAlignment="Center" />
+                <!-- The data source node: database glyph with a green (online) or red (offline) dot -->
+                <Grid x:Name="dsIcon" Width="16" Height="16" Margin="0,0,7,0" VerticalAlignment="Center" Visibility="Collapsed"
+                      ToolTip="{Binding DataContext.DataSourceText, RelativeSource={RelativeSource AncestorType=Window}}">
+                    <Path Data="M2.5,3.5 c0,-1.1 2.5,-2 5.5,-2 s5.5,0.9 5.5,2 s-2.5,2 -5.5,2 s-5.5,-0.9 -5.5,-2 z M2.5,3.5 v9 c0,1.1 2.5,2 5.5,2 s5.5,-0.9 5.5,-2 v-9 M2.5,8 c0,1.1 2.5,2 5.5,2 s5.5,-0.9 5.5,-2"
+                          Stroke="{StaticResource EntryIcon}" StrokeThickness="1.3" />
+                    <Ellipse Width="7" Height="7" Margin="0,0,-3,-3" HorizontalAlignment="Right" VerticalAlignment="Bottom" Stroke="{StaticResource Panel}" StrokeThickness="1">
+                        <Ellipse.Style>
+                            <Style TargetType="Ellipse">
+                                <Setter Property="Fill" Value="{StaticResource Bad}" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding DataContext.DataSourceOk, RelativeSource={RelativeSource AncestorType=Window}}" Value="True">
+                                        <Setter Property="Fill" Value="{StaticResource Ok}" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Ellipse.Style>
+                    </Ellipse>
+                </Grid>
                 <!-- Protocol icon with a tiny presence badge on its corner when someone is on the entry -->
                 <Grid x:Name="tag" Margin="0,0,7,0" VerticalAlignment="Center">
                     <Path x:Name="kind" Style="{StaticResource KindIcon}" Tag="{Binding KindTag}" />
@@ -60,11 +84,9 @@
                     <Setter TargetName="name" Property="FontWeight" Value="SemiBold" />
                 </DataTrigger>
                 <DataTrigger Binding="{Binding IsFolder}" Value="True">
-                    <Setter TargetName="chevron" Property="Visibility" Value="Visible" />
+                    <Setter TargetName="chevBox" Property="Visibility" Value="Visible" />
                     <Setter TargetName="folder" Property="Visibility" Value="Visible" />
                     <Setter TargetName="tag" Property="Visibility" Value="Collapsed" />
-                    <Setter TargetName="name" Property="FontWeight" Value="SemiBold" />
-                    <Setter TargetName="name" Property="Foreground" Value="#C9CFD6" />
                 </DataTrigger>
                 <!-- Change icon: custom glyph or vendor mark replaces the protocol / folder icon (after IsFolder so it wins) -->
                 <DataTrigger Binding="{Binding HasCustomIcon}" Value="True">
@@ -75,6 +97,13 @@
                 </DataTrigger>
                 <DataTrigger Binding="{Binding IsExpanded}" Value="False">
                     <Setter TargetName="chevron" Property="Data" Value="M0,0 L4,4 L0,8" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding IsRoot}" Value="True">
+                    <Setter TargetName="folder" Property="Visibility" Value="Collapsed" />
+                    <Setter TargetName="tag" Property="Visibility" Value="Collapsed" />
+                    <Setter TargetName="dsIcon" Property="Visibility" Value="Visible" />
+                    <Setter TargetName="name" Property="FontWeight" Value="SemiBold" />
+                    <Setter TargetName="name" Property="Foreground" Value="#7DB2F0" />
                 </DataTrigger>
                 <DataTrigger Binding="{Binding ProblemCountHigh}" Value="True">
                     <Setter TargetName="pcount" Property="Background" Value="{StaticResource Bad}" />
@@ -378,31 +407,6 @@
             </DockPanel>
         </Border>
 
-        <!-- Icon rail -->
-        <Border DockPanel.Dock="Left" Width="44" Background="{StaticResource Rail}" BorderBrush="{StaticResource Border}" BorderThickness="0,0,1,0">
-            <DockPanel Margin="0,6">
-                <Button DockPanel.Dock="Bottom" Style="{StaticResource FlatButton}" Width="34" Height="34" Padding="0" Foreground="#8E98A3"
-                        ToolTip="Data sources" AutomationProperties.Name="Data sources" Click="OnDataSources">
-                    <Path Data="M1,3 A6,2.5 0 1 1 13,3 A6,2.5 0 1 1 1,3 Z M1,3 V13 A6,2.5 0 0 0 13,13 V3 M1,8 A6,2.5 0 0 0 13,8"
-                          Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" StrokeThickness="1.3" />
-                </Button>
-                <StackPanel>
-                    <RadioButton GroupName="Rail" Style="{StaticResource RailButton}" Tag="nav" IsChecked="True" Checked="OnRailChecked" ToolTip="Navigation" AutomationProperties.Name="Navigation">
-                        <Path Data="M1,2 H15 M1,8 H10 M1,14 H12" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=RadioButton}}" StrokeThickness="1.6" StrokeStartLineCap="Round" StrokeEndLineCap="Round" />
-                    </RadioButton>
-                    <RadioButton GroupName="Rail" Style="{StaticResource RailButton}" Tag="fav" Checked="OnRailChecked" ToolTip="Favorites" AutomationProperties.Name="Favorites">
-                        <Path Data="M8,0.8 L10.1,5.2 L14.9,5.8 L11.4,9.1 L12.3,13.9 L8,11.5 L3.7,13.9 L4.6,9.1 L1.1,5.8 L5.9,5.2 Z" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=RadioButton}}" StrokeThickness="1.4" StrokeLineJoin="Round" />
-                    </RadioButton>
-                    <RadioButton GroupName="Rail" Style="{StaticResource RailButton}" Tag="recent" Checked="OnRailChecked" ToolTip="Recent" AutomationProperties.Name="Recent">
-                        <Path Data="M15,8 A7,7 0 1 1 1,8 A7,7 0 1 1 15,8 Z M8,4 V8 L10.5,9.8" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=RadioButton}}" StrokeThickness="1.4" StrokeLineJoin="Round" />
-                    </RadioButton>
-                    <RadioButton GroupName="Rail" Style="{StaticResource RailButton}" Tag="cred" Checked="OnRailChecked" ToolTip="Credentials" AutomationProperties.Name="Credentials">
-                        <Path Data="{StaticResource Icon.KEY}" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=RadioButton}}" StrokeThickness="1.4" StrokeStartLineCap="Round" StrokeEndLineCap="Round" />
-                    </RadioButton>
-                </StackPanel>
-            </DockPanel>
-        </Border>
-
         <Grid>
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="264" MinWidth="180" MaxWidth="520" />
@@ -410,46 +414,31 @@
                 <ColumnDefinition Width="*" />
             </Grid.ColumnDefinitions>
 
-            <!-- Navigation panel: title, data source, tree, entry card -->
+            <!-- Navigation panel: tree (data source as the top node), entry card, then the data source picker and panel tabs -->
             <Grid Background="{StaticResource Panel}">
                 <Grid.RowDefinitions>
-                    <RowDefinition Height="32" />
+                    <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="*" MinHeight="100" />
                     <RowDefinition Height="1" />
                     <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
                 </Grid.RowDefinitions>
-                <Border BorderBrush="{StaticResource Border}" BorderThickness="0,0,0,1">
-                    <DockPanel Margin="12,0,4,0">
-                        <Button DockPanel.Dock="Right" Style="{StaticResource FlatButton}" Width="26" Padding="0" ToolTip="Collapse all" AutomationProperties.Name="Collapse all folders" Click="OnCollapseAll">
-                            <Path Data="M0,5 L4,1 L8,5" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" StrokeThickness="1.5" />
-                        </Button>
-                        <TextBlock Text="{Binding PanelTitle}" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource Muted}" VerticalAlignment="Center"
-                                   Typography.Capitals="AllSmallCaps" />
-                    </DockPanel>
-                </Border>
-
-                <Border Grid.Row="1" Margin="8,8,8,4" Height="30" Background="#1D2125" BorderBrush="{StaticResource InputBorder}" BorderThickness="1" CornerRadius="{StaticResource Radius}"
-                        Visibility="{Binding IsNavPanel, Converter={StaticResource BoolVis}}" ToolTip="{Binding DataSourceText}">
-                    <DockPanel Margin="9,0">
-                        <!-- Database glyph: blue when connected, red when offline -->
-                        <Path Data="M1,3 A6,2.5 0 1 1 13,3 A6,2.5 0 1 1 1,3 Z M1,3 V13 A6,2.5 0 0 0 13,13 V3 M1,8 A6,2.5 0 0 0 13,8"
-                              StrokeThickness="1.3" Margin="0,0,8,0" VerticalAlignment="Center">
-                            <Path.Style>
-                                <Style TargetType="Path">
-                                    <Setter Property="Stroke" Value="{StaticResource Bad}" />
-                                    <Style.Triggers>
-                                        <DataTrigger Binding="{Binding DataSourceOk}" Value="True"><Setter Property="Stroke" Value="{StaticResource EntryIcon}" /></DataTrigger>
-                                    </Style.Triggers>
-                                </Style>
-                            </Path.Style>
-                        </Path>
-                        <TextBlock Text="{Binding DataSourceName}" FontWeight="SemiBold" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
-                    </DockPanel>
+                <!-- Title for Favorites, Recent and Credentials (the navigation tree has its data source node instead) -->
+                <Border Height="30" BorderBrush="{StaticResource Border}" BorderThickness="0,0,0,1">
+                    <Border.Style>
+                        <Style TargetType="Border">
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding IsNavPanel}" Value="True"><Setter Property="Visibility" Value="Collapsed" /></DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Border.Style>
+                    <TextBlock Text="{Binding PanelTitle}" Margin="12,0" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource Muted}" VerticalAlignment="Center"
+                               Typography.Capitals="AllSmallCaps" />
                 </Border>
 
                 <TreeView x:Name="Tree" Grid.Row="2" ItemsSource="{Binding Roots}" ItemContainerStyle="{StaticResource EntryItem}"
-                          Background="Transparent" BorderThickness="0" Padding="0,4"
+                          Background="Transparent" BorderThickness="0" Padding="0,3"
                           VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling"
                           SelectedItemChanged="OnTreeSelectionChanged" PreviewMouseLeftButtonDown="OnTreeMouseDown"
                           PreviewMouseMove="OnTreeMouseMove" AllowDrop="True" DragOver="OnTreeDragOver" DragLeave="OnTreeDragLeave" Drop="OnTreeDrop"
@@ -550,6 +539,50 @@
                                 <TextBlock Text="No device matches." Style="{StaticResource MutedText}" FontSize="11" TextTrimming="CharacterEllipsis" />
                             </DockPanel>
                         </StackPanel>
+                    </StackPanel>
+                </Border>
+
+                <!-- Bottom bar: data source picker, then the panel tabs (navigation, favorites, recent, credentials) -->
+                <Border Grid.Row="5" Background="{StaticResource Panel2}" BorderBrush="{StaticResource Border}" BorderThickness="0,1,0,0">
+                    <StackPanel>
+                        <DockPanel Height="32" Margin="8,0,4,0">
+                            <Button DockPanel.Dock="Right" Style="{StaticResource FlatButton}" Width="26" Height="24" Padding="0" ToolTip="Refresh (F5)" AutomationProperties.Name="Refresh" Click="OnPanelRefresh">
+                                <Path Data="M13.5,8 A5.5,5.5 0 1 1 11.9,4.1 M13.5,1.8 V4.6 H10.7" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                                      StrokeThickness="1.4" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" />
+                            </Button>
+                            <Button DockPanel.Dock="Right" Style="{StaticResource FlatButton}" Width="26" Height="24" Padding="0" ToolTip="More" AutomationProperties.Name="Navigation options" Click="OnPanelMore">
+                                <Path Data="M3,8 h0.01 M8,8 h0.01 M13,8 h0.01" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                                      StrokeThickness="2.4" StrokeStartLineCap="Round" StrokeEndLineCap="Round" />
+                            </Button>
+                            <Button Style="{StaticResource FlatButton}" Height="26" Padding="0,0,6,0" HorizontalContentAlignment="Stretch" Click="OnDataSourcePicker"
+                                    ToolTip="{Binding DataSourceText}" AutomationProperties.Name="Switch data source">
+                                <DockPanel>
+                                    <Border Width="20" Height="20" CornerRadius="10" Background="{StaticResource EntryIcon}" Margin="0,0,8,0" VerticalAlignment="Center">
+                                        <Path Data="M2.5,3.5 c0,-1.1 2.5,-2 5.5,-2 s5.5,0.9 5.5,2 s-2.5,2 -5.5,2 s-5.5,-0.9 -5.5,-2 z M2.5,3.5 v9 c0,1.1 2.5,2 5.5,2 s5.5,-0.9 5.5,-2 v-9 M2.5,8 c0,1.1 2.5,2 5.5,2 s5.5,-0.9 5.5,-2"
+                                              Stroke="{StaticResource Bg}" StrokeThickness="1.6" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                            <Path.LayoutTransform><ScaleTransform ScaleX="0.75" ScaleY="0.75" /></Path.LayoutTransform>
+                                        </Path>
+                                    </Border>
+                                    <Path DockPanel.Dock="Right" Data="M0,0 L4,4 L8,0" Stroke="{StaticResource Muted}" StrokeThickness="1.4" VerticalAlignment="Center" Margin="6,0,0,0" />
+                                    <TextBlock Text="{Binding DataSourceName}" FontWeight="SemiBold" Foreground="{StaticResource Text}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                                </DockPanel>
+                            </Button>
+                        </DockPanel>
+                        <UniformGrid Rows="1" Height="34" Margin="4,0,4,4">
+                            <RadioButton GroupName="Rail" Style="{StaticResource PanelTab}" Tag="nav" IsChecked="True" Checked="OnRailChecked" ToolTip="Navigation" AutomationProperties.Name="Navigation">
+                                <Path Data="M1.5,1.5 h5 v3 h-5 z M4,4.5 V12.5 M4,8 h3.5 M4,12.5 h3.5 M9,6.5 h5.5 v3 H9 z M9,11 h5.5 v3 H9 z"
+                                      Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=RadioButton}}" StrokeThickness="1.3" StrokeLineJoin="Round" />
+                            </RadioButton>
+                            <RadioButton GroupName="Rail" Style="{StaticResource PanelTab}" Tag="fav" Checked="OnRailChecked" ToolTip="Favorites" AutomationProperties.Name="Favorites">
+                                <Path Data="M8,0.8 L10.1,5.2 L14.9,5.8 L11.4,9.1 L12.3,13.9 L8,11.5 L3.7,13.9 L4.6,9.1 L1.1,5.8 L5.9,5.2 Z" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=RadioButton}}" StrokeThickness="1.4" StrokeLineJoin="Round" />
+                            </RadioButton>
+                            <RadioButton GroupName="Rail" Style="{StaticResource PanelTab}" Tag="recent" Checked="OnRailChecked" ToolTip="Recent" AutomationProperties.Name="Recent">
+                                <Path Data="M15,8 A7,7 0 1 1 1,8 A7,7 0 1 1 15,8 Z M8,4 V8 L10.5,9.8" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=RadioButton}}" StrokeThickness="1.4" StrokeLineJoin="Round" />
+                            </RadioButton>
+                            <RadioButton GroupName="Rail" Style="{StaticResource PanelTab}" Tag="cred" Checked="OnRailChecked" ToolTip="Credentials" AutomationProperties.Name="Credentials">
+                                <Path Data="{StaticResource Icon.KEY}" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=RadioButton}}" StrokeThickness="1.4" StrokeStartLineCap="Round" StrokeEndLineCap="Round" />
+                            </RadioButton>
+                        </UniformGrid>
                     </StackPanel>
                 </Border>
             </Grid>
