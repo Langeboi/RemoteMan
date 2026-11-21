@@ -120,7 +120,7 @@ public sealed partial class MainViewModel
         d.Tiles.Add(new DashTile("Entries", s.Entries.ToString("N0"), s.AddedThisWeek > 0 ? $"+{s.AddedThisWeek} this week" : "none added this week"));
         d.Tiles.Add(new DashTile("Folders", s.Folders.ToString("N0"), s.MaxFolderDepth > 0 ? $"deepest {s.MaxFolderDepth} level{(s.MaxFolderDepth == 1 ? "" : "s")}" : "no folders yet"));
         d.Tiles.Add(new DashTile("Credentials", s.Credentials.ToString("N0"), $"{s.UsingSavedCredential} entr{(s.UsingSavedCredential == 1 ? "y uses" : "ies use")} one"));
-        var open = Sessions.Where(x => !x.IsPinned).ToList();
+        var open = Sessions.Where(x => x.IsConnection).ToList();
         var openKinds = string.Join(", ", open.GroupBy(x => x.KindTag).Select(g => $"{g.Count()} {g.Key}"));
         d.Tiles.Add(new DashTile("Open tabs", open.Count.ToString(), open.Count == 0 ? "nothing connected" : openKinds));
         if (snap is not null)

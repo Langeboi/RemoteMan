@@ -154,6 +154,12 @@ public sealed partial class MainViewModel
 
     private void RefreshZabbixCard()
     {
+        try { RefreshZabbixCardCore(); }
+        finally { if (!_refreshingProperties) RefreshOverview(); }
+    }
+
+    private void RefreshZabbixCardCore()
+    {
         SelectedProblems.Clear();
         var e = Selected?.Entry;
         SelectedZabbixVisible = ZabbixActive && e is { IsConnectable: true } && ZabbixSnapshot is not null;

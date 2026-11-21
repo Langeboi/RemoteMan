@@ -55,8 +55,8 @@ public partial class MainWindow : Window
         DataContext = _vm;
         SetUpNotices();
 
-        // The Dashboard tab isn't a connection: the assistant sees no session while it's showing.
-        _ai = new AiAssistantViewModel(settings, () => _vm.ActiveSession is DashboardViewModel ? null : _vm.ActiveSession) { StatusMessage = m => _vm.Message = m };
+        // The Dashboard and Overview tabs aren't connections: the assistant sees no session while it's showing.
+        _ai = new AiAssistantViewModel(settings, () => _vm.ActiveSession is { IsConnection: false } ? null : _vm.ActiveSession) { StatusMessage = m => _vm.Message = m };
         _vm.RevealRequested += (_, node) => Dispatcher.BeginInvoke(() => RevealInTree(node), System.Windows.Threading.DispatcherPriority.Loaded);
         _vm.PropertyChanged += (_, e) => { if (e.PropertyName == nameof(MainViewModel.PanelMode)) SyncRail(); };
         AiButton.DataContext = _ai;
@@ -370,6 +370,25 @@ public partial class MainWindow : Window
         if (clicked.Entry.Kind != Core.Model.EntryKind.Credential) return;
         e.Handled = true;
         await _vm.TryCtrlClickLinkAsync(clicked);
+    }
+
+    /// <summary>A plain click on an entry brings up its Overview tab (folders just open and close).</summary>
+    private void OnTreeMouseUp(object sender, MouseButtonEventArgs e)
+    {
+        if (Keyboard.Modifiers != ModifierKeys.None) return;
+        if (FindItem(e.OriginalSource as DependencyObject)?.DataContext is not EntryNode n || n != _vm.Selected) return;
+        if (e.OriginalSource is DependencyObject d && FindAncestor<System.Windows.Controls.Primitives.ToggleButton>(d) is not null) return;
+        _vm.ShowOverview();
+    }
+
+    private static T? FindAncestor<T>(DependencyObject d) where T : DependencyObject
+    {
+        for (var p = d; p is not null; p = p is Visual or System.Windows.Media.Media3D.Visual3D ? VisualTreeHelper.GetParent(p) : LogicalTreeHelper.GetParent(p))
+        {
+            if (p is T t) return t;
+            if (p is TreeViewItem) return null;
+        }
+        return null;
     }
 
     // ---------------- right-click menu ----------------

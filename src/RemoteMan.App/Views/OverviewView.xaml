@@ -1,0 +1,431 @@
+<UserControl x:Class="RemoteMan.App.Views.OverviewView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:local="clr-namespace:RemoteMan.App"
+             xmlns:vm="clr-namespace:RemoteMan.App.ViewModels"
+             Background="{StaticResource Bg}">
+    <UserControl.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolVis" />
+        <local:NullToCollapsedConverter x:Key="NullVis" />
+        <local:EmptyToCollapsedConverter x:Key="EmptyVis" />
+        <local:InverseBoolToVisibilityConverter x:Key="InvBoolVis" />
+
+        <Geometry x:Key="G.Copy">M5.5,5.5 h8 v8 h-8 z M10.5,5.5 V2.5 h-8 v8 h3</Geometry>
+        <Geometry x:Key="G.Open">M9,2.5 h4.5 V7 M13.5,2.5 L7.5,8.5 M12,9.5 V13.5 H2.5 V4 H6.5</Geometry>
+        <Geometry x:Key="G.Eye">M1,8 C3,4 13,4 15,8 C13,12 3,12 1,8 Z M10,8 A2,2 0 1 1 6,8 A2,2 0 1 1 10,8 Z</Geometry>
+        <Geometry x:Key="G.EyeOff">M1,8 C3,4 13,4 15,8 C13,12 3,12 1,8 Z M2,2 L14,14</Geometry>
+        <Geometry x:Key="G.Play">M4.5,2.5 L13,8 L4.5,13.5 Z</Geometry>
+        <Geometry x:Key="G.Edit">M10.5,2.5 L13.5,5.5 L5.5,13.5 H2.5 V10.5 Z M9,4 L12,7</Geometry>
+        <Geometry x:Key="G.Star">M8,0.8 L10.1,5.2 L14.9,5.8 L11.4,9.1 L12.3,13.9 L8,11.5 L3.7,13.9 L4.6,9.1 L1.1,5.8 L5.9,5.2 Z</Geometry>
+        <Geometry x:Key="G.Backup">M2,3.5 h12 v3 h-12 z M2,9.5 h12 v3 h-12 z M4.5,5 h0.01 M4.5,11 h0.01</Geometry>
+
+        <!-- Card: panel with a small caps title row -->
+        <Style TargetType="Border" x:Key="Card">
+            <Setter Property="Background" Value="{StaticResource Panel}" />
+            <Setter Property="BorderBrush" Value="{StaticResource Border}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="{StaticResource Radius}" />
+        </Style>
+        <Style TargetType="Border" x:Key="CardHeader">
+            <Setter Property="Height" Value="30" />
+            <Setter Property="Padding" Value="14,0" />
+            <Setter Property="BorderBrush" Value="{StaticResource BorderSoft}" />
+            <Setter Property="BorderThickness" Value="0,0,0,1" />
+        </Style>
+        <Style TargetType="TextBlock" x:Key="CardTitle">
+            <Setter Property="Foreground" Value="{StaticResource Muted}" />
+            <Setter Property="FontSize" Value="11" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Typography.Capitals" Value="AllSmallCaps" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+        <Style TargetType="TextBlock" x:Key="Meta">
+            <Setter Property="Foreground" Value="{StaticResource Faint}" />
+            <Setter Property="FontSize" Value="11" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+        </Style>
+
+        <!-- Small square icon button on a row (copy, open, eye) -->
+        <Style TargetType="Button" x:Key="RowIcon" BasedOn="{StaticResource FlatButton}">
+            <Setter Property="Width" Value="28" />
+            <Setter Property="Height" Value="28" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="Margin" Value="2,0,0,0" />
+            <Setter Property="Foreground" Value="{StaticResource Muted}" />
+            <Setter Property="Cursor" Value="Hand" />
+        </Style>
+        <Style TargetType="Path" x:Key="Glyph">
+            <Setter Property="Width" Value="16" />
+            <Setter Property="Height" Value="16" />
+            <Setter Property="Stretch" Value="None" />
+            <Setter Property="StrokeThickness" Value="1.3" />
+            <Setter Property="StrokeLineJoin" Value="Round" />
+            <Setter Property="StrokeStartLineCap" Value="Round" />
+            <Setter Property="StrokeEndLineCap" Value="Round" />
+            <Setter Property="Stroke" Value="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Control}}" />
+            <Setter Property="SnapsToDevicePixels" Value="True" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+
+        <!-- A value link: looks like text in the accent colour, hand cursor -->
+        <Style TargetType="Button" x:Key="LinkValue">
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+            <Setter Property="HorizontalAlignment" Value="Left" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <ContentPresenter x:Name="c" />
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True"><Setter Property="Opacity" Value="0.8" /></Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- One row: label (+ badge), value (+ fallbacks), buttons on the right -->
+        <DataTemplate x:Key="Row" DataType="{x:Type vm:OverviewRow}">
+            <Border x:Name="row" BorderBrush="{StaticResource BorderSoft}" BorderThickness="0,1,0,0" Padding="14,8,8,8" MinHeight="50" Background="Transparent">
+                <DockPanel>
+                    <StackPanel x:Name="tools" DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center" Opacity="0.6">
+                        <Button Style="{StaticResource RowIcon}" Command="{Binding ToggleRevealCommand}" ToolTip="Show or hide" AutomationProperties.Name="Show or hide"
+                                Visibility="{Binding CanReveal, Converter={StaticResource BoolVis}}">
+                            <Path x:Name="eye" Style="{StaticResource Glyph}" Data="{StaticResource G.Eye}" />
+                        </Button>
+                        <Button Style="{StaticResource RowIcon}" Command="{Binding Open}" ToolTip="{Binding OpenTip}" AutomationProperties.Name="{Binding OpenTip}"
+                                Visibility="{Binding Open, Converter={StaticResource NullVis}}">
+                            <Path Style="{StaticResource Glyph}" Data="{StaticResource G.Open}" />
+                        </Button>
+                        <Button Style="{StaticResource RowIcon}" Command="{Binding Copy}" ToolTip="{Binding CopyTip}" AutomationProperties.Name="{Binding CopyTip}"
+                                Visibility="{Binding Copy, Converter={StaticResource NullVis}}">
+                            <Path Style="{StaticResource Glyph}" Data="{StaticResource G.Copy}" />
+                        </Button>
+                    </StackPanel>
+                    <StackPanel VerticalAlignment="Center">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="{Binding Key}" FontSize="11.5" Foreground="{StaticResource Muted}" VerticalAlignment="Center" />
+                            <Border Margin="6,0,0,0" Padding="5,0" CornerRadius="2" Background="{StaticResource BorderSoft}" VerticalAlignment="Center"
+                                    Visibility="{Binding Badge, Converter={StaticResource NullVis}}">
+                                <TextBlock Text="{Binding Badge}" FontSize="10" Foreground="{StaticResource Faint}" />
+                            </Border>
+                        </StackPanel>
+                        <Button x:Name="link" Style="{StaticResource LinkValue}" Command="{Binding Follow}" Visibility="Collapsed" Margin="0,1,0,0">
+                            <TextBlock Text="{Binding Value}" FontSize="13.5" Foreground="#7FD3C4" TextTrimming="CharacterEllipsis" ToolTip="{Binding Value}" />
+                        </Button>
+                        <TextBox x:Name="v" Text="{Binding Value, Mode=OneWay}" IsReadOnly="True" BorderThickness="0" Background="Transparent" Padding="0" Margin="-2,1,0,0"
+                                 FontSize="13.5" Foreground="{StaticResource TextStrong}" TextWrapping="NoWrap" MinHeight="0" />
+                        <ItemsControl ItemsSource="{Binding Alternates}" Focusable="False" Margin="0,3,0,0"
+                                      Visibility="{Binding HasAlternates, Converter={StaticResource BoolVis}}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <TextBlock FontSize="12" Margin="0,1,0,0">
+                                        <Run Text="then " Foreground="{StaticResource Faint}" FontSize="11" /><Run Text="{Binding Mode=OneWay}" FontFamily="{StaticResource MonoFont}" Foreground="{StaticResource Muted}" />
+                                    </TextBlock>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+                </DockPanel>
+            </Border>
+            <DataTemplate.Triggers>
+                <Trigger SourceName="row" Property="IsMouseOver" Value="True">
+                    <Setter TargetName="row" Property="Background" Value="#181C20" />
+                    <Setter TargetName="tools" Property="Opacity" Value="1" />
+                </Trigger>
+                <DataTrigger Binding="{Binding Style}" Value="mono">
+                    <Setter TargetName="v" Property="FontFamily" Value="{StaticResource MonoFont}" />
+                    <Setter TargetName="v" Property="FontSize" Value="13" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Style}" Value="dim">
+                    <Setter TargetName="v" Property="Foreground" Value="{StaticResource Muted}" />
+                    <Setter TargetName="v" Property="FontSize" Value="12.5" />
+                    <Setter TargetName="v" Property="TextWrapping" Value="Wrap" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Style}" Value="link">
+                    <Setter TargetName="link" Property="Visibility" Value="Visible" />
+                    <Setter TargetName="v" Property="Visibility" Value="Collapsed" />
+                </DataTrigger>
+                <MultiDataTrigger>
+                    <MultiDataTrigger.Conditions>
+                        <Condition Binding="{Binding Style}" Value="secret" />
+                        <Condition Binding="{Binding IsRevealed}" Value="False" />
+                    </MultiDataTrigger.Conditions>
+                    <Setter TargetName="v" Property="Foreground" Value="{StaticResource Warn}" />
+                    <Setter TargetName="v" Property="IsHitTestVisible" Value="False" />
+                    <Setter TargetName="v" Property="Focusable" Value="False" />
+                </MultiDataTrigger>
+                <DataTrigger Binding="{Binding IsRevealed}" Value="True">
+                    <Setter TargetName="eye" Property="Data" Value="{StaticResource G.EyeOff}" />
+                    <Setter TargetName="v" Property="FontFamily" Value="{StaticResource MonoFont}" />
+                </DataTrigger>
+            </DataTemplate.Triggers>
+        </DataTemplate>
+
+        <Style TargetType="ItemsControl" x:Key="Rows">
+            <Setter Property="Focusable" Value="False" />
+            <Setter Property="ItemTemplate" Value="{StaticResource Row}" />
+            <Setter Property="Margin" Value="0,-1,0,0" />
+        </Style>
+    </UserControl.Resources>
+
+    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False">
+        <StackPanel Margin="24,20,24,24" MaxWidth="1100" HorizontalAlignment="Stretch">
+
+            <!-- Header: big icon, name, kind and folder, tags; actions on the right -->
+            <DockPanel Margin="0,0,0,14">
+                <Border DockPanel.Dock="Left" Width="44" Height="44" CornerRadius="8" Margin="0,0,14,0" VerticalAlignment="Top" BorderThickness="1" x:Name="BigIcon">
+                    <Border.Style>
+                        <Style TargetType="Border">
+                            <Setter Property="Background" Value="#18222E" />
+                            <Setter Property="BorderBrush" Value="#23344A" />
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding IsCredential}" Value="True"><Setter Property="Background" Value="#26241A" /><Setter Property="BorderBrush" Value="#3D3820" /></DataTrigger>
+                                <DataTrigger Binding="{Binding IsFolder}" Value="True"><Setter Property="Background" Value="#1C2024" /><Setter Property="BorderBrush" Value="#2A2F35" /></DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Border.Style>
+                    <Grid>
+                        <Path x:Name="BigKind" Tag="{Binding KindTag}" HorizontalAlignment="Center">
+                            <Path.Style>
+                                <Style TargetType="Path" BasedOn="{StaticResource KindIcon}">
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding Node.HasCustomIcon}" Value="True"><Setter Property="Visibility" Value="Collapsed" /></DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Path.Style>
+                            <Path.LayoutTransform><ScaleTransform ScaleX="1.5" ScaleY="1.5" /></Path.LayoutTransform>
+                        </Path>
+                        <Path x:Name="BigFolder" Style="{StaticResource KindIcon}" Data="{Binding Node.FolderGlyph}" Stroke="{Binding Node.FolderBrush}" HorizontalAlignment="Center"
+                              Visibility="{Binding ShowFolderGlyph, Converter={StaticResource BoolVis}}">
+                            <Path.LayoutTransform><ScaleTransform ScaleX="1.5" ScaleY="1.5" /></Path.LayoutTransform>
+                        </Path>
+                        <Image Width="24" Height="24" Source="{Binding Node.IconImage}" Visibility="{Binding Node.HasCustomIcon, Converter={StaticResource BoolVis}}" />
+                    </Grid>
+                </Border>
+                <WrapPanel DockPanel.Dock="Right" VerticalAlignment="Top" Margin="12,6,0,0">
+                    <Button Style="{StaticResource PrimaryButton}" Height="28" Padding="11,0" Margin="0,0,6,0" FontWeight="SemiBold"
+                            Command="{Binding Main.ConnectCommand}" ToolTip="Open a session (double-click in the tree does the same)"
+                            Visibility="{Binding CanConnect, Converter={StaticResource BoolVis}}">
+                        <StackPanel Orientation="Horizontal">
+                            <Path Style="{StaticResource Glyph}" Data="{StaticResource G.Play}" Margin="0,0,6,0" />
+                            <TextBlock Text="Open session" VerticalAlignment="Center" />
+                        </StackPanel>
+                    </Button>
+                    <Button Height="28" Padding="11,0" Margin="0,0,6,0" Command="{Binding Main.EditCommand}" ToolTip="Edit the entry (F2)">
+                        <StackPanel Orientation="Horizontal">
+                            <Path Style="{StaticResource Glyph}" Data="{StaticResource G.Edit}" Margin="0,0,6,0" />
+                            <TextBlock Text="Edit" VerticalAlignment="Center" />
+                        </StackPanel>
+                    </Button>
+                    <Button Height="28" Padding="11,0" Margin="0,0,6,0" Command="{Binding Main.OpenConfigBackupsCommand}" ToolTip="Saved configs from Oxidized"
+                            Visibility="{Binding CanBackups, Converter={StaticResource BoolVis}}">
+                        <StackPanel Orientation="Horizontal">
+                            <Path Style="{StaticResource Glyph}" Data="{StaticResource G.Backup}" Margin="0,0,6,0" />
+                            <TextBlock Text="Config backups" VerticalAlignment="Center" />
+                        </StackPanel>
+                    </Button>
+                    <Button Height="28" Width="28" Padding="0" Command="{Binding Main.ToggleFavoriteCommand}" ToolTip="Add to or remove from favorites"
+                            AutomationProperties.Name="Favorite" Visibility="{Binding IsFolder, Converter={StaticResource InvBoolVis}}">
+                        <Path x:Name="StarGlyph" Data="{StaticResource G.Star}" Stretch="None" StrokeThickness="1.3" StrokeLineJoin="Round" Stroke="{StaticResource Muted}" VerticalAlignment="Center" HorizontalAlignment="Center">
+                            <Path.Style>
+                                <Style TargetType="Path">
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsFavorite}" Value="True">
+                                            <Setter Property="Fill" Value="{StaticResource KeyIcon}" />
+                                            <Setter Property="Stroke" Value="{StaticResource KeyIcon}" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Path.Style>
+                        </Path>
+                    </Button>
+                </WrapPanel>
+                <StackPanel VerticalAlignment="Center">
+                    <TextBox Text="{Binding Name, Mode=OneWay}" IsReadOnly="True" BorderThickness="0" Background="Transparent" Padding="0" Margin="-2,0,0,0"
+                             FontSize="20" FontWeight="SemiBold" Foreground="{StaticResource TextStrong}" TextWrapping="Wrap" />
+                    <TextBlock Text="{Binding KindText}" FontSize="12.5" Foreground="{StaticResource Muted}" TextTrimming="CharacterEllipsis" Margin="0,1,0,0" />
+                    <ItemsControl ItemsSource="{Binding Tags}" Focusable="False" Margin="0,6,0,0" Visibility="{Binding Tags.Count, Converter={StaticResource EmptyVis}}">
+                        <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Border Margin="0,0,5,0" Padding="7,1" CornerRadius="9" Background="{StaticResource BorderSoft}" BorderBrush="{StaticResource Border}" BorderThickness="1">
+                                    <TextBlock Text="{Binding}" FontSize="11" Foreground="{StaticResource Muted}" />
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+            </DockPanel>
+
+            <!-- Status chips: Zabbix, Oxidized, who else is on it. Only what applies. -->
+            <ItemsControl ItemsSource="{Binding Chips}" Focusable="False" Margin="0,0,0,6" Visibility="{Binding Chips.Count, Converter={StaticResource EmptyVis}}">
+                <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate DataType="{x:Type vm:OverviewChip}">
+                        <Border x:Name="chip" Margin="0,0,8,8" Height="28" Padding="10,0" CornerRadius="{StaticResource Radius}"
+                                Background="{StaticResource Panel}" BorderBrush="{StaticResource Border}" BorderThickness="1">
+                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                <Ellipse x:Name="dot" Width="8" Height="8" Margin="0,0,7,0" Fill="{StaticResource Faint}" VerticalAlignment="Center" />
+                                <Border x:Name="avatar" Width="18" Height="18" CornerRadius="9" Margin="0,0,7,0" Visibility="Collapsed" Background="{Binding Color}">
+                                    <TextBlock Text="{Binding Initials}" FontSize="9" FontWeight="Bold" Foreground="#111" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                </Border>
+                                <TextBlock x:Name="text" Text="{Binding Text}" FontSize="12" VerticalAlignment="Center" MaxWidth="420" TextTrimming="CharacterEllipsis" ToolTip="{Binding Text}" />
+                                <TextBlock Text="{Binding Sub}" Style="{StaticResource Meta}" Margin="6,0,0,0" Visibility="{Binding Sub, Converter={StaticResource EmptyVis}}" />
+                                <TextBlock Margin="8,0,0,0" FontSize="11.5" VerticalAlignment="Center" Visibility="{Binding Action, Converter={StaticResource NullVis}}">
+                                    <Hyperlink Command="{Binding Command}" Foreground="#7FD3C4"><Run Text="{Binding Action, Mode=OneWay}" /></Hyperlink>
+                                </TextBlock>
+                            </StackPanel>
+                        </Border>
+                        <DataTemplate.Triggers>
+                            <DataTrigger Binding="{Binding Tag}" Value="ok"><Setter TargetName="dot" Property="Fill" Value="{StaticResource Ok}" /></DataTrigger>
+                            <DataTrigger Binding="{Binding Tag}" Value="warn"><Setter TargetName="dot" Property="Fill" Value="{StaticResource Warn}" /></DataTrigger>
+                            <DataTrigger Binding="{Binding Tag}" Value="fail"><Setter TargetName="dot" Property="Fill" Value="{StaticResource Warn}" /></DataTrigger>
+                            <DataTrigger Binding="{Binding Tag}" Value="high">
+                                <Setter TargetName="dot" Property="Fill" Value="{StaticResource Bad}" />
+                                <Setter TargetName="chip" Property="BorderBrush" Value="#4A2725" />
+                            </DataTrigger>
+                            <DataTrigger Binding="{Binding Tag}" Value="unreach"><Setter TargetName="dot" Property="Fill" Value="#9AA3AD" /></DataTrigger>
+                            <DataTrigger Binding="{Binding Kind}" Value="presence">
+                                <Setter TargetName="dot" Property="Visibility" Value="Collapsed" />
+                                <Setter TargetName="avatar" Property="Visibility" Value="Visible" />
+                                <Setter TargetName="text" Property="Foreground" Value="{StaticResource Presence}" />
+                            </DataTrigger>
+                        </DataTemplate.Triggers>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+
+            <!-- Zabbix problems on this host (the chip above has the count) -->
+            <Border Style="{StaticResource Card}" Margin="0,0,0,12" Visibility="{Binding Main.SelectedProblems.Count, Converter={StaticResource EmptyVis}}">
+                <StackPanel>
+                    <Border Style="{StaticResource CardHeader}">
+                        <DockPanel>
+                            <TextBlock DockPanel.Dock="Right" FontSize="11.5" VerticalAlignment="Center">
+                                <Hyperlink Command="{Binding Main.OpenInZabbixCommand}" Foreground="#7FD3C4">Open in Zabbix</Hyperlink>
+                            </TextBlock>
+                            <TextBlock Text="Problems" Style="{StaticResource CardTitle}" />
+                        </DockPanel>
+                    </Border>
+                    <ItemsControl ItemsSource="{Binding Main.SelectedProblems}" Focusable="False" Margin="8,6,8,8">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate DataType="{x:Type vm:ZabbixProblemRow}">
+                                <Border Background="#1A1E22" CornerRadius="{StaticResource Radius}" Padding="8,6" Margin="0,2">
+                                    <DockPanel>
+                                        <Path Style="{StaticResource HealthGlyph}" Tag="{Binding Tag}" VerticalAlignment="Top" Margin="0,0,8,0" />
+                                        <StackPanel>
+                                            <TextBlock Text="{Binding Name}" FontSize="12.5" TextWrapping="Wrap" />
+                                            <TextBlock Text="{Binding Meta}" FontSize="11" Style="{StaticResource MutedText}" Margin="0,1,0,0" TextTrimming="CharacterEllipsis" />
+                                        </StackPanel>
+                                    </DockPanel>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+            </Border>
+
+            <!-- Connection | Login -->
+            <Grid x:Name="TopGrid" Margin="0,0,0,12">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="12" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+                <Border x:Name="ConnCard" Style="{StaticResource Card}" VerticalAlignment="Top" Visibility="{Binding ConnectionRows.Count, Converter={StaticResource EmptyVis}}">
+                    <StackPanel>
+                        <Border Style="{StaticResource CardHeader}">
+                            <DockPanel>
+                                <TextBlock DockPanel.Dock="Right" Text="{Binding ConnectionNote}" Style="{StaticResource Meta}" Margin="12,0,0,0" />
+                                <TextBlock Text="{Binding DetailsTitle}" Style="{StaticResource CardTitle}" />
+                            </DockPanel>
+                        </Border>
+                        <ItemsControl ItemsSource="{Binding ConnectionRows}" Style="{StaticResource Rows}" />
+                    </StackPanel>
+                </Border>
+                <Border x:Name="LoginCard" Grid.Column="2" Style="{StaticResource Card}" VerticalAlignment="Top" Visibility="{Binding HasLogin, Converter={StaticResource BoolVis}}">
+                    <StackPanel>
+                        <Border Style="{StaticResource CardHeader}">
+                            <TextBlock Text="Login" Style="{StaticResource CardTitle}" />
+                        </Border>
+                        <ItemsControl ItemsSource="{Binding LoginRows}" Style="{StaticResource Rows}" />
+                        <!-- Two-factor code: live, with a ring for the seconds left -->
+                        <Border BorderBrush="{StaticResource BorderSoft}" BorderThickness="0,1,0,0" Padding="14,8,8,8" MinHeight="50"
+                                Visibility="{Binding HasTotp, Converter={StaticResource BoolVis}}">
+                            <DockPanel>
+                                <Button DockPanel.Dock="Right" Style="{StaticResource RowIcon}" Command="{Binding CopyTotp}" ToolTip="Copy the 2FA code" AutomationProperties.Name="Copy the 2FA code" VerticalAlignment="Center">
+                                    <Path Style="{StaticResource Glyph}" Data="{StaticResource G.Copy}" />
+                                </Button>
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Text="2FA code" FontSize="11.5" Foreground="{StaticResource Muted}" />
+                                    <StackPanel Orientation="Horizontal" Margin="0,1,0,0">
+                                        <TextBlock Text="{Binding TotpCode}" FontFamily="{StaticResource MonoFont}" FontSize="17" Foreground="{StaticResource TextStrong}" VerticalAlignment="Center" />
+                                        <Grid Width="18" Height="18" Margin="10,0,6,0" VerticalAlignment="Center">
+                                            <Ellipse Stroke="{StaticResource Border}" StrokeThickness="2.5" />
+                                            <Path x:Name="TotpArc" Stroke="{StaticResource Accent}" StrokeThickness="2.5" StrokeStartLineCap="Round" StrokeEndLineCap="Round" />
+                                        </Grid>
+                                        <TextBlock Style="{StaticResource Meta}" Text="{Binding TotpSeconds, StringFormat='{}{0} s'}" />
+                                    </StackPanel>
+                                </StackPanel>
+                            </DockPanel>
+                        </Border>
+                    </StackPanel>
+                </Border>
+            </Grid>
+
+            <!-- Fields | Description -->
+            <Grid Margin="0,0,0,12" x:Name="MoreGrid">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="12" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+                <Border x:Name="FieldsCard" Style="{StaticResource Card}" VerticalAlignment="Top" Visibility="{Binding FieldRows.Count, Converter={StaticResource EmptyVis}}">
+                    <StackPanel>
+                        <Border Style="{StaticResource CardHeader}">
+                            <TextBlock Text="Fields" Style="{StaticResource CardTitle}" />
+                        </Border>
+                        <ItemsControl ItemsSource="{Binding FieldRows}" Style="{StaticResource Rows}" />
+                    </StackPanel>
+                </Border>
+                <Border x:Name="DescCard" Grid.Column="2" Style="{StaticResource Card}" VerticalAlignment="Top" Visibility="{Binding Description, Converter={StaticResource EmptyVis}}">
+                    <StackPanel>
+                        <Border Style="{StaticResource CardHeader}">
+                            <TextBlock Text="Description" Style="{StaticResource CardTitle}" />
+                        </Border>
+                        <TextBox Text="{Binding Description, Mode=OneWay}" IsReadOnly="True" BorderThickness="0" Background="Transparent" Padding="14,10,14,12"
+                                 TextWrapping="Wrap" FontSize="12.5" Foreground="{StaticResource Text}" />
+                    </StackPanel>
+                </Border>
+            </Grid>
+
+            <!-- Created by / Modified by -->
+            <Border BorderBrush="{StaticResource BorderSoft}" BorderThickness="0,1,0,0" Padding="2,10,0,0" Visibility="{Binding People.Count, Converter={StaticResource EmptyVis}}">
+                <ItemsControl ItemsSource="{Binding People}" Focusable="False">
+                    <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate DataType="{x:Type vm:OverviewPerson}">
+                            <StackPanel Orientation="Horizontal" Margin="0,0,24,4" ToolTip="{Binding Exact}">
+                                <TextBlock Text="{Binding Label}" FontSize="12" Foreground="{StaticResource Muted}" VerticalAlignment="Center" Margin="0,0,8,0" />
+                                <Border Width="22" Height="22" CornerRadius="11" Background="{Binding Color}" Margin="0,0,7,0">
+                                    <TextBlock Text="{Binding Initials}" FontSize="9.5" FontWeight="Bold" Foreground="#111" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                </Border>
+                                <TextBlock Text="{Binding User}" FontSize="12" Foreground="{StaticResource TextStrong}" VerticalAlignment="Center" Margin="0,0,6,0" />
+                                <TextBlock Text="{Binding When}" FontSize="12" Foreground="{StaticResource Muted}" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </Border>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

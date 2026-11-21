@@ -131,6 +131,12 @@ public sealed partial class MainViewModel
 
     private void RefreshOxidizedCard()
     {
+        try { RefreshOxidizedCardCore(); }
+        finally { if (!_refreshingProperties) RefreshOverview(); }
+    }
+
+    private void RefreshOxidizedCardCore()
+    {
         var e = Selected?.Entry;
         SelectedOxidizedVisible = OxidizedActive && e is { IsConnectable: true } && _oxSnapshot is not null;
         if (!SelectedOxidizedVisible || e is null || _oxSnapshot is not { } snap)

@@ -55,7 +55,7 @@ public sealed partial class MainViewModel
         void Add(SessionViewModel s, int pane, bool active)
         {
             // Only saved entries: quick connects and Oxidized/Zabbix tabs have nothing to reopen from.
-            if (s is ConfigBackupsSessionViewModel || _store.Get(s.Entry.Id) is null) return;
+            if (!s.IsConnection || s is ConfigBackupsSessionViewModel || _store.Get(s.Entry.Id) is null) return;
             list.Add(new OpenSessionRecord { EntryId = s.Entry.Id, Pane = pane, Active = active });
         }
         foreach (var s in LeftSessions) Add(s, 0, s == LeftActive);

@@ -13,8 +13,6 @@ using RemoteMan.Protocols.Ssh;
 
 namespace RemoteMan.App.ViewModels;
 
-public sealed record PropertyRow(string Key, string Value, string? State = null, System.Windows.Input.ICommand? Copy = null);
-
 public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
 {
     private readonly AppSettings _settings;
@@ -39,7 +37,6 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
     public Func<string, string, string[], int>? Choose { get; set; }
 
     public ObservableCollection<EntryNode> Roots { get; } = new();
-    public ObservableCollection<PropertyRow> Properties { get; } = new();
     public ObservableCollection<SessionViewModel> Sessions { get; } = new();
 
     [ObservableProperty] [NotifyPropertyChangedFor(nameof(HasSelection), nameof(SelectedName), nameof(SelectedKindTag))]
@@ -211,74 +208,21 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
         RefreshProperties();
     }
 
+    private bool _refreshingProperties;
+
+    /// <summary>Everything that follows the selection: Zabbix and Oxidized state, the linked credential's highlight, the Overview tab.</summary>
     private void RefreshProperties()
     {
-        Properties.Clear();
-        RefreshZabbixCard();
-        RefreshOxidizedCard();
+        _refreshingProperties = true;
+        try { RefreshZabbixCard(); RefreshOxidizedCard(); }
+        finally { _refreshingProperties = false; }
         foreach (var n in _nodes.Values) n.IsLinkTarget = false;
-        if (Selected?.Entry is not { } e || _store is null) return;
-
-        for (var i = 0; i < e.Endpoints.Count; i++)
-            Properties.Add(new PropertyRow(i == 0 ? "Primary" : "Fallback", e.Endpoints[i].ToString()));
-        if (e.Kind == EntryKind.Web) Properties.Add(new PropertyRow("URL", e.Web?.Url ?? ""));
-
-        if (e.Kind == EntryKind.Credential)
-        {
-            var ct = e.Credential?.Type ?? CredentialType.Password;
-            Properties.Add(new PropertyRow("Type", ct switch { CredentialType.SshKey => "SSH key", CredentialType.Certificate => "certificate", CredentialType.Secret => "secret", _ => "user name and password" }));
-            if (e.Credential?.UserName is { Length: > 0 })
-                Properties.Add(new PropertyRow("Login", (e.Credential?.Domain is { Length: > 0 } d ? d + "\\" : "") + e.Credential?.UserName));
-            var usedBy = _store.Entries.Where(x => x.Login == LoginSource.Saved && x.CredentialId == e.Id).Select(x => x.Name).ToList();
-            Properties.Add(new PropertyRow("Used by", usedBy.Count > 0 ? string.Join(", ", usedBy) : "nothing"));
-        }
-        else if (e.IsConnectable || e.Kind == EntryKind.Folder)
+        if (Selected?.Entry is { } e && _store is not null && e.Kind != EntryKind.Credential)
         {
             var (src, holder) = _store.ResolveLogin(e);
-            var text = src switch
-            {
-                LoginSource.WindowsLogin => "Windows (SSO)",
-                LoginSource.Saved => holder!.Name,
-                LoginSource.Embedded => "typed in" + (holder?.Credential?.UserName is { Length: > 0 } u ? $" ({u})" : ""),
-                _ => e.IsConnectable ? "none (Ctrl+click a credential)" : "none",
-            };
-            if (e.Login == LoginSource.Inherited && src != LoginSource.None) text += ", from folder";
-            Properties.Add(new PropertyRow("Login", text));
             if (src == LoginSource.Saved && _nodes.TryGetValue(holder!.Id, out var cn)) cn.IsLinkTarget = true;
         }
-        switch (e.Kind)
-        {
-            case EntryKind.Ssh:
-                Properties.Add(new PropertyRow("Host key", e.Ssh?.AutoAcceptHostKey != false ? "auto-accept, logged" : "strict"));
-                Properties.Add(new PropertyRow("Algos", e.Ssh?.AllowLegacyAlgorithms != false ? "modern, legacy fallback" : "modern only"));
-                if (e.Ssh?.JumpHostId is { } jid) Properties.Add(new PropertyRow("Via", _store.Get(jid)?.Name ?? "missing jump host"));
-                break;
-            case EntryKind.Rdp:
-                Properties.Add(new PropertyRow("Certs", e.Rdp?.IgnoreCertificateErrors != false ? "skip warnings" : "prompt"));
-                Properties.Add(new PropertyRow("Display", e.Rdp is { DesktopWidth: > 0 } r ? $"{r.DesktopWidth}x{r.DesktopHeight}" : "fit to tab"));
-                break;
-            case EntryKind.Web:
-                Properties.Add(new PropertyRow("Browser", (e.Web?.Browser ?? BrowserKind.Embedded).ToString().ToLowerInvariant()));
-                break;
-        }
-        if (e.Kind == EntryKind.Rdp && e.Rdp?.SshTunnelId is { } tid) Properties.Add(new PropertyRow("Tunnel", _store.Get(tid)?.Name ?? "missing SSH entry"));
-        if (e.IsConnectable && e.OpenIn != OpenMode.Tab) Properties.Add(new PropertyRow("Opens", e.OpenIn == OpenMode.Window ? "in its own window" : "full screen"));
-        if (e.Connection is { WakeOnLan: true } wol) Properties.Add(new PropertyRow("Wake", wol.MacAddress ?? "on"));
-        if (e.Ssh?.Forwards is { Count: > 0 } fw) Properties.Add(new PropertyRow("Forwards", string.Join(", ", fw.Where(f => f.Enabled))));
-        if (e.Description is { Length: > 0 } desc) Properties.Add(new PropertyRow("Notes", desc));
-        // Custom fields, each with a copy button; secrets stay hidden and copy like a password.
-        foreach (var f in e.Fields ?? [])
-        {
-            var field = f;
-            var copy = new CommunityToolkit.Mvvm.Input.RelayCommand(() => CopyField(field));
-            Properties.Add(new PropertyRow(f.Name, f.Secret ? (f.Value is null ? "" : "••••••••") : f.Value ?? "", null, f.Value is null ? null : copy));
-        }
-        if (HasTotp(e)) Properties.Add(new PropertyRow("2FA", "code ready", null, new CommunityToolkit.Mvvm.Input.RelayCommand(CopyTotp)));
-        var people = _store.PresenceFor(e.Id).Select(p => $"{p.User} ({p.State.ToString().ToLowerInvariant()})").ToList();
-        if (people.Count > 0) Properties.Add(new PropertyRow("Users", string.Join(", ", people), "presence"));
-        if (e.CreatedBy is not null) Properties.Add(new PropertyRow("Created", $"{e.CreatedAt?.ToLocalTime():g} by {e.CreatedBy}"));
-        if (e.UpdatedBy is not null && e.Revision > 0 && e.UpdatedAt != e.CreatedAt)
-            Properties.Add(new PropertyRow("Modified", $"{e.UpdatedAt.ToLocalTime():g} by {e.UpdatedBy}"));
+        RefreshOverview();
     }
 
     public EntryNode? FindNode(Guid id) => _nodes.TryGetValue(id, out var n) ? n : null;

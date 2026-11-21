@@ -41,6 +41,10 @@ public abstract partial class SessionViewModel : ObservableObject, IDisposable
     public virtual string KindTag => EntryNode.KindTagFor(Entry.Kind);
     /// <summary>Pinned tabs (the Dashboard) have no close button and stay in the left pane.</summary>
     public virtual bool IsPinned => false;
+    /// <summary>False for tabs that aren't a connection (Dashboard, Overview): no presence, not reopened, not counted as open.</summary>
+    public virtual bool IsConnection => true;
+    /// <summary>The Overview tab: one reused tab that follows the selection, its title in italics.</summary>
+    public virtual bool IsPreview => false;
 
     [ObservableProperty] private string _title;
     /// <summary>True while this tab is the visible one in its pane (both panes can show one in split view).</summary>
