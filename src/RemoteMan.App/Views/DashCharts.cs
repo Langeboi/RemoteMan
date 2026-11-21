@@ -28,7 +28,7 @@ public abstract class DashChart : FrameworkElement
     internal static readonly Brush Cross = Frozen("#4A525B");
 
     /// <summary>Categorical hues for series and slices, in fixed order (validated for the dark surface).</summary>
-    public static readonly Brush[] Series = ["#3987e5", "#d95926", "#199e70", "#c98500", "#d55181"].Select(Frozen).ToArray();
+    public static readonly Brush[] Series = new[] { "#3987e5", "#d95926", "#199e70", "#c98500", "#d55181" }.Select(Frozen).ToArray();
     public static readonly Brush Other = Frozen("#5B636C");
 
     internal static Brush Frozen(string hex)
@@ -344,7 +344,7 @@ public sealed class HeatmapChart : DashChart
         new FrameworkPropertyMetadata(null, FrameworkPropertyMetadataOptions.AffectsRender, Changed));
     public int[,]? Cells { get => (int[,]?)GetValue(CellsProperty); set => SetValue(CellsProperty, value); }
 
-    public static readonly Brush[] Ramp = ["#1A2027", "#1B3350", "#1F4A7A", "#2C66A8", "#3987e5", "#7DB3F2"].Select(Frozen).ToArray();
+    public static readonly Brush[] Ramp = new[] { "#1A2027", "#1B3350", "#1F4A7A", "#2C66A8", "#3987e5", "#7DB3F2" }.Select(Frozen).ToArray();
     private static readonly string[] Days = [.. Enumerable.Range(0, 7).Select(i => CultureInfo.CurrentCulture.DateTimeFormat.AbbreviatedDayNames[(i + 1) % 7])];
     private const double Pl = 32, Pb = 16;
 
