@@ -24,6 +24,8 @@ public enum EntryKind
     PowerShell = 12,
     /// <summary>MikroTik WinBox, started with the address and login.</summary>
     WinBox = 13,
+    /// <summary>A starting point for new entries ("New FortiGate"). Not shown in the tree; lives in the New menu.</summary>
+    Template = 14,
 }
 
 /// <summary>
@@ -74,6 +76,7 @@ public sealed class Entry
     public VncSettings? Vnc { get; set; }
     public CredentialData? Credential { get; set; }
     public SnippetData? Snippet { get; set; }
+    public TemplateData? Template { get; set; }
     public SerialSettings? Serial { get; set; }
     public FtpSettings? Ftp { get; set; }
     public ProxmoxSettings? Proxmox { get; set; }
@@ -102,6 +105,9 @@ public sealed class Entry
     public DateTimeOffset UpdatedAt { get; set; }
     public string? UpdatedBy { get; set; }
     public bool Deleted { get; set; }
+
+    /// <summary>Snippets and templates: stored like entries but never shown in the tree, counted or searched.</summary>
+    [JsonIgnore] public bool IsHidden => Kind is EntryKind.Snippet or EntryKind.Template;
 
     [JsonIgnore] public bool IsConnectable => Kind is EntryKind.Rdp or EntryKind.Ssh or EntryKind.Vnc or EntryKind.Web
         or EntryKind.Telnet or EntryKind.Serial or EntryKind.Sftp or EntryKind.Ftp or EntryKind.Proxmox or EntryKind.PowerShell or EntryKind.WinBox;
@@ -366,6 +372,27 @@ public sealed class SnippetData
 
     public string Expand(string host, string? user, string entryName) =>
         Command.Replace("{host}", host).Replace("{user}", user ?? "").Replace("{name}", entryName);
+}
+
+/// <summary>
+/// An entry template. The settings of the entries it makes are kept as an entry payload in <see cref="Prototype"/>,
+/// so a template can hold anything the entry editor can set (ports, login, icon, tags, custom fields, SSH algorithms…).
+/// </summary>
+public sealed class TemplateData
+{
+    /// <summary>Kind of entry the template makes.</summary>
+    public EntryKind Kind { get; set; } = EntryKind.Ssh;
+    /// <summary>One line under the name in the New menu, e.g. "Web GUI on 443 + SSH CLI".</summary>
+    public string? Summary { get; set; }
+    /// <summary>Folder new entries go into; null = the folder selected when the template is used.</summary>
+    public Guid? FolderId { get; set; }
+    /// <summary>Entry payload (<see cref="Storage.EntryJson"/>) the new entry starts from. Host left empty, or "{host}" in a URL.</summary>
+    public string? Prototype { get; set; }
+    /// <summary>Also make a second entry next to it, e.g. an SSH entry for a firewall's CLI. Null = no companion.</summary>
+    public EntryKind? CompanionKind { get; set; }
+    public int CompanionPort { get; set; }
+    /// <summary>Added to the new entry's name for the companion, e.g. " CLI".</summary>
+    public string? CompanionSuffix { get; set; }
 }
 
 /// <summary>Embedded is the built-in browser (WebView2, the Edge engine), the only one that can run inside a tab.
