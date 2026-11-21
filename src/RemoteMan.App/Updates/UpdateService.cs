@@ -18,6 +18,10 @@ public enum UpdateState
     Downloading,
     ReadyToRestart,
     Failed,
+    /// <summary>First start after Setup.exe: confirm the install worked.</summary>
+    Installed,
+    /// <summary>First start on a new version: confirm the update worked.</summary>
+    Updated,
 }
 
 /// <summary>
@@ -48,7 +52,7 @@ public sealed partial class UpdateService : ObservableObject
         };
     }
 
-    [ObservableProperty] [NotifyPropertyChangedFor(nameof(IsVisible), nameof(IsAvailable), nameof(IsDownloading), nameof(IsReady), nameof(IsFailed), nameof(IsInfo))]
+    [ObservableProperty] [NotifyPropertyChangedFor(nameof(IsVisible), nameof(IsAvailable), nameof(IsDownloading), nameof(IsReady), nameof(IsFailed), nameof(IsInfo), nameof(IsInstalled), nameof(IsUpdated), nameof(IsSuccess))]
     private UpdateState _state;
 
     [ObservableProperty] private string _currentVersion;
@@ -63,6 +67,9 @@ public sealed partial class UpdateService : ObservableObject
     public bool IsDownloading => State == UpdateState.Downloading;
     public bool IsReady => State == UpdateState.ReadyToRestart;
     public bool IsFailed => State == UpdateState.Failed;
+    public bool IsInstalled => State == UpdateState.Installed;
+    public bool IsUpdated => State == UpdateState.Updated;
+    public bool IsSuccess => State is UpdateState.Installed or UpdateState.Updated or UpdateState.ReadyToRestart;
     /// <summary>Checking or up to date: a short informational line after Help > Check for updates.</summary>
     public bool IsInfo => State is UpdateState.Checking or UpdateState.UpToDate;
 
@@ -83,6 +90,7 @@ public sealed partial class UpdateService : ObservableObject
     /// <summary>Starts background checks. Call once after the main window is shown.</summary>
     public void Start()
     {
+        AnnounceInstallOrUpdate();
         _timer.Interval = FirstCheckDelay;
         _timer.Start();
     }
@@ -225,9 +233,32 @@ public sealed partial class UpdateService : ObservableObject
     [RelayCommand]
     private void OpenReleaseNotes()
     {
-        var url = NewVersion is null ? ReleasesUrl : $"{ReleasesUrl}/tag/v{NewVersion}";
+        // Test builds (0.1.0-ci.42) have no release page of their own.
+        var url = NewVersion is null || NewVersion.Contains("-ci.") ? ReleasesUrl : $"{ReleasesUrl}/tag/v{NewVersion}";
         try { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(url) { UseShellExecute = true }); }
         catch (Exception) { }
+    }
+
+    private async void AnnounceInstallOrUpdate()
+    {
+        var current = CurrentVersion;
+        var last = _prefs.LastRunVersion;
+        if (last != current)
+        {
+            _prefs.LastRunVersion = current;
+            _prefs.Save();
+        }
+
+        UpdateState? notice = LaunchInfo.FirstRunAfterInstall ? UpdateState.Installed
+            : last is not null && last != current ? UpdateState.Updated
+            : null;
+        if (notice is not { } state) return;
+
+        NewVersion = current;
+        State = state;
+        // Stays long enough to read, then gets out of the way.
+        await Task.Delay(TimeSpan.FromSeconds(20));
+        if (State == state) State = UpdateState.Idle;
     }
 
     private void Fail(string message)

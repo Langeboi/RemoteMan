@@ -37,7 +37,7 @@
                 <Setter Property="Background" Value="{StaticResource InfoBg}" />
                 <Setter Property="BorderBrush" Value="{StaticResource InfoBorder}" />
                 <Style.Triggers>
-                    <DataTrigger Binding="{Binding State}" Value="{x:Static u:UpdateState.ReadyToRestart}">
+                    <DataTrigger Binding="{Binding IsSuccess}" Value="True">
                         <Setter Property="Background" Value="{StaticResource OkBg}" />
                         <Setter Property="BorderBrush" Value="{StaticResource OkBorder}" />
                     </DataTrigger>
@@ -93,6 +93,29 @@
                 <TextBlock VerticalAlignment="Center" TextTrimming="CharacterEllipsis">
                     <Run Foreground="{StaticResource TextStrong}" Text="{Binding NewVersion, StringFormat='RemoteMan {0} is ready.', Mode=OneWay}" />
                     <Run Foreground="{StaticResource Muted}" Text="  Restart to finish. Open sessions will be disconnected." />
+                </TextBlock>
+            </DockPanel>
+
+            <!-- Installed (first start after Setup.exe) -->
+            <DockPanel Visibility="{Binding IsInstalled, Converter={StaticResource BoolVis}}">
+                <Button DockPanel.Dock="Right" Style="{StaticResource BannerButton}" Content="Dismiss" Command="{Binding DismissCommand}" VerticalAlignment="Center" />
+                <Path Width="14" Height="14" Stretch="None" Stroke="{StaticResource OkText}" StrokeThickness="1.6" VerticalAlignment="Center" Margin="0,0,10,0"
+                      Data="M3,8.5 L6.5,12 L13,4.5" />
+                <TextBlock VerticalAlignment="Center" TextTrimming="CharacterEllipsis">
+                    <Run Foreground="{StaticResource TextStrong}" Text="{Binding CurrentVersion, StringFormat='RemoteMan {0} was installed successfully.', Mode=OneWay}" />
+                    <Run Foreground="{StaticResource Muted}" Text="  You'll find it in the Start menu and on your desktop. Updates install from here when they're out." />
+                </TextBlock>
+            </DockPanel>
+
+            <!-- Updated (first start on a new version) -->
+            <DockPanel Visibility="{Binding IsUpdated, Converter={StaticResource BoolVis}}">
+                <Button DockPanel.Dock="Right" Style="{StaticResource BannerButton}" Content="Dismiss" Command="{Binding DismissCommand}" VerticalAlignment="Center" />
+                <Path Width="14" Height="14" Stretch="None" Stroke="{StaticResource OkText}" StrokeThickness="1.6" VerticalAlignment="Center" Margin="0,0,10,0"
+                      Data="M3,8.5 L6.5,12 L13,4.5" />
+                <TextBlock VerticalAlignment="Center" TextTrimming="CharacterEllipsis">
+                    <Run Foreground="{StaticResource TextStrong}" Text="{Binding CurrentVersion, StringFormat='RemoteMan was updated to {0}.', Mode=OneWay}" />
+                    <Run Text="  " />
+                    <Hyperlink Command="{Binding OpenReleaseNotesCommand}">What's new</Hyperlink>
                 </TextBlock>
             </DockPanel>
 

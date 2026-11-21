@@ -14,6 +14,8 @@ public sealed class UpdatePrefs
     public bool IncludePrereleases { get; set; }
     public string? SkippedVersion { get; set; }
     public DateTimeOffset? LastCheck { get; set; }
+    /// <summary>The version that ran last time, to tell the user when an update has been applied.</summary>
+    public string? LastRunVersion { get; set; }
 
     public static UpdatePrefs Load()
     {

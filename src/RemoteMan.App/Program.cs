@@ -14,7 +14,9 @@ public static class Program
     {
         // Must run first: Velopack uses it to handle install, update and uninstall hooks,
         // and to finish an update that was downloaded before the last exit.
-        VelopackApp.Build().Run();
+        VelopackApp.Build()
+            .OnFirstRun(_ => Updates.LaunchInfo.FirstRunAfterInstall = true)
+            .Run();
 
         AppDomain.CurrentDomain.UnhandledException += (_, e) => ReportCrash(e.ExceptionObject as Exception);
         try
