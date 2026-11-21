@@ -84,6 +84,7 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
             await store.OpenAsync();
             ShowOnlineState(source, store);
             RebuildTree();
+            OfferReopen();
             await StartZabbixAsync();
             await StartOxidizedAsync();
             await SeedSnippetsAsync(cfg.Name);
@@ -564,6 +565,7 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
         {
             s.FullScreen = mode == OpenMode.FullScreen;
             open(s);
+            TrackWindowSession(s);
             return;
         }
         AddSession(s);
@@ -1073,6 +1075,7 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
+        FreezeOpenSessions();
         foreach (var s in Sessions.ToList()) (s as IDisposable)?.Dispose();
         await StopZabbixAsync();
         StopOxidized();
