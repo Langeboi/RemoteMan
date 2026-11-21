@@ -85,3 +85,64 @@ public class DashboardTests
         Assert.Equal(1, s.Entries);
     }
 }
+
+public class DashboardChartTests
+{
+    private static readonly DateTimeOffset Now = new DateTimeOffset(2026, 11, 21, 12, 0, 0, TimeSpan.Zero).ToLocalTime();
+
+    [Fact]
+    public void Per_day_counts_end_today_and_split_by_kind()
+    {
+        var log = new List<ConnectEvent>
+        {
+            new(Now, "SSH"), new(Now.AddMinutes(-5), "SSH"), new(Now.AddMinutes(-10), "RDP"),
+            new(Now.AddDays(-1), "WEB"), new(Now.AddDays(-30), "SSH"),
+        };
+        var days = DashboardCharts.PerDay(log, Now);
+        Assert.Equal(14, days.Count);
+        Assert.Equal(Now.Date, days[^1].Day);
+        Assert.Equal(3, days[^1].Count);
+        Assert.Equal(2, days[^1].ByKind["SSH"]);
+        Assert.Equal(1, days[^2].Count);
+        Assert.Equal(4, days.Sum(d => d.Count));
+    }
+
+    [Fact]
+    public void Heat_puts_monday_first()
+    {
+        var monday = new DateTimeOffset(2026, 11, 16, 9, 30, 0, TimeSpan.Zero).ToLocalTime();
+        var grid = DashboardCharts.Heat([new ConnectEvent(monday, "SSH")], Now);
+        Assert.Equal(1, grid[((int)monday.DayOfWeek + 6) % 7, monday.Hour]);
+    }
+
+    [Fact]
+    public void Growth_counts_entries_without_a_date_from_the_start()
+    {
+        var old = new Entry { Kind = EntryKind.Ssh, Name = "old" };
+        var mid = new Entry { Kind = EntryKind.Rdp, Name = "mid", CreatedAt = Now.AddDays(-30) };
+        var folder = new Entry { Kind = EntryKind.Folder, Name = "f" };
+        var g = DashboardCharts.Growth([old, mid, folder], Now);
+        Assert.Equal(26, g.Count);
+        Assert.Equal(1, g[0].Total);
+        Assert.Equal(2, g[^1].Total);
+    }
+
+    [Fact]
+    public void Samples_keep_one_per_half_hour_for_a_day()
+    {
+        var list = new List<ProblemSample>();
+        Assert.True(DashboardCharts.Sample(list, new(Now.AddHours(-30), 1, 0)));
+        Assert.True(DashboardCharts.Sample(list, new(new DateTimeOffset(2026, 11, 21, 11, 31, 0, TimeSpan.Zero), 2, 0)));
+        Assert.False(DashboardCharts.Sample(list, new(new DateTimeOffset(2026, 11, 21, 11, 50, 0, TimeSpan.Zero), 3, 1)));
+        Assert.Single(list);
+        Assert.Equal(3, list[0].Warning);
+    }
+
+    [Fact]
+    public void Log_drops_old_sessions()
+    {
+        var log = new List<ConnectEvent> { new(Now.AddDays(-90), "SSH") };
+        DashboardCharts.Record(log, new(Now, "RDP"));
+        Assert.Single(log);
+    }
+}

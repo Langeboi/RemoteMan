@@ -18,7 +18,8 @@ WebView2 runtime ships with Windows 11 and current Windows 10.
 ## What works in this first cut
 
 - **Dashboard** tab, pinned first and open at startup: totals, entries by protocol, largest folders, Zabbix
-  host states and open problems, favorites and recent (double-click to connect), and housekeeping checks
+  host states, open problems and a 24 hour trend, your connections per day and by weekday/hour (a local
+  log of the sessions you open), entry growth, favorites and recent (double-click to connect), housekeeping checks
   (missing credentials, duplicate hosts, entries that ask for a login, unused credentials). Widgets button
   turns each one on or off.
 - Tree of folders, RDP, SSH, web, VNC and credential entries. Search box doubles as quick connect

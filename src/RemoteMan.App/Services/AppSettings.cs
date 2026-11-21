@@ -36,6 +36,10 @@ public sealed class AppSettings
     public Dictionary<Guid, DateTimeOffset> RecentAt { get; set; } = new();
     /// <summary>Dashboard widgets turned off (tiles, protocols, zabbix, favorites, recent, folders, checks).</summary>
     public List<string> DashboardHidden { get; set; } = new();
+    /// <summary>Sessions you opened (when and which kind), for the dashboard's connection charts. Last 60 days, this PC only.</summary>
+    public List<RemoteMan.Core.Model.ConnectEvent> ConnectLog { get; set; } = new();
+    /// <summary>Open Zabbix problems every half hour over the last day, for the dashboard trend.</summary>
+    public List<RemoteMan.Core.Model.ProblemSample> ZabbixTrend { get; set; } = new();
     /// <summary>Two panes side by side. Off by default (single pane); a new name so earlier test builds' saved "on" is dropped.</summary>
     public bool SplitPane { get; set; }
 

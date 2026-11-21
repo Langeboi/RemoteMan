@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using RemoteMan.Core.Integrations.Zabbix;
 using RemoteMan.Core.Model;
+using RemoteMan.App.Views;
 
 namespace RemoteMan.App.ViewModels;
 
@@ -134,6 +135,14 @@ public sealed partial class MainViewModel
         var maxKind = s.ByKind.Count > 0 ? s.ByKind[0].Count : 1;
         foreach (var k in s.ByKind) d.Protocols.Add(new DashBar(null, EntryNode.KindTagFor(k.Kind), KindName(k.Kind), k.Count, (double)k.Count / maxKind));
         d.ProtocolTotal = $"{s.Entries} total";
+        // Donut: the five biggest kinds, the rest folded into Other.
+        var slices = s.ByKind.Take(s.ByKind.Count > 6 ? 5 : 6).Select((k, i) =>
+            new ChartSlice(KindName(k.Kind), k.Count, i < DashChart.Series.Length ? DashChart.Series[i] : DashChart.Other)).ToList();
+        var rest = s.ByKind.Skip(slices.Count).ToList();
+        if (rest.Count > 0) slices.Add(new ChartSlice("Other", rest.Sum(k => k.Count), DashChart.Other, string.Join(", ", rest.Select(k => KindName(k.Kind)))));
+        d.ProtocolSlices = slices;
+
+        RefreshDashboardCharts(entries, now);
 
         // Folders
         d.Folders.Clear();
@@ -176,6 +185,64 @@ public sealed partial class MainViewModel
                 entries.Where(e => !e.Deleted && e.HasHosts && !snap.HealthFor(e).IsLinked).Select(e => e.Id)));
 
         RefreshDashboardZabbix(snap, entries);
+    }
+
+
+    private static string TagName(string tag) => tag switch
+    {
+        "WEB" => "web", "TEL" => "Telnet", "SER" => "serial", "PVE" => "Proxmox", "PS" => "PowerShell", "WBX" => "WinBox", _ => tag,
+    };
+
+    /// <summary>Connections per day, the weekday/hour heat, entry growth and the Zabbix trend.</summary>
+    private void RefreshDashboardCharts(List<Entry> entries, DateTimeOffset now)
+    {
+        var d = Dashboard;
+        var log = _settings.ConnectLog;
+
+        var days = DashboardCharts.PerDay(log, now);
+        d.Connections = days.Select((x, i) =>
+        {
+            var label = i == days.Count - 1 ? "today" : i % 2 == 1 ? x.Day.ToString("ddd d") : null;
+            var detail = x.Count == 0 ? "nothing opened" : string.Join(", ", x.ByKind.Select(k => $"{k.Value} {TagName(k.Key)}"));
+            return new ChartColumn(x.Count, label, $"{x.Day:ddd d MMM} · {x.Count} session{(x.Count == 1 ? "" : "s")}\n{detail}", i == days.Count - 1);
+        }).ToList();
+        var total = days.Sum(x => x.Count);
+        d.HasConnections = total > 0;
+        d.ConnectionsMeta = $"last 14 days · {total} session{(total == 1 ? "" : "s")}";
+
+        var heat = DashboardCharts.Heat(log, now);
+        d.Heat = heat;
+        d.HasHeat = heat.Cast<int>().Any(v => v > 0);
+
+        var growth = DashboardCharts.Growth(entries, now);
+        d.Growth = growth.Select((g, i) =>
+        {
+            var weeksAgo = growth.Count - 1 - i;
+            var label = i == 0 || i == growth.Count - 1 || i % 5 == 0 ? g.End.ToLocalTime().ToString("MMM") : null;
+            return new ChartPoint([g.Total], label, $"{(weeksAgo == 0 ? "This week" : weeksAgo == 1 ? "Last week" : $"{weeksAgo} weeks ago")} · {g.Total} entries");
+        }).ToList();
+        var added = growth[^1].Total - growth[0].Total;
+        d.GrowthMeta = added > 0 ? $"last 6 months · +{added}" : "last 6 months";
+
+        var trend = _settings.ZabbixTrend.Where(x => x.At >= now - TimeSpan.FromHours(24)).ToList();
+        d.ZabbixTrend = trend.Select((x, i) =>
+        {
+            var hoursAgo = (now - x.At).TotalHours;
+            var label = i == 0 ? $"{Math.Round(hoursAgo)}h ago" : i == trend.Count - 1 ? "now" : null;
+            return new ChartPoint([x.Warning, x.High], label, $"{x.At.ToLocalTime():HH:mm}\n{x.High} high or worse, {x.Warning} warning");
+        }).ToList();
+        d.HasZabbixTrend = trend.Count >= 2;
+    }
+
+    /// <summary>One sample per half hour of open problems (warning, and high or worse), kept for a day.</summary>
+    private void SampleZabbixTrend()
+    {
+        if (ZabbixSnapshot is not { } snap) return;
+        var enabled = snap.Hosts.Where(h => h.Enabled && !h.InMaintenance).Select(h => h.HostId).ToHashSet();
+        var open = snap.Problems.Where(p => !p.Suppressed && enabled.Contains(p.HostId)).ToList();
+        var high = open.Count(p => p.Severity >= ZabbixSeverity.High);
+        var warn = open.Count(p => p.Severity >= ZabbixSeverity.Warning && p.Severity < ZabbixSeverity.High);
+        if (DashboardCharts.Sample(_settings.ZabbixTrend, new ProblemSample(snap.FetchedAt, warn, high))) TrySaveSettings();
     }
 
     private IEnumerable<Entry> FavoriteEntries(Dictionary<Guid, Entry> byId) =>

@@ -3,11 +3,17 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:local="clr-namespace:RemoteMan.App"
              xmlns:vm="clr-namespace:RemoteMan.App.ViewModels"
+             xmlns:views="clr-namespace:RemoteMan.App.Views"
              Background="{StaticResource Bg}">
     <UserControl.Resources>
         <BooleanToVisibilityConverter x:Key="BoolVis" />
         <local:EmptyToCollapsedConverter x:Key="EmptyVis" />
         <local:InverseBoolToVisibilityConverter x:Key="InvBoolVis" />
+        <!-- Zabbix trend: warning at the bottom, high or worse stacked on top -->
+        <x:Array x:Key="TrendBrushes" Type="Brush">
+            <StaticResource ResourceKey="Warn" />
+            <StaticResource ResourceKey="Bad" />
+        </x:Array>
 
         <!-- A widget: panel card with a small caps title row -->
         <Style TargetType="Border" x:Key="Widget">
@@ -192,7 +198,24 @@
                                 <TextBlock Text="Entries by protocol" Style="{StaticResource WidgetTitle}" />
                             </DockPanel>
                         </Border>
-                        <ItemsControl ItemsSource="{Binding Protocols}" ItemTemplate="{StaticResource BarRow}" Focusable="False" Margin="12,8,12,10" />
+                        <Grid Margin="12,12,12,12">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="150" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <views:DonutChart Width="140" Height="140" Slices="{Binding ProtocolSlices}" VerticalAlignment="Top" />
+                            <ItemsControl Grid.Column="1" ItemsSource="{Binding ProtocolSlices}" Focusable="False" Margin="10,4,0,0" VerticalAlignment="Center">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate DataType="{x:Type views:ChartSlice}">
+                                        <DockPanel Margin="0,2" ToolTip="{Binding Note}">
+                                            <Border Width="10" Height="10" CornerRadius="2" Background="{Binding Brush}" Margin="0,0,8,0" VerticalAlignment="Center" />
+                                            <TextBlock DockPanel.Dock="Right" Text="{Binding Count}" Style="{StaticResource MutedText}" FontSize="12" Margin="8,0,0,0" />
+                                            <TextBlock Text="{Binding Name}" FontSize="12" TextTrimming="CharacterEllipsis" />
+                                        </DockPanel>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </Grid>
                     </DockPanel>
                 </Border>
 
@@ -226,6 +249,18 @@
                                     <Border><StackPanel><TextBlock Text="{Binding ZabbixHigh}" FontSize="18" FontWeight="SemiBold" Foreground="{StaticResource Bad}" /><TextBlock Text="High or worse" Style="{StaticResource WidgetMeta}" /></StackPanel></Border>
                                     <Border><StackPanel><TextBlock Text="{Binding ZabbixUnreach}" FontSize="18" FontWeight="SemiBold" Foreground="{StaticResource Maint}" /><TextBlock Text="Unreachable" Style="{StaticResource WidgetMeta}" /></StackPanel></Border>
                                 </UniformGrid>
+                                <StackPanel Margin="0,0,0,10" Visibility="{Binding HasZabbixTrend, Converter={StaticResource BoolVis}}">
+                                    <DockPanel Margin="0,0,0,4">
+                                        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                                            <Border Width="8" Height="8" CornerRadius="2" Background="{StaticResource Bad}" Margin="0,0,5,0" />
+                                            <TextBlock Text="High or worse" Style="{StaticResource WidgetMeta}" Margin="0,0,10,0" />
+                                            <Border Width="8" Height="8" CornerRadius="2" Background="{StaticResource Warn}" Margin="0,0,5,0" />
+                                            <TextBlock Text="Warning" Style="{StaticResource WidgetMeta}" />
+                                        </StackPanel>
+                                        <TextBlock Text="Open problems, last 24 hours" FontSize="11" Foreground="{StaticResource Muted}" />
+                                    </DockPanel>
+                                    <views:AreaChart Height="90" Points="{Binding ZabbixTrend}" Brushes="{StaticResource TrendBrushes}" />
+                                </StackPanel>
                                 <TextBlock Text="No open problems." Style="{StaticResource Empty}" Visibility="{Binding NoProblems, Converter={StaticResource BoolVis}}" />
                                 <ItemsControl ItemsSource="{Binding Problems}" Focusable="False">
                                     <ItemsControl.ItemTemplate>
@@ -249,6 +284,50 @@
                                     </ItemsControl.ItemTemplate>
                                 </ItemsControl>
                                 <TextBlock Text="{Binding ProblemsMore}" Style="{StaticResource WidgetMeta}" Margin="2,2,0,0" Visibility="{Binding ProblemsMore, Converter={StaticResource EmptyVis}}" />
+                            </StackPanel>
+                        </StackPanel>
+                    </DockPanel>
+                </Border>
+            </UniformGrid>
+
+            <!-- Your connections, When you connect -->
+            <UniformGrid Rows="1">
+                <Border Style="{StaticResource Widget}" Visibility="{Binding ShowConnections, Converter={StaticResource BoolVis}}">
+                    <DockPanel>
+                        <Border DockPanel.Dock="Top" Style="{StaticResource WidgetHeader}">
+                            <DockPanel>
+                                <TextBlock DockPanel.Dock="Right" Text="{Binding ConnectionsMeta}" Style="{StaticResource WidgetMeta}" />
+                                <TextBlock Text="Your connections" Style="{StaticResource WidgetTitle}" />
+                            </DockPanel>
+                        </Border>
+                        <Grid Margin="12,10,12,10">
+                            <views:ColumnChart Height="150" Columns="{Binding Connections}" />
+                            <TextBlock Text="Sessions you open show up here, day by day." Style="{StaticResource Empty}" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                       Visibility="{Binding HasConnections, Converter={StaticResource InvBoolVis}}" />
+                        </Grid>
+                    </DockPanel>
+                </Border>
+                <Border Style="{StaticResource Widget}" Visibility="{Binding ShowHeat, Converter={StaticResource BoolVis}}">
+                    <DockPanel>
+                        <Border DockPanel.Dock="Top" Style="{StaticResource WidgetHeader}">
+                            <DockPanel>
+                                <TextBlock DockPanel.Dock="Right" Text="last 8 weeks, by hour" Style="{StaticResource WidgetMeta}" />
+                                <TextBlock Text="When you connect" Style="{StaticResource WidgetTitle}" />
+                            </DockPanel>
+                        </Border>
+                        <StackPanel Margin="12,10,12,10">
+                            <Grid>
+                                <views:HeatmapChart Height="142" Cells="{Binding Heat}" />
+                                <TextBlock Text="Fills in as you open sessions." Style="{StaticResource Empty}" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                           Visibility="{Binding HasHeat, Converter={StaticResource InvBoolVis}}" />
+                            </Grid>
+                            <StackPanel Orientation="Horizontal" Margin="32,4,0,0">
+                                <TextBlock Text="fewer" Style="{StaticResource WidgetMeta}" Margin="0,0,6,0" />
+                                <ItemsControl ItemsSource="{x:Static views:HeatmapChart.Ramp}" Focusable="False" VerticalAlignment="Center">
+                                    <ItemsControl.ItemsPanel><ItemsPanelTemplate><StackPanel Orientation="Horizontal" /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                                    <ItemsControl.ItemTemplate><DataTemplate><Border Width="12" Height="8" CornerRadius="2" Background="{Binding}" Margin="0,0,2,0" /></DataTemplate></ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                                <TextBlock Text="more" Style="{StaticResource WidgetMeta}" Margin="4,0,0,0" />
                             </StackPanel>
                         </StackPanel>
                     </DockPanel>
@@ -315,7 +394,19 @@
                 </Border>
             </UniformGrid>
 
-            <!-- Housekeeping -->
+            <!-- Entries over time, Housekeeping -->
+            <UniformGrid Rows="1">
+            <Border Style="{StaticResource Widget}" Visibility="{Binding ShowGrowth, Converter={StaticResource BoolVis}}">
+                <DockPanel>
+                    <Border DockPanel.Dock="Top" Style="{StaticResource WidgetHeader}">
+                        <DockPanel>
+                            <TextBlock DockPanel.Dock="Right" Text="{Binding GrowthMeta}" Style="{StaticResource WidgetMeta}" />
+                            <TextBlock Text="Entries over time" Style="{StaticResource WidgetTitle}" />
+                        </DockPanel>
+                    </Border>
+                    <views:AreaChart Margin="12,10,12,10" Height="150" Points="{Binding Growth}" FromMinimum="True" VerticalAlignment="Top" />
+                </DockPanel>
+            </Border>
             <Border Style="{StaticResource Widget}" Visibility="{Binding ShowChecks, Converter={StaticResource BoolVis}}">
                 <DockPanel>
                     <Border DockPanel.Dock="Top" Style="{StaticResource WidgetHeader}">
@@ -355,6 +446,7 @@
                     </ItemsControl>
                 </DockPanel>
             </Border>
+            </UniformGrid>
         </StackPanel>
     </ScrollViewer>
 </UserControl>

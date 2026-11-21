@@ -71,7 +71,7 @@ public sealed partial class MainViewModel
             MinimumSeverity = cfg.MinimumSeverity,
             MatchOptions = cfg.MatchOptions,
         };
-        monitor.Updated += (_, _) => OnUi(() => { ZabbixConnState = "ok"; ApplyZabbix(); });
+        monitor.Updated += (_, _) => OnUi(() => { ZabbixConnState = "ok"; SampleZabbixTrend(); ApplyZabbix(); });
         monitor.Failed += (_, err) => OnUi(() =>
         {
             ZabbixConnState = "bad";

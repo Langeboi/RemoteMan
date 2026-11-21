@@ -79,6 +79,18 @@ public sealed partial class DashboardViewModel : SessionViewModel
     public ObservableCollection<DashProblem> Problems { get; } = new();
 
     [ObservableProperty] private string _protocolTotal = "";
+
+    // --- charts ---
+    [ObservableProperty] private IReadOnlyList<RemoteMan.App.Views.ChartSlice> _protocolSlices = [];
+    [ObservableProperty] private IReadOnlyList<RemoteMan.App.Views.ChartColumn> _connections = [];
+    [ObservableProperty] private string _connectionsMeta = "";
+    [ObservableProperty] private bool _hasConnections;
+    [ObservableProperty] private int[,]? _heat;
+    [ObservableProperty] private bool _hasHeat;
+    [ObservableProperty] private IReadOnlyList<RemoteMan.App.Views.ChartPoint> _growth = [];
+    [ObservableProperty] private string _growthMeta = "";
+    [ObservableProperty] private IReadOnlyList<RemoteMan.App.Views.ChartPoint> _zabbixTrend = [];
+    [ObservableProperty] private bool _hasZabbixTrend;
     [ObservableProperty] private bool _hasFavorites;
     [ObservableProperty] private bool _hasRecent;
     [ObservableProperty] private bool _hasFolders;
@@ -103,6 +115,9 @@ public sealed partial class DashboardViewModel : SessionViewModel
     [ObservableProperty] private bool _showRecent = true;
     [ObservableProperty] private bool _showFolders = true;
     [ObservableProperty] private bool _showChecks = true;
+    [ObservableProperty] private bool _showConnections = true;
+    [ObservableProperty] private bool _showHeat = true;
+    [ObservableProperty] private bool _showGrowth = true;
 
     public bool ZabbixVisible => ShowZabbix && ZabbixOn;
     partial void OnShowZabbixChanged(bool value) => OnPropertyChanged(nameof(ZabbixVisible));
@@ -112,13 +127,15 @@ public sealed partial class DashboardViewModel : SessionViewModel
     public IReadOnlyList<(string Key, string Label)> Widgets { get; } =
     [
         ("tiles", "Totals"), ("protocols", "Entries by protocol"), ("zabbix", "Zabbix"),
-        ("favorites", "Favorites"), ("recent", "Recent"), ("folders", "Folders"), ("checks", "Housekeeping"),
+        ("connections", "Your connections"), ("heat", "When you connect"),
+        ("favorites", "Favorites"), ("recent", "Recent"), ("folders", "Folders"), ("growth", "Entries over time"), ("checks", "Housekeeping"),
     ];
 
     public bool IsShown(string key) => key switch
     {
         "tiles" => ShowTiles, "protocols" => ShowProtocols, "zabbix" => ShowZabbix, "favorites" => ShowFavorites,
-        "recent" => ShowRecent, "folders" => ShowFolders, "checks" => ShowChecks, _ => false,
+        "recent" => ShowRecent, "folders" => ShowFolders, "checks" => ShowChecks,
+        "connections" => ShowConnections, "heat" => ShowHeat, "growth" => ShowGrowth, _ => false,
     };
 
     public void SetShown(string key, bool on)
@@ -132,6 +149,9 @@ public sealed partial class DashboardViewModel : SessionViewModel
             case "recent": ShowRecent = on; break;
             case "folders": ShowFolders = on; break;
             case "checks": ShowChecks = on; break;
+            case "connections": ShowConnections = on; break;
+            case "heat": ShowHeat = on; break;
+            case "growth": ShowGrowth = on; break;
             default: return;
         }
         WidgetToggled?.Invoke(key, on);

@@ -65,6 +65,8 @@ public sealed partial class MainViewModel
     private void AddSession(SessionViewModel s)
     {
         s.Pane = IsSplit ? FocusedPane : 0;
+        DashboardCharts.Record(_settings.ConnectLog, new ConnectEvent(DateTimeOffset.Now, s.KindTag));
+        TrySaveSettings();
         Sessions.Add(s);
         PaneList(s.Pane).Add(s);
         ActiveSession = s;
