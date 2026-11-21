@@ -80,24 +80,15 @@
 
         <!-- One tab in a pane's tab strip -->
         <DataTemplate x:Key="TabHeader">
-            <StackPanel Orientation="Horizontal" MouseDown="OnTabMouseDown" Background="Transparent">
-                <!-- The Dashboard tab is pinned: no menu, no close button -->
-                <StackPanel.Style>
-                    <Style TargetType="StackPanel">
-                        <Setter Property="ContextMenu">
-                            <Setter.Value>
-                                <ContextMenu>
-                                    <MenuItem Header="Move to other pane" Click="OnMoveTab" />
-                                    <Separator />
-                                    <MenuItem Header="Close" InputGestureText="Ctrl+W" Click="OnCloseTab" />
-                                </ContextMenu>
-                            </Setter.Value>
-                        </Setter>
-                        <Style.Triggers>
-                            <DataTrigger Binding="{Binding IsPinned}" Value="True"><Setter Property="ContextMenu" Value="{x:Null}" /></DataTrigger>
-                        </Style.Triggers>
-                    </Style>
-                </StackPanel.Style>
+            <!-- The Dashboard tab is pinned: no menu (OnTabMenuOpening), no close button -->
+            <StackPanel Orientation="Horizontal" MouseDown="OnTabMouseDown" Background="Transparent" ContextMenuOpening="OnTabMenuOpening">
+                <StackPanel.ContextMenu>
+                    <ContextMenu>
+                        <MenuItem Header="Move to other pane" Click="OnMoveTab" />
+                        <Separator />
+                        <MenuItem Header="Close" InputGestureText="Ctrl+W" Click="OnCloseTab" />
+                    </ContextMenu>
+                </StackPanel.ContextMenu>
                 <Path Style="{StaticResource KindIcon}" Tag="{Binding KindTag}" Margin="0,0,7,0" />
                 <TextBlock Text="{Binding Title}" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" VerticalAlignment="Center" />
                 <Button Width="22" Padding="0" MinHeight="22" Margin="6,0,0,0" Foreground="{StaticResource Faint}"

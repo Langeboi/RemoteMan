@@ -211,6 +211,11 @@ public partial class MainWindow : Window
         if ((sender as FrameworkElement)?.DataContext is SessionViewModel s && _vm.ActiveSession != s) _vm.ActiveSession = s;
     }
 
+    private void OnTabMenuOpening(object sender, ContextMenuEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.DataContext is SessionViewModel { IsPinned: true }) e.Handled = true;
+    }
+
     private void OnMoveTab(object sender, RoutedEventArgs e)
     {
         if ((sender as FrameworkElement)?.DataContext is SessionViewModel s) _vm.MoveToOtherPaneCommand.Execute(s);
