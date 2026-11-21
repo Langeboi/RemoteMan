@@ -352,6 +352,30 @@ public sealed class EntryStore : IAsyncDisposable
         ScheduleCacheSave();
     }
 
+    /// <summary>
+    /// The entry as it connects: a copy with every section ticked "Folder" taken from the nearest parent
+    /// folder that sets it itself (a folder can pass on what it inherits). No folder: the defaults.
+    /// </summary>
+    public Entry Effective(Entry entry)
+    {
+        if (entry.Inherit == InheritSections.None) return entry;
+        var copy = Clone(entry);
+        foreach (var section in SettingsInheritance.All)
+        {
+            if (!entry.Inherit.HasFlag(section)) continue;
+            var source = new Entry();
+            var p = entry.ParentId;
+            for (var hops = 0; p is { } pid && hops < 64; hops++)
+            {
+                if (Get(pid) is not { } folder) break;
+                if (!folder.Inherit.HasFlag(section)) { source = folder; break; }
+                p = folder.ParentId;
+            }
+            SettingsInheritance.Copy(section, source, copy);
+        }
+        return copy;
+    }
+
     public static Entry Clone(Entry e)
     {
         var c = new Entry
