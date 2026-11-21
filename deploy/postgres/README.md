@@ -26,7 +26,7 @@ command to run on server 2 (with a one-time join key), and the connection string
 sudo bash remoteman-db.sh second --primary 10.0.0.11 --join <key> --auto-failover
 ```
 
-**RemoteMan**: More > Data sources > Add, type PostgreSQL, and paste the connection string:
+**RemoteMan**: the Data sources button at the bottom of the left icon rail, then Add, type PostgreSQL, and paste the connection string:
 
 ```
 Host=10.0.0.11:5432,10.0.0.12:5432;Database=remoteman;Username=remoteman;Password=…;Target Session Attributes=primary
