@@ -167,8 +167,15 @@ public static class EntryMenu
             if (e.Kind == EntryKind.Web) open.Items.Add(Item("Default browser", null, () => _ = vm.ConnectWithAsync(node, new(External: true))));
             open.Items.Add(Item("Ping", null, () => vm.Ping(e)));
             if (vm.SelectedZabbixLinked) open.Items.Add(Item("Zabbix", null, () => vm.OpenInZabbixCommand.Execute(null)));
+            if (vm.SelectedOxidizedLinked) open.Items.Add(Item("Oxidized", null, () => vm.OpenInOxidizedCommand.Execute(null)));
             menu.Items.Add(open);
             if (vm.ZabbixActive) menu.Items.Add(Item(vm.SelectedZabbixLinked ? "Change Zabbix link…" : "Link to Zabbix host…", "link", () => vm.LinkToZabbixCommand.Execute(null)));
+            if (vm.OxidizedActive)
+            {
+                menu.Items.Add(Item("Config backups", null, () => vm.OpenConfigBackupsCommand.Execute(null)));
+                menu.Items.Add(Item(vm.SelectedOxidizedLinked && !string.IsNullOrEmpty(e.OxidizedNode) ? "Change Oxidized link…" : "Link to Oxidized device…", "link",
+                    () => vm.LinkToOxidizedCommand.Execute(null)));
+            }
         }
 
         // --- details and delete ---

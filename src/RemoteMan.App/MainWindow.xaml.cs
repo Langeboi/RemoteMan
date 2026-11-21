@@ -44,6 +44,13 @@ public partial class MainWindow : Window
         };
         _vm.ZabbixSettingsDialog = () =>
             new ZabbixSettingsWindow(_settings, _vm.Store, _vm.Protector) { Owner = this }.ShowDialog() == true;
+        _vm.OxidizedLinkDialog = (snap, entry) =>
+        {
+            var dlg = new OxidizedLinkWindow(snap, entry) { Owner = this };
+            return dlg.ShowDialog() == true ? dlg.ChosenNode ?? "" : null;
+        };
+        _vm.OxidizedSettingsDialog = () =>
+            new OxidizedSettingsWindow(_settings, _vm.Store, _vm.Protector) { Owner = this }.ShowDialog() == true;
         DataContext = _vm;
         SetUpNotices();
 
@@ -124,6 +131,7 @@ public partial class MainWindow : Window
         menu.Items.Add(Click("Restore from backup…", OnRestore));
         menu.Items.Add(Cmd("Zabbix settings…", _vm.ZabbixSettingsCommand));
         if (_vm.ZabbixActive) menu.Items.Add(Cmd("Import from Zabbix…", _vm.ImportFromZabbixCommand));
+        menu.Items.Add(Cmd("Oxidized settings…", _vm.OxidizedSettingsCommand));
         menu.Items.Add(new Separator());
         var updates = RemoteMan.App.Updates.UpdateService.Instance;
         menu.Items.Add(new MenuItem { Header = "Check for updates", Command = updates.CheckNowCommand });

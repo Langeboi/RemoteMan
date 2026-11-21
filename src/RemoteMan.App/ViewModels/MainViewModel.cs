@@ -85,6 +85,7 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
             ShowOnlineState(source, store);
             RebuildTree();
             await StartZabbixAsync();
+            await StartOxidizedAsync();
             await SeedSnippetsAsync(cfg.Name);
             _ = BackupLoopAsync();
         }
@@ -159,6 +160,7 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
         else Selected = null;
         ApplyPresence();
         ApplyZabbix();
+        ApplyOxidized();
     }
 
     /// <summary>Id of the virtual Favorites group (never stored).</summary>
@@ -197,6 +199,7 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
     {
         Properties.Clear();
         RefreshZabbixCard();
+        RefreshOxidizedCard();
         foreach (var n in _nodes.Values) n.IsLinkTarget = false;
         if (Selected?.Entry is not { } e || _store is null) return;
 
@@ -915,6 +918,7 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
     {
         foreach (var s in Sessions.ToList()) (s as IDisposable)?.Dispose();
         await StopZabbixAsync();
+        StopOxidized();
         if (_store is not null) await _store.DisposeAsync();
     }
 }

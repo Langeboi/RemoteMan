@@ -1,0 +1,193 @@
+<UserControl x:Class="RemoteMan.App.Views.ConfigBackupsView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             Background="{StaticResource Work}">
+    <UserControl.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolVisC" />
+
+        <!-- Version rows: date, age, lines added and removed -->
+        <Style x:Key="VersionItem" TargetType="ListBoxItem">
+            <Setter Property="Foreground" Value="{StaticResource Text}" />
+            <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ListBoxItem">
+                        <Border x:Name="b" Background="Transparent" BorderBrush="{StaticResource BorderSoft}" BorderThickness="0,0,0,1">
+                            <DockPanel>
+                                <Border x:Name="bar" DockPanel.Dock="Left" Width="2" Background="Transparent" />
+                                <ContentPresenter Margin="8,5,10,5" />
+                            </DockPanel>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="b" Property="Background" Value="{StaticResource Hover}" /></Trigger>
+                            <DataTrigger Binding="{Binding IsCompare}" Value="True"><Setter TargetName="bar" Property="Background" Value="{StaticResource Warn}" /></DataTrigger>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="b" Property="Background" Value="{StaticResource Select}" />
+                                <Setter TargetName="bar" Property="Background" Value="{StaticResource Accent}" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Config lines: number, +/- mark, text; added green, removed red, gaps grey -->
+        <Style x:Key="LineItem" TargetType="ListBoxItem">
+            <Setter Property="Foreground" Value="{StaticResource Text}" />
+            <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ListBoxItem">
+                        <Border x:Name="b" Background="Transparent">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock x:Name="no" Text="{Binding No}" Width="46" TextAlignment="Right" Padding="0,0,12,0" Foreground="#4B535B" />
+                                <TextBlock x:Name="mark" Text="{Binding Mark}" Width="14" Foreground="{StaticResource Faint}" />
+                                <TextBlock x:Name="text" Text="{Binding Text}" Padding="0,0,16,0" />
+                            </StackPanel>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <DataTrigger Binding="{Binding Kind}" Value="add">
+                                <Setter TargetName="b" Property="Background" Value="#14271F" />
+                                <Setter TargetName="mark" Property="Foreground" Value="{StaticResource Ok}" />
+                            </DataTrigger>
+                            <DataTrigger Binding="{Binding Kind}" Value="del">
+                                <Setter TargetName="b" Property="Background" Value="#2A1617" />
+                                <Setter TargetName="mark" Property="Foreground" Value="{StaticResource Bad}" />
+                            </DataTrigger>
+                            <DataTrigger Binding="{Binding Kind}" Value="gap">
+                                <Setter TargetName="b" Property="Background" Value="{StaticResource Panel}" />
+                                <Setter TargetName="text" Property="Foreground" Value="{StaticResource Faint}" />
+                            </DataTrigger>
+                            <DataTrigger Binding="{Binding IsComment}" Value="True">
+                                <Setter TargetName="text" Property="Foreground" Value="{StaticResource Faint}" />
+                            </DataTrigger>
+                            <DataTrigger Binding="{Binding Hit}" Value="True">
+                                <Setter TargetName="text" Property="Background" Value="#5A4A1A" />
+                                <Setter TargetName="text" Property="Foreground" Value="{StaticResource TextStrong}" />
+                            </DataTrigger>
+                            <Trigger Property="IsSelected" Value="True"><Setter TargetName="b" Property="Background" Value="#26313A" /></Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="Chip" TargetType="TextBlock" BasedOn="{StaticResource MutedText}">
+            <Setter Property="FontSize" Value="11" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="Margin" Value="14,0,0,0" />
+        </Style>
+    </UserControl.Resources>
+
+    <DockPanel>
+        <!-- Device header -->
+        <Border DockPanel.Dock="Top" Background="{StaticResource Panel}" BorderBrush="{StaticResource Border}" BorderThickness="0,0,0,1" Padding="12,6">
+            <DockPanel>
+                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
+                    <Button Style="{StaticResource FlatButton}" Width="26" Padding="0" Content="⟳" ToolTip="Refresh from Oxidized" AutomationProperties.Name="Refresh" Click="OnRefresh" />
+                    <Button x:Name="BackUpButton" Content="Back up now" Margin="6,0,0,0" ToolTip="Ask Oxidized to back up this device next" Click="OnBackUpNow" />
+                    <Button Content="Open in Oxidized" Margin="6,0,0,0" Click="OnOpenInOxidized" />
+                </StackPanel>
+                <WrapPanel VerticalAlignment="Center">
+                    <TextBlock x:Name="NodeName" FontWeight="SemiBold" FontSize="13" Foreground="{StaticResource TextStrong}" VerticalAlignment="Center" />
+                    <TextBlock x:Name="ModelText" Style="{StaticResource Chip}" />
+                    <TextBlock x:Name="GroupText" Style="{StaticResource Chip}" />
+                    <TextBlock x:Name="IpText" Style="{StaticResource Chip}" FontFamily="{StaticResource MonoFont}" />
+                    <StackPanel Orientation="Horizontal" Margin="14,0,0,0" VerticalAlignment="Center">
+                        <Ellipse x:Name="StatusDot" Width="7" Height="7" Margin="0,0,5,0" VerticalAlignment="Center" Fill="{StaticResource Faint}" />
+                        <TextBlock x:Name="StatusText" FontSize="11" VerticalAlignment="Center" />
+                    </StackPanel>
+                </WrapPanel>
+            </DockPanel>
+        </Border>
+
+        <Grid>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="230" MinWidth="160" MaxWidth="420" />
+                <ColumnDefinition Width="1" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+
+            <!-- Versions -->
+            <DockPanel Background="{StaticResource Panel}">
+                <Border DockPanel.Dock="Top" Height="30" BorderBrush="{StaticResource BorderSoft}" BorderThickness="0,0,0,1" Padding="10,0">
+                    <DockPanel>
+                        <TextBlock DockPanel.Dock="Right" Text="LINES" Style="{StaticResource PaneTitle}" FontSize="10" />
+                        <TextBlock x:Name="VersionsTitle" Text="VERSIONS" Style="{StaticResource PaneTitle}" FontSize="10" />
+                    </DockPanel>
+                </Border>
+                <TextBlock x:Name="VersionsNote" DockPanel.Dock="Bottom" Style="{StaticResource MutedText}" FontSize="11" TextWrapping="Wrap" Margin="10,8" Visibility="Collapsed" />
+                <ListBox x:Name="Versions" Background="Transparent" BorderThickness="0" ItemContainerStyle="{StaticResource VersionItem}"
+                         ScrollViewer.HorizontalScrollBarVisibility="Disabled" VirtualizingPanel.IsVirtualizing="True"
+                         SelectionChanged="OnVersionChanged" AutomationProperties.Name="Config versions">
+                    <ListBox.ItemTemplate>
+                        <DataTemplate>
+                            <DockPanel>
+                                <StackPanel DockPanel.Dock="Right" VerticalAlignment="Center" MinWidth="34">
+                                    <TextBlock Text="{Binding AddedText}" Foreground="{StaticResource Ok}" FontFamily="{StaticResource MonoFont}" FontSize="10.5" TextAlignment="Right" />
+                                    <TextBlock Text="{Binding RemovedText}" Foreground="{StaticResource Bad}" FontFamily="{StaticResource MonoFont}" FontSize="10.5" TextAlignment="Right" />
+                                    <TextBlock Text="{Binding NoteText}" Foreground="{StaticResource Faint}" FontSize="10.5" TextAlignment="Right" />
+                                </StackPanel>
+                                <StackPanel>
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="{Binding DateText}" />
+                                        <Border Background="{StaticResource Accent}" CornerRadius="2" Padding="4,0" Margin="6,0,0,0" VerticalAlignment="Center"
+                                                Visibility="{Binding IsLatest, Converter={StaticResource BoolVisC}}">
+                                            <TextBlock Text="latest" FontSize="9.5" Foreground="{StaticResource Bg}" />
+                                        </Border>
+                                    </StackPanel>
+                                    <TextBlock Text="{Binding AgeText}" Style="{StaticResource MutedText}" FontSize="11" ToolTip="{Binding Tip}" />
+                                </StackPanel>
+                            </DockPanel>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+            </DockPanel>
+
+            <GridSplitter Grid.Column="1" Width="1" HorizontalAlignment="Stretch" Background="{StaticResource Border}" />
+
+            <!-- Config or changes -->
+            <DockPanel Grid.Column="2">
+                <Border DockPanel.Dock="Top" Background="{StaticResource Panel2}" BorderBrush="{StaticResource Border}" BorderThickness="0,0,0,1" Padding="8,4">
+                    <DockPanel>
+                        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
+                            <Grid Width="150">
+                                <TextBox x:Name="FindBox" Padding="6,2" TextChanged="OnFind" KeyDown="OnFindKey" AutomationProperties.Name="Find in config"
+                                         ToolTip="Find (Enter for the next one)" />
+                                <TextBlock x:Name="FindHint" Text="Find" Foreground="{StaticResource Faint}" Margin="8,0,0,0" VerticalAlignment="Center" IsHitTestVisible="False" />
+                            </Grid>
+                            <Button Content="Copy" Margin="6,0,0,0" ToolTip="Copy this version's whole config" Click="OnCopy" />
+                            <Button Content="Save as…" Margin="6,0,0,0" Click="OnSaveAs" />
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <Border BorderBrush="{StaticResource ButtonBorder}" BorderThickness="1" CornerRadius="{StaticResource Radius}">
+                                <StackPanel Orientation="Horizontal">
+                                    <ToggleButton x:Name="ConfigMode" Content="Config" Padding="10,0" MinWidth="64" IsChecked="True" Click="OnMode" />
+                                    <ToggleButton x:Name="ChangesMode" Content="Changes" Padding="10,0" MinWidth="64" Click="OnMode" />
+                                </StackPanel>
+                            </Border>
+                            <StackPanel x:Name="ComparePanel" Orientation="Horizontal" Margin="10,0,0,0" Visibility="Collapsed">
+                                <TextBlock Text="against" Style="{StaticResource MutedText}" VerticalAlignment="Center" Margin="0,0,6,0" />
+                                <ComboBox x:Name="CompareBox" MinWidth="170" DisplayMemberPath="CompareName" SelectionChanged="OnCompareChanged"
+                                          AutomationProperties.Name="Compare against" />
+                            </StackPanel>
+                            <TextBlock x:Name="Summary" Style="{StaticResource MutedText}" FontSize="11" Margin="12,0,0,0" VerticalAlignment="Center" />
+                        </StackPanel>
+                    </DockPanel>
+                </Border>
+                <Grid>
+                    <ListBox x:Name="Lines" Background="{StaticResource Work}" BorderThickness="0" Padding="0,4" ItemContainerStyle="{StaticResource LineItem}"
+                             FontFamily="{StaticResource MonoFont}" FontSize="12" SelectionMode="Extended"
+                             VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling" VirtualizingPanel.ScrollUnit="Pixel"
+                             ScrollViewer.HorizontalScrollBarVisibility="Auto" AutomationProperties.Name="Config text">
+                        <ListBox.CommandBindings>
+                            <CommandBinding Command="ApplicationCommands.Copy" Executed="OnCopyLines" />
+                        </ListBox.CommandBindings>
+                    </ListBox>
+                    <TextBlock x:Name="Overlay" Style="{StaticResource MutedText}" HorizontalAlignment="Center" VerticalAlignment="Center" TextAlignment="Center"
+                               TextWrapping="Wrap" MaxWidth="420" Text="Loading from Oxidized…" />
+                </Grid>
+            </DockPanel>
+        </Grid>
+    </DockPanel>
+</UserControl>

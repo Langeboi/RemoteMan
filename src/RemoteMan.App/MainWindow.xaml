@@ -22,6 +22,7 @@
         <DataTemplate DataType="{x:Type vm:RdpSessionViewModel}"><views:RdpSessionView /></DataTemplate>
         <DataTemplate DataType="{x:Type vm:WebSessionViewModel}"><views:WebSessionView /></DataTemplate>
         <DataTemplate DataType="{x:Type vm:FilesSessionViewModel}"><views:FilesSessionView /></DataTemplate>
+        <DataTemplate DataType="{x:Type vm:ConfigBackupsSessionViewModel}"><views:ConfigBackupsView /></DataTemplate>
 
         <HierarchicalDataTemplate DataType="{x:Type vm:EntryNode}" ItemsSource="{Binding Children}">
             <DockPanel LastChildFill="True">
@@ -41,6 +42,9 @@
                         <TextBlock Text="{Binding Badge.Initials}" FontSize="5.5" FontWeight="Bold" Foreground="{StaticResource Bg}" HorizontalAlignment="Center" VerticalAlignment="Center" />
                     </Border>
                 </Grid>
+                <!-- Oxidized: small orange dot when the device's last config backup failed -->
+                <Ellipse DockPanel.Dock="Right" Width="7" Height="7" Margin="6,0,0,0" Fill="{StaticResource Warn}" VerticalAlignment="Center"
+                         ToolTip="{Binding BackupTip}" Visibility="{Binding BackupFailed, Converter={StaticResource BoolVis}}" />
                 <!-- Zabbix: health glyph on entries, count of problem hosts on folders -->
                 <Path DockPanel.Dock="Right" Style="{StaticResource HealthGlyph}" Tag="{Binding Health}" Margin="6,0,0,0" ToolTip="{Binding HealthTip}" />
                 <Border x:Name="pcount" DockPanel.Dock="Right" MinWidth="16" Height="16" CornerRadius="8" Padding="4,0" Margin="6,0,0,0" Background="{StaticResource Warn}"
@@ -505,6 +509,34 @@
                             <DockPanel Margin="0,2,0,0" Visibility="{Binding SelectedZabbixUnlinked, Converter={StaticResource BoolVis}}">
                                 <TextBlock DockPanel.Dock="Right" FontSize="11"><Hyperlink Command="{Binding LinkToZabbixCommand}" Foreground="#7FD3C4">Link to Zabbix host</Hyperlink></TextBlock>
                                 <TextBlock Text="No Zabbix host matches this entry." Style="{StaticResource MutedText}" FontSize="11" TextTrimming="CharacterEllipsis" />
+                            </DockPanel>
+                        </StackPanel>
+
+                        <!-- Oxidized: last config backup, link to the Config backups tab -->
+                        <StackPanel Visibility="{Binding SelectedOxidizedVisible, Converter={StaticResource BoolVis}}">
+                            <Border Height="1" Background="{StaticResource BorderSoft}" Margin="0,8,0,8" />
+                            <DockPanel Visibility="{Binding SelectedOxidizedLinked, Converter={StaticResource BoolVis}}" ToolTip="{Binding SelectedOxidizedTip}">
+                                <TextBlock DockPanel.Dock="Right" VerticalAlignment="Center" FontSize="11">
+                                    <Hyperlink Command="{Binding OpenConfigBackupsCommand}" Foreground="#7FD3C4" ToolTip="Open this device's saved configs in a tab">Config backups</Hyperlink>
+                                </TextBlock>
+                                <TextBlock Text="OXIDIZED" FontSize="10" FontWeight="SemiBold" Foreground="{StaticResource Muted}" VerticalAlignment="Center" Margin="0,0,8,0" />
+                                <Ellipse Width="7" Height="7" Margin="0,0,6,0" VerticalAlignment="Center">
+                                    <Ellipse.Style>
+                                        <Style TargetType="Ellipse">
+                                            <Setter Property="Fill" Value="{StaticResource Faint}" />
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding SelectedOxidizedState}" Value="ok"><Setter Property="Fill" Value="{StaticResource Ok}" /></DataTrigger>
+                                                <DataTrigger Binding="{Binding SelectedOxidizedState}" Value="fail"><Setter Property="Fill" Value="{StaticResource Warn}" /></DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Ellipse.Style>
+                                </Ellipse>
+                                <TextBlock Text="{Binding SelectedOxidizedText}" FontSize="11" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                            </DockPanel>
+                            <DockPanel Visibility="{Binding SelectedOxidizedUnlinked, Converter={StaticResource BoolVis}}">
+                                <TextBlock DockPanel.Dock="Right" FontSize="11"><Hyperlink Command="{Binding LinkToOxidizedCommand}" Foreground="#7FD3C4">Link to device</Hyperlink></TextBlock>
+                                <TextBlock Text="OXIDIZED" FontSize="10" FontWeight="SemiBold" Foreground="{StaticResource Muted}" VerticalAlignment="Center" Margin="0,0,8,0" />
+                                <TextBlock Text="No device matches." Style="{StaticResource MutedText}" FontSize="11" TextTrimming="CharacterEllipsis" />
                             </DockPanel>
                         </StackPanel>
                     </StackPanel>

@@ -1,6 +1,7 @@
 using System.IO;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using RemoteMan.Core.Integrations.Oxidized;
 using RemoteMan.Core.Integrations.Zabbix;
 using RemoteMan.Core.Ai;
 using RemoteMan.Core.Storage;
@@ -36,6 +37,7 @@ public sealed class AppSettings
     public bool SplitPane { get; set; }
 
     public ZabbixConfig Zabbix { get; set; } = new();
+    public OxidizedConfig Oxidized { get; set; } = new();
 
     /// <summary>AI assistant providers (keys are not stored here; see <see cref="Secrets"/>).</summary>
     public AiSettings Ai { get; set; } = new();
@@ -79,6 +81,29 @@ public sealed class ZabbixConfig
     public bool IsConfigured => Enabled && Url.Length > 0 && !string.IsNullOrEmpty(ProtectedToken);
 
     public ZabbixMatchOptions MatchOptions => new() { ByAddress = MatchByAddress, ByName = MatchByName, IgnoreBracketSuffix = IgnoreBracketSuffix };
+}
+
+/// <summary>Per-user Oxidized connection (config backups of network gear). Hand-made links live on the entries.</summary>
+public sealed class OxidizedConfig
+{
+    public bool Enabled { get; set; }
+    /// <summary>Oxidized's web page, e.g. https://oxidized.lab.local or http://10.0.0.5:8888.</summary>
+    public string Url { get; set; } = "";
+    /// <summary>Basic auth in front of Oxidized (nginx, Apache). Empty = no login.</summary>
+    public string? UserName { get; set; }
+    /// <summary>DPAPI-protected for this Windows user.</summary>
+    public string? ProtectedPassword { get; set; }
+    public Guid? JumpHostEntryId { get; set; }
+    public bool IgnoreCertificateErrors { get; set; } = true;
+    /// <summary>How often the node list (last backup and status) is refreshed.</summary>
+    public int PollMinutes { get; set; } = 5;
+    public bool MatchByAddress { get; set; } = true;
+    public bool MatchByName { get; set; } = true;
+    public bool IgnoreBracketSuffix { get; set; } = true;
+
+    public bool IsConfigured => Enabled && Url.Length > 0;
+
+    public OxidizedMatchOptions MatchOptions => new() { ByAddress = MatchByAddress, ByName = MatchByName, IgnoreBracketSuffix = IgnoreBracketSuffix };
 }
 
 /// <summary>Automatic daily backup of the active data source to an encrypted .rmx file.</summary>

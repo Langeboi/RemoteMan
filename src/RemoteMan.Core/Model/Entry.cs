@@ -63,6 +63,9 @@ public sealed class Entry
     /// <summary>Zabbix host this entry is linked to (set on import or by "Link to Zabbix host"). Wins over automatic matching.</summary>
     public string? ZabbixHostId { get; set; }
 
+    /// <summary>Oxidized node ("group/name") this entry is linked to by hand. Wins over automatic matching.</summary>
+    public string? OxidizedNode { get; set; }
+
     public RdpSettings? Rdp { get; set; }
     /// <summary>Credential entries: the secret itself. Other entries: the login typed into the entry
     /// (<see cref="LoginSource.Embedded"/>).</summary>
