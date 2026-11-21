@@ -394,6 +394,44 @@
                 </Border>
             </UniformGrid>
 
+            <!-- Oxidized config backups -->
+            <Border Style="{StaticResource Widget}" Visibility="{Binding BackupsVisible, Converter={StaticResource BoolVis}}">
+                <DockPanel>
+                    <Border DockPanel.Dock="Top" Style="{StaticResource WidgetHeader}">
+                        <DockPanel>
+                            <TextBlock DockPanel.Dock="Right" Text="{Binding BackupsMeta}" Style="{StaticResource WidgetMeta}" />
+                            <TextBlock Text="Config backups" Style="{StaticResource WidgetTitle}" />
+                        </DockPanel>
+                    </Border>
+                    <Grid Margin="12,10,12,10">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="2*" />
+                            <ColumnDefinition Width="3*" />
+                        </Grid.ColumnDefinitions>
+                        <UniformGrid Columns="2" VerticalAlignment="Top" Margin="0,0,6,0">
+                            <UniformGrid.Resources>
+                                <Style TargetType="Border">
+                                    <Setter Property="Background" Value="{StaticResource Panel2}" />
+                                    <Setter Property="BorderBrush" Value="{StaticResource BorderSoft}" />
+                                    <Setter Property="BorderThickness" Value="1" />
+                                    <Setter Property="CornerRadius" Value="{StaticResource Radius}" />
+                                    <Setter Property="Padding" Value="8,5" />
+                                    <Setter Property="Margin" Value="0,0,6,6" />
+                                </Style>
+                            </UniformGrid.Resources>
+                            <Border><StackPanel><TextBlock Text="{Binding BackupDevices}" FontSize="18" FontWeight="SemiBold" Foreground="{StaticResource TextStrong}" /><TextBlock Text="Devices" Style="{StaticResource WidgetMeta}" /></StackPanel></Border>
+                            <Border><StackPanel><TextBlock Text="{Binding BackupsToday}" FontSize="18" FontWeight="SemiBold" Foreground="{StaticResource Ok}" /><TextBlock Text="Backed up in 24 h" Style="{StaticResource WidgetMeta}" /></StackPanel></Border>
+                            <Border><StackPanel><TextBlock Text="{Binding BackupsFailing}" FontSize="18" FontWeight="SemiBold" Foreground="{StaticResource Bad}" /><TextBlock Text="Failing" Style="{StaticResource WidgetMeta}" /></StackPanel></Border>
+                            <Border><StackPanel><TextBlock Text="{Binding BackupsChanged}" FontSize="18" FontWeight="SemiBold" Foreground="{StaticResource Warn}" /><TextBlock Text="Changed in 7 days" Style="{StaticResource WidgetMeta}" /></StackPanel></Border>
+                        </UniformGrid>
+                        <StackPanel Grid.Column="1">
+                            <TextBlock Text="All backups OK, no config changes this week." Style="{StaticResource Empty}" Visibility="{Binding NoBackupRows, Converter={StaticResource BoolVis}}" />
+                            <ItemsControl ItemsSource="{Binding BackupRows}" ItemTemplate="{StaticResource EntryRow}" Focusable="False" />
+                        </StackPanel>
+                    </Grid>
+                </DockPanel>
+            </Border>
+
             <!-- Entries over time, Housekeeping -->
             <UniformGrid Rows="1">
             <Border Style="{StaticResource Widget}" Visibility="{Binding ShowGrowth, Converter={StaticResource BoolVis}}">

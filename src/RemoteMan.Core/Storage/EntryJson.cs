@@ -24,6 +24,7 @@ public static class EntryJson
         public bool? UseWindowsLogin { get; set; }
         public bool? Favorite { get; set; }
         public string? ZabbixHostId { get; set; }
+        public string? OxidizedNode { get; set; }
         public RdpSettings? Rdp { get; set; }
         public SshSettings? Ssh { get; set; }
         public WebSettings? Web { get; set; }
@@ -52,6 +53,7 @@ public static class EntryJson
         Login = e.Login == LoginSource.None ? null : e.Login,
         Favorite = e.Favorite ? true : null,
         ZabbixHostId = string.IsNullOrEmpty(e.ZabbixHostId) ? null : e.ZabbixHostId,
+        OxidizedNode = string.IsNullOrEmpty(e.OxidizedNode) ? null : e.OxidizedNode,
         Rdp = e.Rdp, Ssh = e.Ssh, Web = e.Web, Vnc = e.Vnc, Credential = e.Credential, Snippet = e.Snippet,
         Serial = e.Serial, Ftp = e.Ftp, Proxmox = e.Proxmox, PowerShell = e.PowerShell,
         Icon = string.IsNullOrEmpty(e.Icon) ? null : e.Icon, IconColor = string.IsNullOrEmpty(e.IconColor) ? null : e.IconColor,
@@ -75,6 +77,7 @@ public static class EntryJson
             : p.CredentialId is not null ? LoginSource.Saved : LoginSource.None);
         e.Favorite = p.Favorite == true;
         e.ZabbixHostId = p.ZabbixHostId;
+        e.OxidizedNode = p.OxidizedNode;
         e.Rdp = p.Rdp; e.Ssh = p.Ssh; e.Web = p.Web; e.Vnc = p.Vnc; e.Credential = p.Credential; e.Snippet = p.Snippet;
         e.Serial = p.Serial; e.Ftp = p.Ftp; e.Proxmox = p.Proxmox; e.PowerShell = p.PowerShell;
         e.Icon = p.Icon; e.IconColor = p.IconColor;

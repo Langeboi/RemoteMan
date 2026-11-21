@@ -107,6 +107,19 @@ public sealed partial class DashboardViewModel : SessionViewModel
     [ObservableProperty] private string _problemsMore = "";
     [ObservableProperty] private bool _noProblems;
 
+    // --- Oxidized config backups ---
+    [ObservableProperty] private bool _backupsOn;
+    [ObservableProperty] private string _backupsMeta = "";
+    [ObservableProperty] private int _backupDevices;
+    [ObservableProperty] private int _backupsToday;
+    [ObservableProperty] private int _backupsFailing;
+    [ObservableProperty] private int _backupsChanged;
+    /// <summary>Failing devices first, then configs that changed lately. Health "high" marks a failure.</summary>
+    public ObservableCollection<DashEntry> BackupRows { get; } = new();
+    [ObservableProperty] private bool _noBackupRows;
+    public bool BackupsVisible => ShowBackups && BackupsOn;
+    partial void OnBackupsOnChanged(bool value) => OnPropertyChanged(nameof(BackupsVisible));
+
     // --- which widgets show (More > Widgets on the dashboard) ---
     [ObservableProperty] private bool _showTiles = true;
     [ObservableProperty] private bool _showProtocols = true;
@@ -118,6 +131,7 @@ public sealed partial class DashboardViewModel : SessionViewModel
     [ObservableProperty] private bool _showConnections = true;
     [ObservableProperty] private bool _showHeat = true;
     [ObservableProperty] private bool _showGrowth = true;
+    [ObservableProperty] [NotifyPropertyChangedFor(nameof(BackupsVisible))] private bool _showBackups = true;
 
     public bool ZabbixVisible => ShowZabbix && ZabbixOn;
     partial void OnShowZabbixChanged(bool value) => OnPropertyChanged(nameof(ZabbixVisible));
@@ -129,13 +143,14 @@ public sealed partial class DashboardViewModel : SessionViewModel
         ("tiles", "Totals"), ("protocols", "Entries by protocol"), ("zabbix", "Zabbix"),
         ("connections", "Your connections"), ("heat", "When you connect"),
         ("favorites", "Favorites"), ("recent", "Recent"), ("folders", "Folders"), ("growth", "Entries over time"), ("checks", "Housekeeping"),
+        ("backups", "Config backups"),
     ];
 
     public bool IsShown(string key) => key switch
     {
         "tiles" => ShowTiles, "protocols" => ShowProtocols, "zabbix" => ShowZabbix, "favorites" => ShowFavorites,
         "recent" => ShowRecent, "folders" => ShowFolders, "checks" => ShowChecks,
-        "connections" => ShowConnections, "heat" => ShowHeat, "growth" => ShowGrowth, _ => false,
+        "connections" => ShowConnections, "heat" => ShowHeat, "growth" => ShowGrowth, "backups" => ShowBackups, _ => false,
     };
 
     public void SetShown(string key, bool on)
@@ -152,6 +167,7 @@ public sealed partial class DashboardViewModel : SessionViewModel
             case "connections": ShowConnections = on; break;
             case "heat": ShowHeat = on; break;
             case "growth": ShowGrowth = on; break;
+            case "backups": ShowBackups = on; break;
             default: return;
         }
         WidgetToggled?.Invoke(key, on);

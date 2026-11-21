@@ -78,7 +78,7 @@ public sealed partial class MainViewModel
         {
             SetPaneActive(newValue.Pane, newValue);
             FocusedPane = newValue.Pane;
-            if (_store is not null && newValue.Entry.Revision > 0)
+            if (_store is not null && newValue.Entry.Revision > 0 && newValue is not ConfigBackupsSessionViewModel)
                 _ = _store.SetMyPresenceAsync(newValue.Entry.Id, PresenceState.Connected);
         }
         UpdateShown();

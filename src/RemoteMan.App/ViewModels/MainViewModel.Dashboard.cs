@@ -185,6 +185,7 @@ public sealed partial class MainViewModel
                 entries.Where(e => !e.Deleted && e.HasHosts && !snap.HealthFor(e).IsLinked).Select(e => e.Id)));
 
         RefreshDashboardZabbix(snap, entries);
+        RefreshDashboardBackups(entries, now);
     }
 
 
@@ -233,6 +234,46 @@ public sealed partial class MainViewModel
         }).ToList();
         d.HasZabbixTrend = trend.Count >= 2;
     }
+
+    /// <summary>Oxidized: device counts, failing backups and configs that changed lately, with the entry each belongs to.</summary>
+    private void RefreshDashboardBackups(List<Entry> entries, DateTimeOffset now)
+    {
+        var d = Dashboard;
+        d.BackupsOn = OxidizedActive;
+        d.BackupRows.Clear();
+        if (OxidizedSnapshot is not { } ox)
+        {
+            d.BackupsMeta = OxidizedActive ? "waiting for Oxidized…" : "";
+            d.BackupDevices = d.BackupsToday = d.BackupsFailing = d.BackupsChanged = 0;
+            d.NoBackupRows = true;
+            return;
+        }
+        var entryFor = new Dictionary<string, Entry>();
+        foreach (var e in entries.Where(e => !e.Deleted && e.IsConnectable))
+            if (ox.Matcher.Match(e) is { } m) entryFor.TryAdd(m.Node.FullName, e);
+
+        d.BackupDevices = ox.Nodes.Count;
+        d.BackupsToday = ox.Nodes.Count(n => n.IsOk && n.LastRun is { } t && t >= now - TimeSpan.FromHours(24));
+        d.BackupsFailing = ox.FailingCount;
+        d.BackupsChanged = ox.Nodes.Count(n => n.LastChanged is { } c && c >= now - TimeSpan.FromDays(7));
+        d.BackupsMeta = $"{ZabbixLessHost(_settings.Oxidized.Url)} · {ox.FetchedAt.ToLocalTime():HH:mm}";
+
+        DashEntry Row(RemoteMan.Core.Integrations.Oxidized.OxidizedNode n, string side, string? health)
+        {
+            entryFor.TryGetValue(n.FullName, out var e);
+            return new DashEntry(e?.Id ?? Guid.Empty, e?.Name ?? n.Name, e is null ? "DIR" : EntryNode.KindTagFor(e.Kind),
+                e is null ? "no entry" : FolderName(e), side, health);
+        }
+        foreach (var n in ox.Nodes.Where(n => n.IsFailing).OrderByDescending(n => n.LastRun).Take(5))
+            d.BackupRows.Add(Row(n, $"{n.StatusText}{(n.LastRun is { } t ? " · " + When(t, now) : "")}", "high"));
+        foreach (var n in ox.Nodes.Where(n => !n.IsFailing && n.LastChanged is { } c && c >= now - TimeSpan.FromDays(7))
+                     .OrderByDescending(n => n.LastChanged).Take(Math.Max(0, 7 - d.BackupRows.Count)))
+            d.BackupRows.Add(Row(n, $"changed {When(n.LastChanged!.Value, now)}", null));
+        d.NoBackupRows = d.BackupRows.Count == 0;
+    }
+
+    private static string ZabbixLessHost(string url) =>
+        Uri.TryCreate(url, UriKind.Absolute, out var u) ? u.Host : url;
 
     /// <summary>One sample per half hour of open problems (warning, and high or worse), kept for a day.</summary>
     private void SampleZabbixTrend()
