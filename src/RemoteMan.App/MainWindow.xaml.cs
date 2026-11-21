@@ -65,10 +65,23 @@ public partial class MainWindow : Window
         SizeChanged += (_, _) => _aiWindow?.Reposition();
         StateChanged += (_, _) => { if (WindowState == WindowState.Minimized) _aiWindow?.HideBox(); else _aiWindow?.Reposition(); };
         Loaded += async (_, _) => await _vm.InitializeAsync();
-        Closing += async (_, _) => await _vm.DisposeAsync();
+        Closing += async (_, _) => { _vm.FreezeOpenSessions(); await _vm.DisposeAsync(); };
+        _vm.AskReopen = AskReopen;
         PreviewKeyDown += OnWindowKeyDown;
         StateChanged += (_, _) => MaxGlyph.Data = Geometry.Parse(WindowState == WindowState.Maximized
             ? "M2.5,0.5 H9.5 V7.5 M0.5,2.5 H7.5 V9.5 H0.5 Z" : "M0.5,0.5 H9.5 V9.5 H0.5 Z");
+    }
+
+    /// <summary>Startup question: reopen what was open when RemoteMan last closed.</summary>
+    private (bool Reopen, bool Remember) AskReopen(IReadOnlyList<string> names)
+    {
+        var shown = names.Take(8).Select(n => "  •  " + n).ToList();
+        if (names.Count > 8) shown.Add($"  …and {names.Count - 8} more");
+        var remember = new CheckBox { Content = "Don't ask again (you can change this under More > On startup)", Margin = new Thickness(0, 12, 0, 0) };
+        var text = (names.Count == 1 ? "This session was open" : $"These {names.Count} sessions were open") +
+                   " when you closed RemoteMan:\n\n" + string.Join("\n", shown);
+        var pick = ChoiceDialog.Show(this, "Reopen last sessions?", text, ["Reopen", "Not now"], DialogIcon.Question, extra: remember);
+        return (pick == 0, remember.IsChecked == true && pick >= 0);
     }
 
     // ---------------- connection notices ----------------
@@ -136,6 +149,14 @@ public partial class MainWindow : Window
         menu.Items.Add(Cmd("Zabbix settings…", _vm.ZabbixSettingsCommand));
         if (_vm.ZabbixActive) menu.Items.Add(Cmd("Import from Zabbix…", _vm.ImportFromZabbixCommand));
         menu.Items.Add(Cmd("Oxidized settings…", _vm.OxidizedSettingsCommand));
+        var startup = new MenuItem { Header = "On startup, reopen last sessions" };
+        foreach (var (mode, label) in new[] { (ReopenMode.Ask, "Ask"), (ReopenMode.Always, "Always"), (ReopenMode.Never, "Never") })
+        {
+            var item = new MenuItem { Header = label, IsCheckable = true, IsChecked = _vm.ReopenSessions == mode };
+            item.Click += (_, _) => _vm.ReopenSessions = mode;
+            startup.Items.Add(item);
+        }
+        menu.Items.Add(startup);
         menu.Items.Add(new Separator());
         var updates = RemoteMan.App.Updates.UpdateService.Instance;
         menu.Items.Add(new MenuItem { Header = "Check for updates", Command = updates.CheckNowCommand });
