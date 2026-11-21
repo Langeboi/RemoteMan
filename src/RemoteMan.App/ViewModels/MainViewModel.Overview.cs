@@ -55,7 +55,7 @@ public sealed partial class MainViewModel
         o.CanConnect = e.IsConnectable;
         o.CanBackups = OxidizedActive && e.IsConnectable;
         o.Description = e.Description?.Trim() ?? "";
-        var path = FolderPath(e);
+        var path = ParentPath(e);
         o.FolderText = path;
         var kind = node.IsFolder ? "Folder" : EntryKindName(e);
         var folder = path.Length == 0 ? "" : path[(path.LastIndexOf('\\') + 1)..];
@@ -99,7 +99,7 @@ public sealed partial class MainViewModel
         return N((int)(d.TotalDays / 365.25), "year");
     }
 
-    private string FolderPath(Entry e)
+    private string ParentPath(Entry e)
     {
         var parts = new List<string>();
         for (var (p, hops) = (e.ParentId, 0); p is { } pid && hops < 64 && _store?.Get(pid) is { } f; p = f.ParentId, hops++)
@@ -252,7 +252,7 @@ public sealed partial class MainViewModel
             {
                 case LoginSource.Saved when holder is not null:
                     var hid = holder.Id;
-                    var where = FolderPath(holder);
+                    var where = ParentPath(holder);
                     rows.Add(new OverviewRow("Credentials", (where.Length > 0 ? where + "\\" : "") + holder.Name)
                     {
                         Badge = inherited ? "linked, from folder" : "linked", Style = "link",
