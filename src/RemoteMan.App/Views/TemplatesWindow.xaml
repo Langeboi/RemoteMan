@@ -1,0 +1,109 @@
+<Window x:Class="RemoteMan.App.Views.TemplatesWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Templates" Width="820" Height="560" MinWidth="640" MinHeight="420"
+        Style="{StaticResource RemoteManWindow}" WindowStartupLocation="CenterOwner" ShowInTaskbar="False">
+    <DockPanel>
+        <Border DockPanel.Dock="Top" Height="28" Background="{StaticResource Header}" BorderBrush="{StaticResource Border}" BorderThickness="0,0,0,1">
+            <DockPanel Margin="10,0">
+                <TextBlock DockPanel.Dock="Right" Style="{StaticResource MutedText}" FontSize="11" VerticalAlignment="Center"
+                           Text="Shared with everyone on this data source" />
+                <TextBlock Text="Templates" FontWeight="SemiBold" VerticalAlignment="Center" />
+            </DockPanel>
+        </Border>
+        <Border DockPanel.Dock="Bottom" Background="{StaticResource Header}" BorderBrush="{StaticResource Border}" BorderThickness="0,1,0,0" Padding="10,8">
+            <DockPanel>
+                <TextBlock x:Name="Status" Style="{StaticResource MutedText}" FontSize="11" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                    <Button Content="Close" MinWidth="76" IsCancel="True" Click="OnClose" />
+                </StackPanel>
+            </DockPanel>
+        </Border>
+        <Grid>
+            <Grid.ColumnDefinitions><ColumnDefinition Width="240" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+
+            <!-- Left: the templates, and making new ones -->
+            <DockPanel Background="{StaticResource Panel}">
+                <StackPanel DockPanel.Dock="Bottom" Margin="8">
+                    <UniformGrid Columns="2">
+                        <Button Content="New" Margin="0,0,3,0" Click="OnNew" ToolTip="A new, empty template" />
+                        <Button x:Name="DuplicateButton" Content="Duplicate" Margin="3,0,0,0" Click="OnDuplicate" />
+                    </UniformGrid>
+                    <Button x:Name="StartersButton" Content="Add starter templates" Margin="0,6,0,0" Click="OnStarters"
+                            ToolTip="FortiGate, MikroTik, Cisco IOS switch, Proxmox, Windows Server, Linux server. Change them to match your setup." />
+                </StackPanel>
+                <Border BorderBrush="{StaticResource Border}" BorderThickness="0,0,1,0">
+                    <Grid>
+                        <ListBox x:Name="TemplateList" Background="Transparent" BorderThickness="0" SelectionChanged="OnListSelection"
+                                 ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                            <ListBox.ItemTemplate>
+                                <DataTemplate>
+                                    <StackPanel Margin="4,3">
+                                        <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
+                                        <TextBlock Text="{Binding Template.Summary}" Style="{StaticResource MutedText}" FontSize="11" TextTrimming="CharacterEllipsis" />
+                                    </StackPanel>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+                        <TextBlock x:Name="EmptyHint" Margin="16" TextWrapping="Wrap" Style="{StaticResource MutedText}" VerticalAlignment="Top"
+                                   Text="No templates yet. Make one with New, add the starters below, or right-click an entry in the tree and pick Save as template." />
+                    </Grid>
+                </Border>
+            </DockPanel>
+
+            <!-- Right: the selected template -->
+            <ScrollViewer Grid.Column="1" VerticalScrollBarVisibility="Auto">
+                <StackPanel x:Name="Details" Margin="16,12">
+                    <TextBlock x:Name="DetailHeading" FontSize="15" FontWeight="SemiBold" Foreground="{StaticResource TextStrong}" Margin="0,0,0,10" />
+                    <Grid>
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="120" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" /><RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+                        <TextBlock Text="Name" Style="{StaticResource MutedText}" VerticalAlignment="Center" />
+                        <TextBox x:Name="NameBox" Grid.Column="1" Margin="0,2" TextChanged="OnChanged" />
+                        <TextBlock Grid.Row="1" Text="Shown as" Style="{StaticResource MutedText}" VerticalAlignment="Center" />
+                        <TextBox x:Name="SummaryBox" Grid.Row="1" Grid.Column="1" Margin="0,2" TextChanged="OnChanged"
+                                 ToolTip="One line under the name in the New menu, e.g. Web GUI on 443 + SSH CLI" />
+                        <TextBlock Grid.Row="2" Text="Makes" Style="{StaticResource MutedText}" VerticalAlignment="Center" />
+                        <ComboBox x:Name="KindBox" Grid.Row="2" Grid.Column="1" Margin="0,2" SelectionChanged="OnKindChanged" />
+                        <TextBlock Grid.Row="3" Text="Put new entries in" Style="{StaticResource MutedText}" VerticalAlignment="Center" />
+                        <ComboBox x:Name="FolderBox" Grid.Row="3" Grid.Column="1" Margin="0,2" SelectionChanged="OnChanged" />
+                        <TextBlock Grid.Row="4" Text="Also make" Style="{StaticResource MutedText}" VerticalAlignment="Top" Margin="0,6,0,0" />
+                        <StackPanel Grid.Row="4" Grid.Column="1" Margin="0,4,0,0">
+                            <CheckBox x:Name="CompanionBox" Content="A second entry for the same host" Checked="OnChanged" Unchecked="OnChanged"
+                                      ToolTip="For example an SSH entry for a firewall's CLI next to its web GUI entry. It gets the same login and folder." />
+                            <StackPanel x:Name="CompanionRow" Orientation="Horizontal" Margin="20,4,0,0">
+                                <ComboBox x:Name="CompanionKindBox" Width="110" SelectionChanged="OnChanged" />
+                                <TextBlock Text="port" Style="{StaticResource MutedText}" VerticalAlignment="Center" Margin="10,0,6,0" />
+                                <TextBox x:Name="CompanionPortBox" Width="60" TextChanged="OnChanged" />
+                                <TextBlock Text="name + " Style="{StaticResource MutedText}" VerticalAlignment="Center" Margin="10,0,6,0" />
+                                <TextBox x:Name="CompanionSuffixBox" Width="90" TextChanged="OnChanged" ToolTip="Added after the new entry's name, e.g. &quot; CLI&quot; makes fw02 CLI" />
+                            </StackPanel>
+                        </StackPanel>
+                    </Grid>
+
+                    <Border Margin="0,14,0,0" BorderBrush="{StaticResource Border}" BorderThickness="1" CornerRadius="{StaticResource Radius}" Background="{StaticResource Panel}">
+                        <StackPanel Margin="12,10">
+                            <DockPanel>
+                                <Button DockPanel.Dock="Right" Content="Edit settings…" Click="OnEditSettings"
+                                        ToolTip="Opens the entry editor: port, login, linked credential, icon, tags, custom fields, SSH algorithms, RDP and browser options" />
+                                <TextBlock Text="Fills in" FontWeight="SemiBold" VerticalAlignment="Center" />
+                            </DockPanel>
+                            <TextBlock x:Name="FillsIn" Margin="0,8,0,0" TextWrapping="Wrap" LineHeight="19" />
+                        </StackPanel>
+                    </Border>
+                    <TextBlock Margin="0,8,0,0" Style="{StaticResource MutedText}" FontSize="11" TextWrapping="Wrap"
+                               Text="New entries ask you for a name and host. Leave the host empty in the settings (or {host} in a web address). Changing a template doesn't change entries already made from it." />
+
+                    <StackPanel Orientation="Horizontal" Margin="0,14,0,0">
+                        <Button x:Name="SaveButton" Content="Save" MinWidth="76" Style="{StaticResource PrimaryButton}" Click="OnSave" />
+                        <Button x:Name="UseButton" Content="New entry from this" Margin="6,0,0,0" Click="OnUse" />
+                        <Button x:Name="DeleteButton" Content="Delete" Margin="6,0,0,0" Click="OnDelete" />
+                    </StackPanel>
+                </StackPanel>
+            </ScrollViewer>
+        </Grid>
+    </DockPanel>
+</Window>

@@ -11,7 +11,41 @@
             <ColumnDefinition Width="22" />
         </Grid.ColumnDefinitions>
 
-        <wv2:WebView2 x:Name="Web" DefaultBackgroundColor="#141517" />
+        <DockPanel>
+            <!-- Broadcast: shown in every tab whose typing goes to the group -->
+            <Border x:Name="BroadcastBar" DockPanel.Dock="Top" Background="#2A2214" BorderBrush="#5A4522" BorderThickness="0,0,0,1" Padding="8,4" Visibility="Collapsed">
+                <DockPanel>
+                    <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
+                        <Button Content="All SSH tabs" Margin="6,0,0,0" Click="OnBroadcastAll" ToolTip="Add every open SSH tab" />
+                        <Button Content="Stop" Margin="6,0,0,0" Click="OnBroadcastStop" ToolTip="Stop broadcasting (Ctrl+Shift+M, or Esc twice in the terminal)" Foreground="{StaticResource Warn}" />
+                    </StackPanel>
+                    <Ellipse DockPanel.Dock="Left" Width="8" Height="8" Fill="{StaticResource Warn}" VerticalAlignment="Center" Margin="0,0,7,0" />
+                    <TextBlock x:Name="BroadcastLabel" DockPanel.Dock="Left" Foreground="{StaticResource Warn}" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,10,0" />
+                    <ItemsControl x:Name="BroadcastList" Focusable="False" VerticalAlignment="Center">
+                        <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Border CornerRadius="{StaticResource Radius}" BorderThickness="1" Padding="5,0" Margin="0,1,4,1">
+                                    <Border.Style>
+                                        <Style TargetType="Border">
+                                            <Setter Property="BorderBrush" Value="{StaticResource InputBorder}" />
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding IsChecked}" Value="True">
+                                                    <Setter Property="BorderBrush" Value="#5A4522" />
+                                                    <Setter Property="Background" Value="#3A2D17" />
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Border.Style>
+                                    <CheckBox Content="{Binding Title}" IsChecked="{Binding IsChecked}" IsEnabled="{Binding IsConnected}" Margin="0,2" />
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </DockPanel>
+            </Border>
+            <wv2:WebView2 x:Name="Web" DefaultBackgroundColor="#141517" />
+        </DockPanel>
         <GridSplitter Grid.Column="1" Width="1" HorizontalAlignment="Stretch" />
 
         <!-- SFTP panel: same login as the terminal -->
@@ -210,6 +244,13 @@
                           Foreground="{StaticResource Muted}" ToolTip="Snippets (Ctrl+Shift+S)" AutomationProperties.Name="Toggle snippets panel"
                           Checked="OnSnippetsToggled" Unchecked="OnSnippetsToggled">
                 <TextBlock Text="Snippets" FontSize="11">
+                    <TextBlock.LayoutTransform><RotateTransform Angle="90" /></TextBlock.LayoutTransform>
+                </TextBlock>
+            </ToggleButton>
+            <ToggleButton x:Name="BroadcastToggle" Height="84" Background="Transparent" BorderThickness="0"
+                          Foreground="{StaticResource Muted}" ToolTip="Broadcast: type once into several SSH tabs (Ctrl+Shift+M)" AutomationProperties.Name="Toggle broadcast typing"
+                          Checked="OnBroadcastToggled" Unchecked="OnBroadcastToggled">
+                <TextBlock Text="Broadcast" FontSize="11">
                     <TextBlock.LayoutTransform><RotateTransform Angle="90" /></TextBlock.LayoutTransform>
                 </TextBlock>
             </ToggleButton>

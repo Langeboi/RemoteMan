@@ -68,6 +68,9 @@ public static class EntryTemplates
         var proto = EntryStore.Clone(source);
         proto.Endpoints = proto.Endpoints.Select(h => h with { Host = "" }).Take(1).ToList();
         if (proto.Web is { } web) web.Url = WithHostPlaceholder(web.Url);
+        // A login typed into the entry keeps its user name, not its secrets.
+        if (proto.Credential is { } c) { c.ProtectedPassword = null; c.ProtectedPrivateKey = null; c.ProtectedPassphrase = null; c.ProtectedTotpSecret = null; c.ProtectedCertificate = null; }
+        proto.Fields = proto.Fields?.Select(f => new CustomField { Name = f.Name, Secret = f.Secret, Value = f.Secret ? null : f.Value }).ToList();
         var t = new Entry
         {
             Kind = EntryKind.Template, Name = name,

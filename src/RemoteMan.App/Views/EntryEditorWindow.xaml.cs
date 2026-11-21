@@ -100,6 +100,11 @@ public partial class EntryEditorWindow : Window
     private ZabbixSnapshot? _zabbix;
     private string? _zabbixHostId;
 
+    /// <summary>Editing a template's settings: no name or host needed, a "{host}" URL is fine, no credential is split off.</summary>
+    public bool TemplateMode { get; init; }
+    /// <summary>Replaces the heading, e.g. "New SSH entry from template Cisco IOS switch".</summary>
+    public string? TemplateHeading { get; init; }
+
     /// <summary>Latest Zabbix data; when set, connection entries get a Zabbix section with the link picker.</summary>
     public ZabbixSnapshot? Zabbix
     {
@@ -234,6 +239,20 @@ public partial class EntryEditorWindow : Window
         _totpTimer.Tick += (_, _) => UpdateTotp();
         Closed += (_, _) => _totpTimer.Stop();
         Loaded += (_, _) => { _loaded = true; UpdateSummaries(); UpdateTotp(); _totpTimer.Start(); NameBox.Focus(); NameBox.SelectAll(); };
+        Loaded += (_, _) => ApplyTemplateUi();
+    }
+
+    private void ApplyTemplateUi()
+    {
+        if (TemplateHeading is { Length: > 0 } h) Heading.Text = h;
+        if (!TemplateMode) return;
+        Show(SaveAsCredential, false);
+        SaveAsCredential.IsChecked = false;
+        NameBox.Text = "";
+        NameBox.IsEnabled = false;
+        NameBox.ToolTip = "The name is typed when you use the template";
+        History.Text = "Leave the host empty (or {host} in the URL). Everything else here is filled in for new entries.";
+        (_e.Kind == EntryKind.Web ? UrlBox : TagsBox).Focus();
     }
 
     private void ShowZabbix()
@@ -482,6 +501,15 @@ public partial class EntryEditorWindow : Window
 
     private void OnOk(object sender, RoutedEventArgs e)
     {
+        // A URL from a template still says {host}: select it so typing the address replaces it.
+        if (!TemplateMode && _e.Kind == EntryKind.Web && UrlBox.Text.IndexOf(EntryTemplates.HostPlaceholder, StringComparison.Ordinal) is var at and >= 0)
+        {
+            TabGeneral.IsChecked = true;
+            UrlBox.Focus();
+            UrlBox.Select(at, EntryTemplates.HostPlaceholder.Length);
+            return;
+        }
+        if (TemplateMode) NameBox.Text = _e.Name.Length > 0 ? _e.Name : "template";
         if (string.IsNullOrWhiteSpace(NameBox.Text))
         {
             // Default the name to the first host, like a quick connect.
@@ -497,7 +525,8 @@ public partial class EntryEditorWindow : Window
 
         if (_e.IsConnectable)
         {
-            _e.Endpoints = _hosts.Where(h => !string.IsNullOrWhiteSpace(h.Host))
+            // A template keeps a port-only first row, so its entries start on that port.
+            _e.Endpoints = _hosts.Where((h, i) => !string.IsNullOrWhiteSpace(h.Host) || (TemplateMode && i == 0 && h.Port.Trim().Length > 0))
                 .Select(h => new HostEndpoint(h.Host.Trim(), int.TryParse(h.Port, out var p) ? p : 0)).ToList();
         }
 
@@ -514,7 +543,7 @@ public partial class EntryEditorWindow : Window
             {
                 _e.Credential ??= new();
                 ReadCredential(_e.Credential);
-                if (SaveAsCredential.IsChecked == true)
+                if (SaveAsCredential.IsChecked == true && !TemplateMode)
                 {
                     // Also keep it as its own credential entry, and link to that instead.
                     NewCredential = new Entry { Kind = EntryKind.Credential, ParentId = _e.ParentId, Name = DisplayName(_e.Credential, _e.Name), Credential = _e.Credential };
