@@ -1,0 +1,360 @@
+<UserControl x:Class="RemoteMan.App.Views.DashboardView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:local="clr-namespace:RemoteMan.App"
+             xmlns:vm="clr-namespace:RemoteMan.App.ViewModels"
+             Background="{StaticResource Bg}">
+    <UserControl.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolVis" />
+        <local:EmptyToCollapsedConverter x:Key="EmptyVis" />
+        <local:InverseBoolToVisibilityConverter x:Key="InvBoolVis" />
+
+        <!-- A widget: panel card with a small caps title row -->
+        <Style TargetType="Border" x:Key="Widget">
+            <Setter Property="Background" Value="{StaticResource Panel}" />
+            <Setter Property="BorderBrush" Value="{StaticResource Border}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="{StaticResource Radius}" />
+            <Setter Property="Margin" Value="0,0,12,12" />
+        </Style>
+        <Style TargetType="TextBlock" x:Key="WidgetTitle">
+            <Setter Property="Foreground" Value="{StaticResource Muted}" />
+            <Setter Property="FontSize" Value="11" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Typography.Capitals" Value="AllSmallCaps" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+        <Style TargetType="TextBlock" x:Key="WidgetMeta">
+            <Setter Property="Foreground" Value="{StaticResource Faint}" />
+            <Setter Property="FontSize" Value="11" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+        </Style>
+        <Style TargetType="Border" x:Key="WidgetHeader">
+            <Setter Property="Height" Value="32" />
+            <Setter Property="Padding" Value="12,0" />
+            <Setter Property="BorderBrush" Value="{StaticResource BorderSoft}" />
+            <Setter Property="BorderThickness" Value="0,0,0,1" />
+        </Style>
+        <Style TargetType="TextBlock" x:Key="Empty">
+            <Setter Property="Foreground" Value="{StaticResource Faint}" />
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="Margin" Value="6,4" />
+            <Setter Property="TextWrapping" Value="Wrap" />
+        </Style>
+
+        <!-- A clickable row: hover highlight, hand cursor -->
+        <Style TargetType="Button" x:Key="RowButton">
+            <Setter Property="Foreground" Value="{StaticResource Text}" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="b" Background="Transparent" CornerRadius="{StaticResource Radius}" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Stretch" VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="b" Property="Background" Value="{StaticResource Hover}" /></Trigger>
+                            <Trigger Property="IsKeyboardFocused" Value="True"><Setter TargetName="b" Property="Background" Value="{StaticResource Select}" /></Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- An entry row: icon, name, folder/host, right side text. Click selects it in the tree, double-click connects. -->
+        <DataTemplate x:Key="EntryRow" DataType="{x:Type vm:DashEntry}">
+            <Button Style="{StaticResource RowButton}" Padding="6,0" Height="28" ToolTip="{Binding Detail}"
+                    Command="{Binding DataContext.RevealCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" CommandParameter="{Binding Id}"
+                    MouseDoubleClick="OnEntryDoubleClick">
+                <DockPanel>
+                    <Path Style="{StaticResource KindIcon}" Tag="{Binding Tag}" Margin="0,0,8,0" />
+                    <TextBlock DockPanel.Dock="Right" Text="{Binding Side}" Style="{StaticResource WidgetMeta}" Margin="8,0,0,0" />
+                    <Path DockPanel.Dock="Right" Style="{StaticResource HealthGlyph}" Tag="{Binding Health}" Margin="6,0,0,0">
+                        <Path.LayoutTransform><ScaleTransform ScaleX="0.8" ScaleY="0.8" /></Path.LayoutTransform>
+                    </Path>
+                    <TextBlock VerticalAlignment="Center" TextTrimming="CharacterEllipsis" FontSize="12.5">
+                        <Run Text="{Binding Name}" /><Run Text="  " /><Run Text="{Binding Detail}" Foreground="{StaticResource Faint}" FontSize="11" />
+                    </TextBlock>
+                </DockPanel>
+            </Button>
+        </DataTemplate>
+
+        <!-- Favorites: a small card per entry -->
+        <DataTemplate x:Key="FavoriteCard" DataType="{x:Type vm:DashEntry}">
+            <Button Margin="0,0,6,6" Padding="0" Cursor="Hand" ToolTip="Double-click to connect"
+                    Command="{Binding DataContext.RevealCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" CommandParameter="{Binding Id}"
+                    MouseDoubleClick="OnEntryDoubleClick">
+                <Button.Template>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="b" Background="{StaticResource Panel2}" BorderBrush="{StaticResource BorderSoft}" BorderThickness="1" CornerRadius="{StaticResource Radius}" Padding="9,6">
+                            <ContentPresenter />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="b" Property="BorderBrush" Value="{StaticResource ButtonBorder}" /><Setter TargetName="b" Property="Background" Value="{StaticResource Hover}" /></Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Button.Template>
+                <DockPanel>
+                    <Path Style="{StaticResource KindIcon}" Tag="{Binding Tag}" Margin="0,0,8,0" />
+                    <Path DockPanel.Dock="Right" Style="{StaticResource HealthGlyph}" Tag="{Binding Health}" Margin="6,0,0,0">
+                        <Path.LayoutTransform><ScaleTransform ScaleX="0.8" ScaleY="0.8" /></Path.LayoutTransform>
+                    </Path>
+                    <StackPanel>
+                        <TextBlock Text="{Binding Name}" Foreground="{StaticResource TextStrong}" FontSize="12.5" TextTrimming="CharacterEllipsis" />
+                        <TextBlock Text="{Binding Detail}" FontFamily="{StaticResource MonoFont}" FontSize="11" Foreground="{StaticResource Faint}" TextTrimming="CharacterEllipsis" />
+                    </StackPanel>
+                </DockPanel>
+            </Button>
+        </DataTemplate>
+
+        <!-- A bar row: protocol or folder, track split by star widths -->
+        <DataTemplate x:Key="BarRow" DataType="{x:Type vm:DashBar}">
+            <Grid Height="24">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="130" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="40" />
+                </Grid.ColumnDefinitions>
+                <DockPanel VerticalAlignment="Center">
+                    <Path x:Name="icon" Style="{StaticResource KindIcon}" Tag="{Binding Tag}" Margin="0,0,8,0" />
+                    <TextBlock Text="{Binding Name}" FontSize="12" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                </DockPanel>
+                <Grid Grid.Column="1" Height="8" VerticalAlignment="Center">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="{Binding Fill}" />
+                        <ColumnDefinition Width="{Binding Rest}" />
+                    </Grid.ColumnDefinitions>
+                    <Border Grid.ColumnSpan="2" Background="{StaticResource BorderSoft}" CornerRadius="2" />
+                    <Border x:Name="bar" Background="{StaticResource EntryIcon}" Opacity="0.85" CornerRadius="2" />
+                </Grid>
+                <TextBlock Grid.Column="2" Text="{Binding Count}" Style="{StaticResource MutedText}" FontSize="12" HorizontalAlignment="Right" VerticalAlignment="Center" />
+            </Grid>
+            <DataTemplate.Triggers>
+                <DataTrigger Binding="{Binding Tag}" Value="DIR">
+                    <Setter TargetName="icon" Property="Data" Value="{StaticResource Icon.DIR}" />
+                    <Setter TargetName="icon" Property="Stroke" Value="{StaticResource FolderIcon}" />
+                    <Setter TargetName="bar" Property="Background" Value="{StaticResource FolderIcon}" />
+                </DataTrigger>
+            </DataTemplate.Triggers>
+        </DataTemplate>
+    </UserControl.Resources>
+
+    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False">
+        <StackPanel Margin="20,18,8,10">
+            <!-- Heading: data source, state, buttons -->
+            <DockPanel Margin="0,0,12,16">
+                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Bottom">
+                    <Button Content="Widgets" Padding="10,0" Height="26" Click="OnWidgetsMenu" ToolTip="Choose which widgets show" />
+                </StackPanel>
+                <StackPanel>
+                    <TextBlock Text="Dashboard" FontSize="20" FontWeight="SemiBold" Foreground="{StaticResource TextStrong}" />
+                    <TextBlock FontSize="12" Margin="0,2,0,0" TextTrimming="CharacterEllipsis">
+                        <Run Text="{Binding SourceName, Mode=OneWay}" Foreground="{StaticResource Muted}" /><Run Text=" · " Foreground="{StaticResource Faint}" /><Run Text="{Binding SourceState, Mode=OneWay}">
+                            <Run.Style>
+                                <Style TargetType="Run">
+                                    <Setter Property="Foreground" Value="{StaticResource Bad}" />
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding SourceOk}" Value="True"><Setter Property="Foreground" Value="{StaticResource Ok}" /></DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Run.Style>
+                        </Run><Run Text=" · " Foreground="{StaticResource Faint}" /><Run Text="{Binding Updated, Mode=OneWay}" Foreground="{StaticResource Faint}" />
+                    </TextBlock>
+                </StackPanel>
+            </DockPanel>
+
+            <!-- Totals -->
+            <ItemsControl ItemsSource="{Binding Tiles}" Focusable="False" Visibility="{Binding ShowTiles, Converter={StaticResource BoolVis}}">
+                <ItemsControl.ItemsPanel><ItemsPanelTemplate><UniformGrid Rows="1" /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate DataType="{x:Type vm:DashTile}">
+                        <Border Style="{StaticResource Widget}" Padding="12,10">
+                            <StackPanel>
+                                <TextBlock Text="{Binding Label}" Style="{StaticResource WidgetTitle}" />
+                                <TextBlock Text="{Binding Value}" FontSize="24" FontWeight="SemiBold" Foreground="{StaticResource TextStrong}" Margin="0,1,0,0" />
+                                <TextBlock Text="{Binding Sub}" Style="{StaticResource WidgetMeta}" />
+                            </StackPanel>
+                        </Border>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+
+            <!-- Protocols and Zabbix -->
+            <UniformGrid Rows="1">
+                <Border Style="{StaticResource Widget}" Visibility="{Binding ShowProtocols, Converter={StaticResource BoolVis}}">
+                    <DockPanel>
+                        <Border DockPanel.Dock="Top" Style="{StaticResource WidgetHeader}">
+                            <DockPanel>
+                                <TextBlock DockPanel.Dock="Right" Text="{Binding ProtocolTotal}" Style="{StaticResource WidgetMeta}" />
+                                <TextBlock Text="Entries by protocol" Style="{StaticResource WidgetTitle}" />
+                            </DockPanel>
+                        </Border>
+                        <ItemsControl ItemsSource="{Binding Protocols}" ItemTemplate="{StaticResource BarRow}" Focusable="False" Margin="12,8,12,10" />
+                    </DockPanel>
+                </Border>
+
+                <Border Style="{StaticResource Widget}" Visibility="{Binding ZabbixVisible, Converter={StaticResource BoolVis}}">
+                    <DockPanel>
+                        <Border DockPanel.Dock="Top" Style="{StaticResource WidgetHeader}">
+                            <DockPanel>
+                                <TextBlock DockPanel.Dock="Right" FontSize="11.5" VerticalAlignment="Center" Margin="12,0,0,0">
+                                    <Hyperlink Command="{Binding OpenZabbixCommand}" Foreground="#7FD3C4" ToolTip="Open the problem list in the Zabbix web UI">Open Zabbix</Hyperlink>
+                                </TextBlock>
+                                <TextBlock Text="Zabbix" Style="{StaticResource WidgetTitle}" Margin="0,0,12,0" />
+                                <TextBlock Text="{Binding ZabbixMeta}" Style="{StaticResource WidgetMeta}" HorizontalAlignment="Right" />
+                            </DockPanel>
+                        </Border>
+                        <StackPanel Margin="12,10,12,10">
+                            <TextBlock Text="{Binding ZabbixWaiting}" Style="{StaticResource Empty}" Visibility="{Binding ZabbixHasData, Converter={StaticResource InvBoolVis}}" />
+                            <StackPanel Visibility="{Binding ZabbixHasData, Converter={StaticResource BoolVis}}">
+                                <UniformGrid Rows="1" Margin="0,0,-6,10">
+                                    <UniformGrid.Resources>
+                                        <Style TargetType="Border">
+                                            <Setter Property="Background" Value="{StaticResource Panel2}" />
+                                            <Setter Property="BorderBrush" Value="{StaticResource BorderSoft}" />
+                                            <Setter Property="BorderThickness" Value="1" />
+                                            <Setter Property="CornerRadius" Value="{StaticResource Radius}" />
+                                            <Setter Property="Padding" Value="8,5" />
+                                            <Setter Property="Margin" Value="0,0,6,0" />
+                                        </Style>
+                                    </UniformGrid.Resources>
+                                    <Border><StackPanel><TextBlock Text="{Binding ZabbixOk}" FontSize="18" FontWeight="SemiBold" Foreground="{StaticResource Ok}" /><TextBlock Text="Hosts OK" Style="{StaticResource WidgetMeta}" /></StackPanel></Border>
+                                    <Border><StackPanel><TextBlock Text="{Binding ZabbixWarn}" FontSize="18" FontWeight="SemiBold" Foreground="{StaticResource Warn}" /><TextBlock Text="Warning" Style="{StaticResource WidgetMeta}" /></StackPanel></Border>
+                                    <Border><StackPanel><TextBlock Text="{Binding ZabbixHigh}" FontSize="18" FontWeight="SemiBold" Foreground="{StaticResource Bad}" /><TextBlock Text="High or worse" Style="{StaticResource WidgetMeta}" /></StackPanel></Border>
+                                    <Border><StackPanel><TextBlock Text="{Binding ZabbixUnreach}" FontSize="18" FontWeight="SemiBold" Foreground="{StaticResource Maint}" /><TextBlock Text="Unreachable" Style="{StaticResource WidgetMeta}" /></StackPanel></Border>
+                                </UniformGrid>
+                                <TextBlock Text="No open problems." Style="{StaticResource Empty}" Visibility="{Binding NoProblems, Converter={StaticResource BoolVis}}" />
+                                <ItemsControl ItemsSource="{Binding Problems}" Focusable="False">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate DataType="{x:Type vm:DashProblem}">
+                                            <Button Style="{StaticResource RowButton}" Padding="0" Margin="0,0,0,4" ToolTip="Select this entry in the tree"
+                                                    Command="{Binding DataContext.RevealProblemCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" CommandParameter="{Binding}">
+                                                <Border Background="#1A1E22" CornerRadius="{StaticResource Radius}" Padding="8,5">
+                                                    <DockPanel>
+                                                        <Path Style="{StaticResource HealthGlyph}" Tag="{Binding Tag}" VerticalAlignment="Top" Margin="0,0,8,0">
+                                                            <Path.LayoutTransform><ScaleTransform ScaleX="0.85" ScaleY="0.85" /></Path.LayoutTransform>
+                                                        </Path>
+                                                        <TextBlock DockPanel.Dock="Right" Text="{Binding Age}" Style="{StaticResource WidgetMeta}" VerticalAlignment="Top" Margin="8,0,0,0" />
+                                                        <StackPanel>
+                                                            <TextBlock Text="{Binding Name}" FontSize="12" TextTrimming="CharacterEllipsis" ToolTip="{Binding Name}" />
+                                                            <TextBlock Text="{Binding Where}" FontSize="11" Foreground="{StaticResource Muted}" TextTrimming="CharacterEllipsis" />
+                                                        </StackPanel>
+                                                    </DockPanel>
+                                                </Border>
+                                            </Button>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                                <TextBlock Text="{Binding ProblemsMore}" Style="{StaticResource WidgetMeta}" Margin="2,2,0,0" Visibility="{Binding ProblemsMore, Converter={StaticResource EmptyVis}}" />
+                            </StackPanel>
+                        </StackPanel>
+                    </DockPanel>
+                </Border>
+            </UniformGrid>
+
+            <!-- Favorites, Recent, Folders -->
+            <UniformGrid Rows="1">
+                <Border Style="{StaticResource Widget}" Visibility="{Binding ShowFavorites, Converter={StaticResource BoolVis}}">
+                    <DockPanel>
+                        <Border DockPanel.Dock="Top" Style="{StaticResource WidgetHeader}">
+                            <DockPanel>
+                                <TextBlock DockPanel.Dock="Right" Text="double-click to connect" Style="{StaticResource WidgetMeta}" />
+                                <TextBlock Text="Favorites" Style="{StaticResource WidgetTitle}" />
+                            </DockPanel>
+                        </Border>
+                        <StackPanel Margin="10,10,4,4">
+                            <TextBlock Text="No favorites yet. Right-click an entry and pick Add to favorites." Style="{StaticResource Empty}"
+                                       Visibility="{Binding HasFavorites, Converter={StaticResource InvBoolVis}}" />
+                            <ItemsControl ItemsSource="{Binding Favorites}" ItemTemplate="{StaticResource FavoriteCard}" Focusable="False">
+                                <ItemsControl.ItemsPanel><ItemsPanelTemplate><UniformGrid Columns="2" VerticalAlignment="Top" /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                            </ItemsControl>
+                        </StackPanel>
+                    </DockPanel>
+                </Border>
+
+                <Border Style="{StaticResource Widget}" Visibility="{Binding ShowRecent, Converter={StaticResource BoolVis}}">
+                    <DockPanel>
+                        <Border DockPanel.Dock="Top" Style="{StaticResource WidgetHeader}">
+                            <DockPanel>
+                                <TextBlock DockPanel.Dock="Right" Text="last 8" Style="{StaticResource WidgetMeta}" />
+                                <TextBlock Text="Recent" Style="{StaticResource WidgetTitle}" />
+                            </DockPanel>
+                        </Border>
+                        <StackPanel Margin="6,8,6,8">
+                            <TextBlock Text="Entries you open show up here." Style="{StaticResource Empty}" Visibility="{Binding HasRecent, Converter={StaticResource InvBoolVis}}" />
+                            <ItemsControl ItemsSource="{Binding Recent}" ItemTemplate="{StaticResource EntryRow}" Focusable="False" />
+                        </StackPanel>
+                    </DockPanel>
+                </Border>
+
+                <Border Style="{StaticResource Widget}" Visibility="{Binding ShowFolders, Converter={StaticResource BoolVis}}">
+                    <DockPanel>
+                        <Border DockPanel.Dock="Top" Style="{StaticResource WidgetHeader}">
+                            <DockPanel>
+                                <TextBlock DockPanel.Dock="Right" Text="entries inside, any depth" Style="{StaticResource WidgetMeta}" />
+                                <TextBlock Text="Folders" Style="{StaticResource WidgetTitle}" />
+                            </DockPanel>
+                        </Border>
+                        <StackPanel Margin="12,8,12,10">
+                            <TextBlock Text="No folders yet." Style="{StaticResource Empty}" Visibility="{Binding HasFolders, Converter={StaticResource InvBoolVis}}" />
+                            <ItemsControl ItemsSource="{Binding Folders}" Focusable="False">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate DataType="{x:Type vm:DashBar}">
+                                        <Button Style="{StaticResource RowButton}" Padding="0" ToolTip="Select this folder in the tree"
+                                                Command="{Binding DataContext.RevealCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" CommandParameter="{Binding Id}">
+                                            <ContentPresenter Content="{Binding}" ContentTemplate="{StaticResource BarRow}" />
+                                        </Button>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+                    </DockPanel>
+                </Border>
+            </UniformGrid>
+
+            <!-- Housekeeping -->
+            <Border Style="{StaticResource Widget}" Visibility="{Binding ShowChecks, Converter={StaticResource BoolVis}}">
+                <DockPanel>
+                    <Border DockPanel.Dock="Top" Style="{StaticResource WidgetHeader}">
+                        <DockPanel>
+                            <TextBlock DockPanel.Dock="Right" Text="click a line to list those entries" Style="{StaticResource WidgetMeta}" />
+                            <TextBlock Text="Housekeeping" Style="{StaticResource WidgetTitle}" />
+                        </DockPanel>
+                    </Border>
+                    <ItemsControl ItemsSource="{Binding Checks}" Focusable="False" Margin="6,6,6,8">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate DataType="{x:Type vm:DashCheck}">
+                                <StackPanel>
+                                    <Button Style="{StaticResource RowButton}" Padding="6,0" Height="28"
+                                            Command="{Binding DataContext.ToggleCheckCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" CommandParameter="{Binding}">
+                                        <DockPanel>
+                                            <TextBlock x:Name="num" DockPanel.Dock="Right" Text="{Binding Count}" FontWeight="SemiBold" Foreground="{StaticResource TextStrong}" VerticalAlignment="Center" />
+                                            <Path x:Name="chev" Width="9" Height="9" Margin="0,0,8,0" Stretch="Uniform" Stroke="{StaticResource Faint}" StrokeThickness="1.6"
+                                                  Data="M0,0 L4,4 L0,8" VerticalAlignment="Center" />
+                                            <TextBlock Text="{Binding Label}" FontSize="12.5" VerticalAlignment="Center" />
+                                        </DockPanel>
+                                    </Button>
+                                    <StackPanel Margin="22,0,0,6" Visibility="{Binding IsOpen, Converter={StaticResource BoolVis}}">
+                                        <ItemsControl ItemsSource="{Binding Shown}" ItemTemplate="{StaticResource EntryRow}" Focusable="False" />
+                                        <TextBlock Text="{Binding MoreText}" Style="{StaticResource WidgetMeta}" Margin="6,2,0,0" Visibility="{Binding MoreText, Converter={StaticResource EmptyVis}}" />
+                                    </StackPanel>
+                                </StackPanel>
+                                <DataTemplate.Triggers>
+                                    <DataTrigger Binding="{Binding IsWarn}" Value="True"><Setter TargetName="num" Property="Foreground" Value="{StaticResource Warn}" /></DataTrigger>
+                                    <DataTrigger Binding="{Binding Count}" Value="0">
+                                        <Setter TargetName="num" Property="Foreground" Value="{StaticResource Faint}" />
+                                        <Setter TargetName="chev" Property="Visibility" Value="Hidden" />
+                                    </DataTrigger>
+                                    <DataTrigger Binding="{Binding IsOpen}" Value="True"><Setter TargetName="chev" Property="Data" Value="M0,0 L4,4 L8,0" /></DataTrigger>
+                                </DataTemplate.Triggers>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </DockPanel>
+            </Border>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

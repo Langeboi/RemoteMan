@@ -32,6 +32,10 @@ public sealed class AppSettings
     // Per-user UI state (not shared through the data source).
     public List<Guid> Favorites { get; set; } = new();
     public List<Guid> Recent { get; set; } = new();
+    /// <summary>When each recent entry was last opened, for the Dashboard.</summary>
+    public Dictionary<Guid, DateTimeOffset> RecentAt { get; set; } = new();
+    /// <summary>Dashboard widgets turned off (tiles, protocols, zabbix, favorites, recent, folders, checks).</summary>
+    public List<string> DashboardHidden { get; set; } = new();
     /// <summary>Two panes side by side. Off by default (single pane); a new name so earlier test builds' saved "on" is dropped.</summary>
     public bool SplitPane { get; set; }
 

@@ -77,12 +77,14 @@ public sealed partial class MainViewModel
             ZabbixConnState = "bad";
             ZabbixStatusTag = "unreach";
             ZabbixStatusText = ZabbixSnapshot is { } last ? $"Zabbix: {err} (showing data from {last.FetchedAt.ToLocalTime():HH:mm})" : $"Zabbix: {err}";
+            RefreshDashboard();
         });
         _zabbix = monitor;
         ZabbixActive = true;
         ZabbixStatusTag = null;
         ZabbixStatusText = "Zabbix: connecting…";
         ZabbixConnState = "wait";
+        RefreshDashboard();
         var host = cfg.Url;
         try { host = ZabbixClient.ApiEndpoint(cfg.Url).Host; } catch (ZabbixApiException) { }
         var jump = cfg.JumpHostEntryId is { } jid ? _store?.Get(jid)?.Name : null;
@@ -138,6 +140,7 @@ public sealed partial class MainViewModel
                 : $"Zabbix: {problems} problem{(problems == 1 ? "" : "s")} on {hosts} host{(hosts == 1 ? "" : "s")} · {snap.FetchedAt.ToLocalTime():HH:mm:ss}";
         }
         RefreshZabbixCard();
+        RefreshDashboard();
     }
 
     /// <summary>Glyphs only for errors and warnings: OK and maintenance show nothing.</summary>

@@ -110,7 +110,7 @@ public sealed partial class MainViewModel
     [RelayCommand]
     private void CloseSession(SessionViewModel? s)
     {
-        if (s is null || !Sessions.Contains(s)) return;
+        if (s is null || s.IsPinned || !Sessions.Contains(s)) return;
         var list = PaneList(s.Pane);
         var idx = list.IndexOf(s);
         var wasActive = PaneActive(s.Pane) == s;
@@ -130,7 +130,7 @@ public sealed partial class MainViewModel
     [RelayCommand]
     private void MoveToOtherPane(SessionViewModel? s)
     {
-        if (s is null) return;
+        if (s is null || s.IsPinned) return;
         if (!IsSplit) IsSplit = true;
         MoveSession(s, s.Pane == 0 ? 1 : 0);
         ActiveSession = s;
@@ -201,6 +201,7 @@ public sealed partial class MainViewModel
         TrySaveSettings();
         Message = removed ? $"Removed {e.Name} from favorites" : $"Added {e.Name} to favorites";
         if (PanelMode == "fav") RebuildTree();
+        RefreshDashboard();
     }
 
     private void RememberRecent(Entry e)
@@ -209,8 +210,11 @@ public sealed partial class MainViewModel
         _settings.Recent.Remove(e.Id);
         _settings.Recent.Insert(0, e.Id);
         if (_settings.Recent.Count > 20) _settings.Recent.RemoveRange(20, _settings.Recent.Count - 20);
+        _settings.RecentAt[e.Id] = DateTimeOffset.Now;
+        foreach (var gone in _settings.RecentAt.Keys.Where(k => !_settings.Recent.Contains(k)).ToList()) _settings.RecentAt.Remove(gone);
         TrySaveSettings();
         if (PanelMode == "recent") RebuildTree();
+        RefreshDashboard();
     }
 
     private void TrySaveSettings()

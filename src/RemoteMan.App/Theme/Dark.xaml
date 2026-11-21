@@ -94,6 +94,7 @@
     <Geometry x:Key="Icon.PVE">M1.5,3.5 h13 v8 h-13 z M4,7.5 h2 M10,6 l2,1.5 l-2,1.5 M5,14.5 h6</Geometry>
     <Geometry x:Key="Icon.PS">M1.5,2.5 h13 v11 h-13 z M1.5,4.5 h13 M4,7 l3,2 l-3,2 M8,11.5 h4</Geometry>
     <Geometry x:Key="Icon.WBX">M2,3.5 h12 v9 h-12 z M2,6 h12 M4.5,9 h2 M9.5,9 h2 M4.5,10.8 h7</Geometry>
+    <Geometry x:Key="Icon.DASH">M1.5,1.5 h5.5 v6 h-5.5 z M9,1.5 h5.5 v3.5 h-5.5 z M9,7 h5.5 v7.5 h-5.5 z M1.5,9.5 h5.5 v5 h-5.5 z</Geometry>
     <Geometry x:Key="Icon.DIR">M1.5,3.5 h4.5 l1.5,1.5 h7 v8 h-13 z</Geometry>
 
     <Style TargetType="Path" x:Key="KindIcon">
@@ -119,6 +120,7 @@
             <Trigger Property="Tag" Value="PVE"><Setter Property="Data" Value="{StaticResource Icon.PVE}" /><Setter Property="ToolTip" Value="Proxmox console" /></Trigger>
             <Trigger Property="Tag" Value="PS"><Setter Property="Data" Value="{StaticResource Icon.PS}" /><Setter Property="ToolTip" Value="PowerShell remoting" /></Trigger>
             <Trigger Property="Tag" Value="WBX"><Setter Property="Data" Value="{StaticResource Icon.WBX}" /><Setter Property="ToolTip" Value="WinBox" /></Trigger>
+            <Trigger Property="Tag" Value="DASH"><Setter Property="Data" Value="{StaticResource Icon.DASH}" /><Setter Property="ToolTip" Value="Dashboard" /><Setter Property="Stroke" Value="{StaticResource Accent}" /></Trigger>
             <Trigger Property="Tag" Value="KEY"><Setter Property="Data" Value="{StaticResource Icon.KEY}" /><Setter Property="ToolTip" Value="Credential" /><Setter Property="Stroke" Value="{StaticResource KeyIcon}" /></Trigger>
         </Style.Triggers>
     </Style>

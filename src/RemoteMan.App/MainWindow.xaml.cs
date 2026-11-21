@@ -47,7 +47,10 @@ public partial class MainWindow : Window
         DataContext = _vm;
         SetUpNotices();
 
-        _ai = new AiAssistantViewModel(settings, () => _vm.ActiveSession) { StatusMessage = m => _vm.Message = m };
+        // The Dashboard tab isn't a connection: the assistant sees no session while it's showing.
+        _ai = new AiAssistantViewModel(settings, () => _vm.ActiveSession is DashboardViewModel ? null : _vm.ActiveSession) { StatusMessage = m => _vm.Message = m };
+        _vm.RevealRequested += (_, node) => Dispatcher.BeginInvoke(() => RevealInTree(node), System.Windows.Threading.DispatcherPriority.Loaded);
+        _vm.PropertyChanged += (_, e) => { if (e.PropertyName == nameof(MainViewModel.PanelMode)) SyncRail(); };
         AiButton.DataContext = _ai;
         _vm.PropertyChanged += (_, e) => { if (e.PropertyName == nameof(MainViewModel.ActiveSession)) _ai.RefreshSession(); };
         LocationChanged += (_, _) => _aiWindow?.Reposition();
@@ -146,6 +149,42 @@ public partial class MainWindow : Window
     private void OnRailChecked(object sender, RoutedEventArgs e)
     {
         if (_vm is not null && sender is FrameworkElement { Tag: string mode }) _vm.PanelMode = mode;
+    }
+
+    /// <summary>Keeps the rail's checked button in step when the panel changes from code (the dashboard leaving Favorites, say).</summary>
+    private void SyncRail()
+    {
+        foreach (var rb in FindChildren<RadioButton>(this))
+            if (rb.GroupName == "Rail" && rb.Tag as string == _vm.PanelMode && rb.IsChecked != true) rb.IsChecked = true;
+    }
+
+    private static IEnumerable<T> FindChildren<T>(DependencyObject parent) where T : DependencyObject
+    {
+        for (var i = 0; i < VisualTreeHelper.GetChildrenCount(parent); i++)
+        {
+            var c = VisualTreeHelper.GetChild(parent, i);
+            if (c is T t) yield return t;
+            foreach (var d in FindChildren<T>(c)) yield return d;
+        }
+    }
+
+    /// <summary>Scrolls the tree to an entry the dashboard picked and focuses it.</summary>
+    private void RevealInTree(EntryNode node)
+    {
+        Tree.UpdateLayout();
+        if (FindContainer(Tree, node) is { } item) { item.BringIntoView(); item.Focus(); }
+    }
+
+    private static TreeViewItem? FindContainer(ItemsControl parent, EntryNode node)
+    {
+        if (parent.ItemContainerGenerator.ContainerFromItem(node) is TreeViewItem direct) return direct;
+        foreach (var child in parent.Items)
+        {
+            if (parent.ItemContainerGenerator.ContainerFromItem(child) is not TreeViewItem tvi || !tvi.IsExpanded) continue;
+            tvi.UpdateLayout();
+            if (FindContainer(tvi, node) is { } found) return found;
+        }
+        return null;
     }
 
     private void OnCollapseAll(object sender, RoutedEventArgs e)

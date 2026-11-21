@@ -26,6 +26,8 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
     {
         _settings = settings;
         _isSplit = settings.SplitPane;
+        CreateDashboard();
+        Sessions.CollectionChanged += (_, _) => RefreshDashboard();
     }
 
     // --- dialogs supplied by the window ---
@@ -102,6 +104,7 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
         DataSourceText = store.IsOnline
             ? $"{source.DisplayName} as {store.User}"
             : $"{source.DisplayName}: offline, retrying every {store.ReconnectInterval.TotalSeconds:0} s" + (store.LastError is { } err ? $" ({err})" : "");
+        RefreshDashboard();
     }
 
     private static void OnUi(Action a)
@@ -386,8 +389,8 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
             Message = "";
             jumped.CloseRequested += (_, _) => CloseSession(jumped);
             TrackFailures(jumped);
-            Sessions.Add(jumped);
-            ActiveSession = jumped;
+            AddSession(jumped);
+            RememberRecent(e);
             return;
         }
 

@@ -163,12 +163,13 @@ public sealed class ZabbixClient : IDisposable
         return result;
     }
 
-    /// <summary>The frontend page that lists a host's problems.</summary>
-    public static string ProblemsUrl(string url, string hostId)
+    /// <summary>The frontend page that lists a host's problems, or every problem when no host is given.</summary>
+    public static string ProblemsUrl(string url, string? hostId = null)
     {
         var api = ApiEndpoint(url);
         var basePath = api.AbsolutePath[..^"api_jsonrpc.php".Length];
-        var b = new UriBuilder(api) { Path = basePath + "zabbix.php", Query = $"action=problem.view&filter_set=1&hostids%5B%5D={Uri.EscapeDataString(hostId)}" };
+        var query = hostId is null ? "action=problem.view" : $"action=problem.view&filter_set=1&hostids%5B%5D={Uri.EscapeDataString(hostId)}";
+        var b = new UriBuilder(api) { Path = basePath + "zabbix.php", Query = query };
         return b.Uri.ToString();
     }
 

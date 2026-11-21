@@ -22,6 +22,7 @@
         <DataTemplate DataType="{x:Type vm:RdpSessionViewModel}"><views:RdpSessionView /></DataTemplate>
         <DataTemplate DataType="{x:Type vm:WebSessionViewModel}"><views:WebSessionView /></DataTemplate>
         <DataTemplate DataType="{x:Type vm:FilesSessionViewModel}"><views:FilesSessionView /></DataTemplate>
+        <DataTemplate DataType="{x:Type vm:DashboardViewModel}"><views:DashboardView /></DataTemplate>
 
         <HierarchicalDataTemplate DataType="{x:Type vm:EntryNode}" ItemsSource="{Binding Children}">
             <DockPanel LastChildFill="True">
@@ -80,18 +81,35 @@
         <!-- One tab in a pane's tab strip -->
         <DataTemplate x:Key="TabHeader">
             <StackPanel Orientation="Horizontal" MouseDown="OnTabMouseDown" Background="Transparent">
-                <StackPanel.ContextMenu>
-                    <ContextMenu>
-                        <MenuItem Header="Move to other pane" Click="OnMoveTab" />
-                        <Separator />
-                        <MenuItem Header="Close" InputGestureText="Ctrl+W" Click="OnCloseTab" />
-                    </ContextMenu>
-                </StackPanel.ContextMenu>
+                <!-- The Dashboard tab is pinned: no menu, no close button -->
+                <StackPanel.Style>
+                    <Style TargetType="StackPanel">
+                        <Setter Property="ContextMenu">
+                            <Setter.Value>
+                                <ContextMenu>
+                                    <MenuItem Header="Move to other pane" Click="OnMoveTab" />
+                                    <Separator />
+                                    <MenuItem Header="Close" InputGestureText="Ctrl+W" Click="OnCloseTab" />
+                                </ContextMenu>
+                            </Setter.Value>
+                        </Setter>
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding IsPinned}" Value="True"><Setter Property="ContextMenu" Value="{x:Null}" /></DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </StackPanel.Style>
                 <Path Style="{StaticResource KindIcon}" Tag="{Binding KindTag}" Margin="0,0,7,0" />
                 <TextBlock Text="{Binding Title}" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" VerticalAlignment="Center" />
-                <Button Style="{StaticResource FlatButton}" Width="22" Padding="0" MinHeight="22" Margin="6,0,0,0" Foreground="{StaticResource Faint}"
+                <Button Width="22" Padding="0" MinHeight="22" Margin="6,0,0,0" Foreground="{StaticResource Faint}"
                         ToolTip="Close (Ctrl+W)" AutomationProperties.Name="Close tab"
                         Command="{Binding DataContext.CloseSessionCommand, RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="{Binding}">
+                    <Button.Style>
+                        <Style TargetType="Button" BasedOn="{StaticResource FlatButton}">
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding IsPinned}" Value="True"><Setter Property="Visibility" Value="Collapsed" /></DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Button.Style>
                     <Path Data="M0,0 L8,8 M8,0 L0,8" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" StrokeThickness="1.3" />
                 </Button>
             </StackPanel>

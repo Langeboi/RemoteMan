@@ -21,7 +21,9 @@ public abstract partial class SessionViewModel : ObservableObject, IDisposable
     public HostEndpoint Endpoint { get; }
     public ResolvedCredential Credential { get; }
     public bool UsedFallback { get; }
-    public string KindTag => EntryNode.KindTagFor(Entry.Kind);
+    public virtual string KindTag => EntryNode.KindTagFor(Entry.Kind);
+    /// <summary>Pinned tabs (the Dashboard) have no close button and stay in the left pane.</summary>
+    public virtual bool IsPinned => false;
 
     [ObservableProperty] private string _title;
     /// <summary>True while this tab is the visible one in its pane (both panes can show one in split view).</summary>
