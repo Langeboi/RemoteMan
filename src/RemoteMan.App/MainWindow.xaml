@@ -462,7 +462,9 @@
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate>
                                     <DockPanel Margin="0,2">
-                                        <TextBlock Width="66" Text="{Binding Key}" Style="{StaticResource MutedText}" FontSize="11" />
+                                        <Button x:Name="copy" DockPanel.Dock="Right" Content="Copy" FontSize="10" Padding="5,0" Margin="4,0,0,0" Command="{Binding Copy}"
+                                                ToolTip="Copy to the clipboard" Visibility="{Binding Copy, Converter={StaticResource NullVis}}" />
+                                        <TextBlock Width="66" Text="{Binding Key}" Style="{StaticResource MutedText}" FontSize="11" TextTrimming="CharacterEllipsis" ToolTip="{Binding Key}" />
                                         <TextBlock x:Name="v" Text="{Binding Value}" FontSize="11" TextTrimming="CharacterEllipsis" ToolTip="{Binding Value}" />
                                     </DockPanel>
                                     <DataTemplate.Triggers>

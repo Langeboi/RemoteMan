@@ -7,7 +7,8 @@ public sealed record AutoLoginOptions(
     bool Submit = true,
     string? UserSelector = null,
     string? PasswordSelector = null,
-    string? SubmitSelector = null);
+    string? SubmitSelector = null,
+    bool Totp = false);
 
 /// <summary>
 /// Script injected into every page of a web tab: finds the user name and password boxes,
@@ -93,6 +94,7 @@ public static class AutoFillScript
             userSel = o.UserSelector,
             passSel = o.PasswordSelector,
             submitSel = o.SubmitSelector,
+            totp = o.Totp,
         });
         return "(() => { const cfg = " + cfg + ";\n" + Body + "\n})();";
     }
@@ -162,6 +164,34 @@ public static class AutoFillScript
         }
         return false;
       };
+      // Two-factor: a code box after the password. The host computes the code when asked, so it is fresh.
+      const OTP_SEL = 'input[autocomplete=one-time-code], input[name*=otp i], input[id*=otp i], input[name*=totp i], input[id*=totp i], input[name*=token i], input[id*=token i], input[name*=code i]:not([type=hidden]), input[id*=code i]:not([type=hidden]), input[name*=2fa i], input[name*=mfa i], input[inputmode=numeric][maxlength="6"], input[maxlength="6"][type=text], input[maxlength="6"][type=tel]';
+      let doneOtp = false;
+      const otpTick = () => {
+        if (!cfg.totp || doneOtp || findPw()) return;
+        const box = first(document, OTP_SEL);
+        if (!box || box.value) return;
+        doneOtp = true;
+        const onCode = (e) => {
+          const m = e.data; if (!m || typeof m !== 'object' || !m.rmTotp) return;
+          window.chrome.webview.removeEventListener('message', onCode);
+          set(box, m.rmTotp);
+          if (cfg.submit && !recent('__rm_otp')) { mark('__rm_otp'); press(box.form, box); }
+        };
+        window.chrome.webview.addEventListener('message', onCode);
+        window.chrome.webview.postMessage({ rmTotp: 'need' });
+      };
+      if (cfg.totp) {
+        const startOtp = () => {
+          otpTick();
+          const o = new MutationObserver(otpTick);
+          o.observe(document.documentElement, { childList: true, subtree: true, attributes: true, attributeFilter: ['style', 'class', 'hidden'] });
+          const t = setInterval(otpTick, 500);
+          setTimeout(() => { o.disconnect(); clearInterval(t); }, 60000);
+        };
+        document.readyState === 'loading' ? document.addEventListener('DOMContentLoaded', startOtp) : startOtp();
+      }
+
       const start = () => {
         if (tick()) return;
         // Watch the page change, and also poll: some frameworks enable or show the password box

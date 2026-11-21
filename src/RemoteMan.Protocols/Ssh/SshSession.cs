@@ -65,10 +65,55 @@ public sealed class SshSession : RemoteMan.Protocols.Terminal.ITerminalChannel
         NegotiatedSummary = $"{_client.ConnectionInfo.CurrentKeyExchangeAlgorithm} / {_client.ConnectionInfo.CurrentServerEncryption} / {_client.ConnectionInfo.CurrentHostKeyAlgorithm}";
 
         _shell = _client.CreateShellStream(settings.TerminalType ?? "xterm-256color", cols, rows, 0, 0, 64 * 1024);
-        _shell.DataReceived += (_, e) => Output?.Invoke(Encoding.UTF8.GetString(e.Data));
+        // One decoder for the whole stream, so a character split over two packets still comes out right.
+        var decoder = RemoteMan.Protocols.Terminal.TerminalEncoding.For(settings.Encoding).GetDecoder();
+        _shell.DataReceived += (_, e) =>
+        {
+            var chars = new char[decoder.GetCharCount(e.Data, 0, e.Data.Length)];
+            var n = decoder.GetChars(e.Data, 0, e.Data.Length, chars, 0);
+            if (n > 0) Output?.Invoke(new string(chars, 0, n));
+        };
         _shell.Closed += (_, _) => Closed?.Invoke(null);
 
+        StartForwards(settings.Forwards);
         if (!string.IsNullOrWhiteSpace(settings.StartupCommand)) Send(settings.StartupCommand + "\n");
+    }
+
+    private readonly List<ForwardedPort> _forwards = new();
+
+    /// <summary>What's forwarded right now, for the tab's status line.</summary>
+    public IReadOnlyList<string> ActiveForwards => _forwards.Where(f => f.IsStarted).Select(Describe).ToList();
+
+    private static string Describe(ForwardedPort f) => f switch
+    {
+        ForwardedPortLocal l => $"{l.BoundHost}:{l.BoundPort} → {l.Host}:{l.Port}",
+        ForwardedPortRemote r => $"server {r.BoundHost}:{r.BoundPort} → {r.Host}:{r.Port}",
+        ForwardedPortDynamic d => $"SOCKS {d.BoundHost}:{d.BoundPort}",
+        _ => f.ToString() ?? "",
+    };
+
+    private void StartForwards(IEnumerable<PortForward>? forwards)
+    {
+        if (_client is null || forwards is null) return;
+        foreach (var f in forwards.Where(f => f.Enabled))
+        {
+            try
+            {
+                var listen = string.IsNullOrWhiteSpace(f.ListenHost) ? (f.Kind == ForwardKind.Remote ? "localhost" : "127.0.0.1") : f.ListenHost.Trim();
+                ForwardedPort port = f.Kind switch
+                {
+                    ForwardKind.Dynamic => new ForwardedPortDynamic(listen, (uint)f.ListenPort),
+                    ForwardKind.Remote => new ForwardedPortRemote(listen, (uint)f.ListenPort, f.DestHost ?? "localhost", (uint)f.DestPort),
+                    _ => new ForwardedPortLocal(listen, (uint)f.ListenPort, f.DestHost ?? "localhost", (uint)f.DestPort),
+                };
+                port.Exception += (_, e) => Info?.Invoke($"Forward {f}: {e.Exception.Message}");
+                _client.AddForwardedPort(port);
+                port.Start();
+                _forwards.Add(port);
+                Info?.Invoke($"Forwarding {Describe(port)}");
+            }
+            catch (Exception ex) { Info?.Invoke($"Forward {f} didn't start: {ex.Message}"); }
+        }
     }
 
     /// <summary>The endpoint the shell actually reached (the real host, also when tunnelled).</summary>
@@ -133,22 +178,33 @@ public sealed class SshSession : RemoteMan.Protocols.Terminal.ITerminalChannel
     public static ConnectionInfo BuildConnectionInfo(HostEndpoint endpoint, ResolvedCredential cred, SshSettings settings)
     {
         var user = cred.UserName ?? Environment.UserName;
-        var methods = new List<AuthenticationMethod>();
+        var byName = new Dictionary<string, List<AuthenticationMethod>>();
+        void Add(string name, AuthenticationMethod m) { if (!byName.TryGetValue(name, out var l)) byName[name] = l = new(); l.Add(m); }
 
         if (!string.IsNullOrEmpty(cred.PrivateKey))
         {
             using var keyStream = new MemoryStream(Encoding.UTF8.GetBytes(cred.PrivateKey));
             var key = string.IsNullOrEmpty(cred.Passphrase) ? new PrivateKeyFile(keyStream) : new PrivateKeyFile(keyStream, cred.Passphrase);
-            methods.Add(new PrivateKeyAuthenticationMethod(user, key));
+            Add("publickey", new PrivateKeyAuthenticationMethod(user, key));
         }
         if (cred.Password is { } pw)
+            Add("password", new PasswordAuthenticationMethod(user, pw));
+        if (cred.Password is not null || cred.TotpCode is not null)
         {
-            methods.Add(new PasswordAuthenticationMethod(user, pw));
-            // Many network devices and PAM setups only offer keyboard-interactive.
+            // Many network devices and PAM setups only offer keyboard-interactive. A prompt that asks
+            // for a code (Google Authenticator PAM, Duo, FortiToken) gets the credential's 2FA code.
             var kbd = new KeyboardInteractiveAuthenticationMethod(user);
-            kbd.AuthenticationPrompt += (_, e) => { foreach (var p in e.Prompts) p.Response = pw; };
-            methods.Add(kbd);
+            kbd.AuthenticationPrompt += (_, e) =>
+            {
+                foreach (var p in e.Prompts)
+                    p.Response = LooksLikeCodePrompt(p.Request) && cred.TotpCode is { } code ? code : cred.Password ?? "";
+            };
+            Add("keyboard-interactive", kbd);
         }
+
+        var order = (settings.AuthOrder ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(x => x.ToLowerInvariant()).Concat(["publickey", "password", "keyboard-interactive"]).Distinct();
+        var methods = order.Where(byName.ContainsKey).SelectMany(n => byName[n]).ToList();
         if (methods.Count == 0) methods.Add(new NoneAuthenticationMethod(user));
 
         var info = new ConnectionInfo(endpoint.Host, endpoint.Port, user, methods.ToArray())
@@ -162,7 +218,27 @@ public sealed class SshSession : RemoteMan.Protocols.Terminal.ITerminalChannel
             foreach (var m in LegacyMacs) info.HmacAlgorithms.Remove(m);
             foreach (var h in LegacyHostKeys) info.HostKeyAlgorithms.Remove(h);
         }
+        Restrict(info.KeyExchangeAlgorithms, settings.KexAlgorithms);
+        Restrict(info.Encryptions, settings.Ciphers);
+        Restrict(info.HostKeyAlgorithms, settings.HostKeyAlgorithms);
+        info.Encoding = RemoteMan.Protocols.Terminal.TerminalEncoding.For(settings.Encoding);
         return info;
+    }
+
+    /// <summary>"Verification code:", "Enter OTP", "Token:" and the like.</summary>
+    public static bool LooksLikeCodePrompt(string? prompt) =>
+        prompt is not null && System.Text.RegularExpressions.Regex.IsMatch(prompt, @"code|otp|token|one[- ]time|verification|authenticator|2fa|two[- ]factor", System.Text.RegularExpressions.RegexOptions.IgnoreCase)
+        && !System.Text.RegularExpressions.Regex.IsMatch(prompt, @"pass(word|phrase)", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+
+    /// <summary>"Only these, in this order" for one algorithm list. Names this SSH library doesn't know are skipped;
+    /// if none is known the list is left as it was, so a typo doesn't lock you out.</summary>
+    private static void Restrict<T>(IDictionary<string, T> algos, string? wanted)
+    {
+        var names = (wanted ?? "").Split(',', ';', ' ', '\n').Select(x => x.Trim()).Where(x => x.Length > 0 && algos.ContainsKey(x)).Distinct().ToList();
+        if (names.Count == 0) return;
+        var keep = names.Select(n => (n, algos[n])).ToList();
+        algos.Clear();
+        foreach (var (n, v) in keep) algos.Add(n, v);
     }
 
     /// <summary>
@@ -189,6 +265,8 @@ public sealed class SshSession : RemoteMan.Protocols.Terminal.ITerminalChannel
 
     public void Dispose()
     {
+        foreach (var f in _forwards) { try { f.Stop(); } catch (Exception) { } f.Dispose(); }
+        _forwards.Clear();
         _shell?.Dispose();
         if (_client is { IsConnected: true }) _client.Disconnect();
         _client?.Dispose();
