@@ -26,9 +26,16 @@ public partial class MainWindow : Window
             Confirm = (title, text, action) => Views.ChoiceDialog.Confirm(this, title, text, action, danger: true),
         };
         _vm.OpenWindow = session => new Views.SessionWindow(session, this).Show();
+        _vm.TemplatesDialog = () => new TemplatesWindow(_vm) { Owner = this }.ShowDialog();
+        _vm.SaveAsTemplateDialog = entry => new TemplatesWindow(_vm, RemoteMan.Core.Model.EntryTemplates.FromEntry(entry, entry.Name + " template")) { Owner = this }.ShowDialog();
         _vm.EditDialog = (entry, store, protector) =>
         {
-            var w = new EntryEditorWindow(entry, store, protector) { Owner = this, Zabbix = _vm.ZabbixSnapshot };
+            var w = new EntryEditorWindow(entry, store, protector)
+            {
+                Owner = this, Zabbix = _vm.ZabbixSnapshot,
+                TemplateHeading = _vm.EditingFromTemplate is { } t ? $"New {EntryIcons.KindName(EntryNode.KindTagFor(entry.Kind))} entry from template {t.Name}"
+                    + (t.Template?.CompanionKind is { } ck ? $" (also makes a {ck} entry)" : "") : null,
+            };
             if (w.ShowDialog() != true) return null;
             // A login typed in the entry and kept as a reusable credential is saved first.
             return w.NewCredential is { } cred ? [cred, entry] : [entry];
@@ -141,6 +148,8 @@ public partial class MainWindow : Window
         menu.Items.Add(Cmd("Copy both (paste twice)", _vm.CopyBothCommand, "Ctrl+Shift+B"));
         menu.Items.Add(new Separator());
         menu.Items.Add(new MenuItem { Header = "Close tab", Command = _vm.CloseSessionCommand, CommandParameter = _vm.ActiveSession, InputGestureText = "Ctrl+W" });
+        menu.Items.Add(new Separator());
+        menu.Items.Add(Click("Templates…", (_, _) => _vm.TemplatesDialog?.Invoke()));
         menu.Items.Add(new Separator());
         menu.Items.Add(Click("Data sources…", OnDataSources));
         menu.Items.Add(Click("Import…", OnImport));
@@ -342,10 +351,37 @@ public partial class MainWindow : Window
         }
         else if (e.Key == Key.K && Keyboard.Modifiers == ModifierKeys.Control)
         {
+            OpenSearch();
+            e.Handled = true;
+        }
+        else if (e.Key == Key.F && Keyboard.Modifiers == ModifierKeys.Control && !(Keyboard.FocusedElement is DependencyObject d && IsInSession(d)))
+        {
+            // Ctrl F: the tree filter (what Ctrl K used to do).
             Search.Focus();
             Search.SelectAll();
             e.Handled = true;
         }
+    }
+
+    private static bool IsInSession(DependencyObject d)
+    {
+        for (var p = d; p is not null; p = p is Visual or System.Windows.Media.Media3D.Visual3D ? VisualTreeHelper.GetParent(p) : LogicalTreeHelper.GetParent(p))
+            if (p is SshSessionView or WebSessionView or RdpSessionView) return true;
+        return false;
+    }
+
+    private void OnSearchEverything(object sender, MouseButtonEventArgs e)
+    {
+        OpenSearch();
+        e.Handled = true;
+    }
+
+    /// <summary>Ctrl K: the search window under the title bar search box, starting from what is typed there.</summary>
+    private void OpenSearch()
+    {
+        if (OwnedWindows.OfType<SearchWindow>().FirstOrDefault() is { } open) { open.Activate(); return; }
+        var w = new SearchWindow(_vm, _vm.SearchText.Trim().Length > 0 ? _vm.SearchText.Trim() : null);
+        w.ShowUnder(Search);
     }
 
     private void OnSearchKeyDown(object sender, KeyEventArgs e)

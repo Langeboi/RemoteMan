@@ -108,6 +108,7 @@ public static class EntryMenu
         }));
         menu.Items.Add(Item("Copy", "copy", () => vm.CopyEntry(e), "Ctrl+C"));
         if (!isFolder) menu.Items.Add(Item("Duplicate…", "duplicate", () => vm.DuplicateCommand.Execute(null), "Ctrl+D"));
+        if (e.IsConnectable) menu.Items.Add(Item("Save as template…", "new", () => vm.SaveAsTemplateDialog?.Invoke(e)));
         var move = Item("Move to", "move");
         move.Items.Add(Item("(top level)", null, () => _ = vm.MoveAsync(e.Id, null), enabled: vm.CanMove(e.Id, null)));
         foreach (var f in vm.Folders.Select(f => (f, path: vm.FolderPath(f))).OrderBy(x => x.path, StringComparer.OrdinalIgnoreCase))
@@ -242,6 +243,35 @@ public static class EntryMenu
             mi.Click += (_, _) => _ = vm.NewEntryInAsync(kind, parent);
             menu.Items.Add(mi);
         }
+        FillTemplates(menu, vm, parent);
+    }
+
+    /// <summary>"From template" group at the end of the New menu, then "Templates…" to make and change them.</summary>
+    private static void FillTemplates(ItemsControl menu, MainViewModel vm, Guid? parent)
+    {
+        menu.Items.Add(new Separator());
+        var head = new MenuItem
+        {
+            Header = "FROM TEMPLATE", IsEnabled = false, FontSize = 10, Height = 22,
+            Margin = new Thickness(0, 6, 0, 4), VerticalContentAlignment = VerticalAlignment.Bottom,
+        };
+        head.SetResourceReference(Control.ForegroundProperty, "Faint");
+        menu.Items.Add(head);
+        foreach (var t in vm.Templates)
+        {
+            var template = t;
+            var proto = EntryTemplates.Prototype(t);
+            var icon = new Image { Width = 16, Height = 16, Source = EntryIcons.Render(proto.Icon, proto.IconColor, EntryNode.KindTagFor(proto.Kind)) };
+            var text = new StackPanel { Margin = new Thickness(2, 3, 0, 3) };
+            text.Children.Add(new TextBlock { Text = t.Name });
+            var desc = new TextBlock { Text = t.Template?.Summary is { Length: > 0 } sum ? sum : EntryIcons.KindName(EntryNode.KindTagFor(proto.Kind)), FontSize = 11 };
+            desc.SetResourceReference(TextBlock.ForegroundProperty, "Muted");
+            text.Children.Add(desc);
+            var mi = new MenuItem { Header = text, Icon = icon, MinWidth = 260 };
+            mi.Click += (_, _) => _ = vm.NewFromTemplateAsync(template, parent);
+            menu.Items.Add(mi);
+        }
+        menu.Items.Add(Item(vm.Templates.Count == 0 ? "Make a template…" : "Templates…", "edit", () => vm.TemplatesDialog?.Invoke()));
     }
 
     /// <summary>"New entry" submenu that creates in <paramref name="parent"/> (null = top level).</summary>

@@ -27,7 +27,7 @@ public sealed record DashboardStats(
 
     public static DashboardStats Compute(IReadOnlyCollection<Entry> all, DateTimeOffset now, int topFolders = 6)
     {
-        var live = all.Where(e => !e.Deleted && e.Kind != EntryKind.Snippet).ToList();
+        var live = all.Where(e => !e.Deleted && !e.IsHidden).ToList();
         var byId = live.ToDictionary(e => e.Id);
         var conn = live.Where(e => e.IsConnectable).ToList();
         var folders = live.Where(e => e.Kind == EntryKind.Folder).ToList();

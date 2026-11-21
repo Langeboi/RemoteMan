@@ -23,7 +23,7 @@ public partial class BackupWindow : Window
     {
         InitializeComponent();
         _main = main;
-        var all = main.Store?.Entries.Where(e => e.Kind != EntryKind.Snippet).ToList() ?? new();
+        var all = main.Store?.Entries.Where(e => !e.IsHidden).ToList() ?? new();
 
         var scopes = new List<Scope> { new(null, $"Everything ({all.Count(e => e.Kind != EntryKind.Folder)} entries)") };
         var sel = main.Selected?.Entry;

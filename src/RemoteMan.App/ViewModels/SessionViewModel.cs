@@ -53,6 +53,8 @@ public abstract partial class SessionViewModel : ObservableObject, IDisposable
     [ObservableProperty] [NotifyPropertyChangedFor(nameof(Column))] private int _pane;
     /// <summary>Grid column in the working area: moving panes only re-lays out the view, it never reconnects.</summary>
     public int Column => Pane == 0 ? 0 : 2;
+    /// <summary>Broadcast typing is on and this tab gets what is typed in the group (amber mark on the tab).</summary>
+    [ObservableProperty] private bool _isBroadcasting;
     /// <summary>Shown in the status bar while this tab is active.</summary>
     [ObservableProperty] private string _statusText = "";
 

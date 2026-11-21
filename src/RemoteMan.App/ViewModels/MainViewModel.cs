@@ -124,9 +124,10 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
         _nodes.Clear();
         Roots.Clear();
 
-        // Snippets live in the SSH tab's Snippets panel, not in the tree.
-        var all = _store.Entries.Where(e => e.Kind != EntryKind.Snippet).ToList();
+        // Snippets live in the SSH tab's Snippets panel and templates in the New menu, not in the tree.
+        var all = _store.Entries.Where(e => !e.IsHidden).ToList();
         RefreshSnippets();
+        RefreshTemplates();
         var filter = SearchText.Trim();
         if (filter.Length == 0 && PanelMode != "nav")
         {
@@ -655,18 +656,30 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
     [RelayCommand(CanExecute = nameof(HasSelection))]
     private Task EditAsync() => Selected is { } s && s.Id != FavoritesId ? EditAndSaveAsync(EntryStore.Clone(s.Entry)) : Task.CompletedTask;
 
-    private async Task EditAndSaveAsync(Entry e)
+    /// <summary>Set while the editor is open on a new entry made from a template (the editor heading names it).</summary>
+    public Entry? EditingFromTemplate { get; private set; }
+
+    private async Task EditAndSaveAsync(Entry e, Entry? template = null)
     {
         if (_store is null || _protector is null || EditDialog is null) return;
         if (!_store.IsOnline) { Message = "Offline: entries can be opened but not changed until the database is back"; return; }
         await _store.SetMyPresenceAsync(e.Id, PresenceState.Editing);
-        var toSave = EditDialog(e, _store, _protector);
+        EditingFromTemplate = template;
+        IReadOnlyList<Entry>? toSave;
+        try { toSave = EditDialog(e, _store, _protector); }
+        finally { EditingFromTemplate = null; }
         await _store.SetMyPresenceAsync(Selected?.Id, PresenceState.Viewing);
         if (toSave is null || toSave.Count == 0) return;
         try
         {
             Entry saved = null!;
             foreach (var item in toSave) saved = await _store.SaveAsync(item);
+            // A template can ask for a second entry next to it, e.g. SSH for a firewall's CLI.
+            if (template is not null && EntryTemplates.Companion(template, saved) is { } companion)
+            {
+                await _store.SaveAsync(companion);
+                Message = $"Made {saved.Name} and {companion.Name} from template {template.Name}";
+            }
             if (_nodes.TryGetValue(saved.Id, out var n)) { n.IsSelected = true; Selected = n; }
         }
         catch (ConcurrencyException ex)

@@ -31,6 +31,7 @@ public static class EntryJson
         public VncSettings? Vnc { get; set; }
         public CredentialData? Credential { get; set; }
         public SnippetData? Snippet { get; set; }
+        public TemplateData? Template { get; set; }
         public SerialSettings? Serial { get; set; }
         public FtpSettings? Ftp { get; set; }
         public ProxmoxSettings? Proxmox { get; set; }
@@ -54,7 +55,7 @@ public static class EntryJson
         Favorite = e.Favorite ? true : null,
         ZabbixHostId = string.IsNullOrEmpty(e.ZabbixHostId) ? null : e.ZabbixHostId,
         OxidizedNode = string.IsNullOrEmpty(e.OxidizedNode) ? null : e.OxidizedNode,
-        Rdp = e.Rdp, Ssh = e.Ssh, Web = e.Web, Vnc = e.Vnc, Credential = e.Credential, Snippet = e.Snippet,
+        Rdp = e.Rdp, Ssh = e.Ssh, Web = e.Web, Vnc = e.Vnc, Credential = e.Credential, Snippet = e.Snippet, Template = e.Template,
         Serial = e.Serial, Ftp = e.Ftp, Proxmox = e.Proxmox, PowerShell = e.PowerShell,
         Icon = string.IsNullOrEmpty(e.Icon) ? null : e.Icon, IconColor = string.IsNullOrEmpty(e.IconColor) ? null : e.IconColor,
         OpenIn = e.OpenIn == OpenMode.Tab ? null : e.OpenIn,
@@ -78,7 +79,7 @@ public static class EntryJson
         e.Favorite = p.Favorite == true;
         e.ZabbixHostId = p.ZabbixHostId;
         e.OxidizedNode = p.OxidizedNode;
-        e.Rdp = p.Rdp; e.Ssh = p.Ssh; e.Web = p.Web; e.Vnc = p.Vnc; e.Credential = p.Credential; e.Snippet = p.Snippet;
+        e.Rdp = p.Rdp; e.Ssh = p.Ssh; e.Web = p.Web; e.Vnc = p.Vnc; e.Credential = p.Credential; e.Snippet = p.Snippet; e.Template = p.Template;
         e.Serial = p.Serial; e.Ftp = p.Ftp; e.Proxmox = p.Proxmox; e.PowerShell = p.PowerShell;
         e.Icon = p.Icon; e.IconColor = p.IconColor;
         e.OpenIn = p.OpenIn ?? OpenMode.Tab;

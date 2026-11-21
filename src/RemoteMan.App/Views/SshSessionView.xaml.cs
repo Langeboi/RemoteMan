@@ -52,6 +52,11 @@ public partial class SshSessionView : UserControl
                 FilesToggle.IsChecked = FilesToggle.IsChecked != true;
                 e.Handled = true;
             }
+            else if (e.Key == Key.M && Keyboard.Modifiers == (ModifierKeys.Control | ModifierKeys.Shift))
+            {
+                ToggleBroadcast();
+                e.Handled = true;
+            }
             else if (e.Key == Key.S && Keyboard.Modifiers == (ModifierKeys.Control | ModifierKeys.Shift))
             {
                 SnippetsToggle.IsChecked = SnippetsToggle.IsChecked != true;
@@ -77,6 +82,7 @@ public partial class SshSessionView : UserControl
         core.WebMessageReceived += OnWebMessage;
         core.Navigate("https://remoteman-terminal.local/terminal.html");
         vm.Disposed += (_, _) => Close();
+        HookBroadcast();
     }
 
     // ---------------- terminal ----------------
@@ -95,7 +101,7 @@ public partial class SshSessionView : UserControl
                 await StartAsync((uint)m.GetProperty("cols").GetInt32(), (uint)m.GetProperty("rows").GetInt32());
                 break;
             case "data":
-                _chan?.Send(m.GetProperty("d").GetString() ?? "");
+                SendInput(m.GetProperty("d").GetString() ?? "");
                 break;
             case "resize":
                 _cols = (uint)m.GetProperty("cols").GetInt32(); _rows = (uint)m.GetProperty("rows").GetInt32();
@@ -108,7 +114,7 @@ public partial class SshSessionView : UserControl
                 if (m.GetProperty("d").GetString() is { Length: > 0 } text) TrySetClipboard(text);
                 break;
             case "paste":
-                if (Clipboard.ContainsText()) _chan?.Send(Clipboard.GetText().Replace("\r\n", "\r").Replace('\n', '\r'));
+                if (Clipboard.ContainsText()) SendInput(Clipboard.GetText().Replace("\r\n", "\r").Replace('\n', '\r'));
                 else if (Clipboard.ContainsFileDropList()) await UploadAsync(Clipboard.GetFileDropList().Cast<string>().ToList());
                 break;
             case "upload":
@@ -823,6 +829,7 @@ public partial class SshSessionView : UserControl
             _main.SnippetsChanged -= OnSnippetsChanged;
         }
         if (_vm is not null) _vm.SendToTerminal = null;
+        UnhookBroadcast();
         _transferCts?.Cancel();
         _flush.Stop();
         _sftp?.Dispose();
