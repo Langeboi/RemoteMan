@@ -57,6 +57,7 @@ public sealed partial class DashboardViewModel : SessionViewModel
     }
 
     public override bool IsPinned => true;
+    public override bool IsConnection => false;
     public override string KindTag => DashTag;
 
     /// <summary>Set by the main view model.</summary>

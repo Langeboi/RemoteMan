@@ -121,6 +121,7 @@
             <Trigger Property="Tag" Value="PS"><Setter Property="Data" Value="{StaticResource Icon.PS}" /><Setter Property="ToolTip" Value="PowerShell remoting" /></Trigger>
             <Trigger Property="Tag" Value="WBX"><Setter Property="Data" Value="{StaticResource Icon.WBX}" /><Setter Property="ToolTip" Value="WinBox" /></Trigger>
             <Trigger Property="Tag" Value="DASH"><Setter Property="Data" Value="{StaticResource Icon.DASH}" /><Setter Property="ToolTip" Value="Dashboard" /><Setter Property="Stroke" Value="{StaticResource Accent}" /></Trigger>
+            <Trigger Property="Tag" Value="DIR"><Setter Property="Data" Value="{StaticResource Icon.DIR}" /><Setter Property="ToolTip" Value="Folder" /><Setter Property="Stroke" Value="{StaticResource FolderIcon}" /></Trigger>
             <Trigger Property="Tag" Value="KEY"><Setter Property="Data" Value="{StaticResource Icon.KEY}" /><Setter Property="ToolTip" Value="Credential" /><Setter Property="Stroke" Value="{StaticResource KeyIcon}" /></Trigger>
         </Style.Triggers>
     </Style>
