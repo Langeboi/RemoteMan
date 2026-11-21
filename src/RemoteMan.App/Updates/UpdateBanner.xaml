@@ -1,0 +1,146 @@
+<!-- Slim update banner under the menu bar: available, downloading, ready to restart. -->
+<UserControl x:Class="RemoteMan.App.Updates.UpdateBanner"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:u="clr-namespace:RemoteMan.App.Updates"
+             DataContext="{x:Static u:UpdateService.Instance}">
+    <UserControl.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolVis" />
+        <SolidColorBrush x:Key="InfoBg" Color="#22303D" />
+        <SolidColorBrush x:Key="InfoBorder" Color="#3A4E63" />
+        <SolidColorBrush x:Key="InfoText" Color="#9FB4CC" />
+        <SolidColorBrush x:Key="OkBg" Color="#24302A" />
+        <SolidColorBrush x:Key="OkBorder" Color="#4F6B4F" />
+        <SolidColorBrush x:Key="OkText" Color="#9CC29C" />
+        <SolidColorBrush x:Key="WarnBg" Color="#33291D" />
+        <SolidColorBrush x:Key="WarnBorder" Color="#6B5435" />
+        <Style TargetType="Button" BasedOn="{StaticResource {x:Type Button}}" x:Key="BannerButton">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Margin" Value="8,0,0,0" />
+        </Style>
+        <Style TargetType="Button" BasedOn="{StaticResource PrimaryButton}" x:Key="BannerPrimary">
+            <Setter Property="Margin" Value="8,0,0,0" />
+            <Setter Property="Padding" Value="14,0" />
+        </Style>
+        <Style TargetType="Hyperlink">
+            <Setter Property="Foreground" Value="{StaticResource InfoText}" />
+            <Setter Property="TextDecorations" Value="None" />
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True"><Setter Property="TextDecorations" Value="Underline" /></Trigger>
+            </Style.Triggers>
+        </Style>
+    </UserControl.Resources>
+
+    <Border Height="34" BorderThickness="0,0,0,1" Visibility="{Binding IsVisible, Converter={StaticResource BoolVis}}">
+        <Border.Style>
+            <Style TargetType="Border">
+                <Setter Property="Background" Value="{StaticResource InfoBg}" />
+                <Setter Property="BorderBrush" Value="{StaticResource InfoBorder}" />
+                <Style.Triggers>
+                    <DataTrigger Binding="{Binding IsSuccess}" Value="True">
+                        <Setter Property="Background" Value="{StaticResource OkBg}" />
+                        <Setter Property="BorderBrush" Value="{StaticResource OkBorder}" />
+                    </DataTrigger>
+                    <DataTrigger Binding="{Binding State}" Value="{x:Static u:UpdateState.Failed}">
+                        <Setter Property="Background" Value="{StaticResource WarnBg}" />
+                        <Setter Property="BorderBrush" Value="{StaticResource WarnBorder}" />
+                    </DataTrigger>
+                </Style.Triggers>
+            </Style>
+        </Border.Style>
+
+        <Grid Margin="12,0,6,0">
+            <!-- Available -->
+            <DockPanel Visibility="{Binding IsAvailable, Converter={StaticResource BoolVis}}">
+                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
+                    <Button Style="{StaticResource BannerButton}" Content="Skip this version" Command="{Binding SkipVersionCommand}" />
+                    <Button Style="{StaticResource BannerButton}" Content="Later" Command="{Binding LaterCommand}" />
+                    <Button Style="{StaticResource BannerPrimary}" Content="Update" Command="{Binding UpdateCommand}" />
+                </StackPanel>
+                <Path Width="14" Height="14" Stretch="None" Stroke="{StaticResource InfoText}" StrokeThickness="1.5" VerticalAlignment="Center" Margin="0,0,10,0"
+                      Data="M8,2 V10 M4.5,6.5 L8,10 L11.5,6.5 M3,13 H13" />
+                <TextBlock VerticalAlignment="Center" TextTrimming="CharacterEllipsis">
+                    <Run Foreground="{StaticResource TextStrong}" Text="{Binding NewVersion, StringFormat='RemoteMan {0} is available.', Mode=OneWay}" />
+                    <Run Foreground="{StaticResource Muted}" Text="{Binding CurrentVersion, StringFormat='  You have {0}.', Mode=OneWay}" />
+                    <Run Foreground="{StaticResource Muted}" Text="{Binding SizeText, StringFormat='About {0}, downloads in the background.', Mode=OneWay}" />
+                    <Run Text="  " />
+                    <Hyperlink Command="{Binding OpenReleaseNotesCommand}" ToolTip="{Binding ReleaseNotes}">What's new</Hyperlink>
+                </TextBlock>
+            </DockPanel>
+
+            <!-- Downloading -->
+            <DockPanel Visibility="{Binding IsDownloading, Converter={StaticResource BoolVis}}">
+                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
+                    <TextBlock Foreground="{StaticResource Muted}" VerticalAlignment="Center" Text="Keep working, your sessions stay connected." />
+                    <Button Style="{StaticResource BannerButton}" Content="Cancel" Command="{Binding CancelDownloadCommand}" />
+                </StackPanel>
+                <Path Width="14" Height="14" Stretch="None" Stroke="{StaticResource InfoText}" StrokeThickness="1.5" VerticalAlignment="Center" Margin="0,0,10,0"
+                      Data="M8,2 V10 M4.5,6.5 L8,10 L11.5,6.5 M3,13 H13" />
+                <TextBlock VerticalAlignment="Center" Foreground="{StaticResource TextStrong}" Text="{Binding NewVersion, StringFormat='Downloading RemoteMan {0}'}" />
+                <ProgressBar Width="220" Height="6" Margin="12,0" VerticalAlignment="Center" Minimum="0" Maximum="100" Value="{Binding Progress, Mode=OneWay}"
+                             Background="{StaticResource Bg}" BorderBrush="{StaticResource InfoBorder}" BorderThickness="1" Foreground="{StaticResource Accent}" />
+                <TextBlock VerticalAlignment="Center" Foreground="{StaticResource Muted}" FontFamily="{StaticResource MonoFont}" FontSize="11" Text="{Binding Progress, StringFormat='{}{0}%'}" />
+            </DockPanel>
+
+            <!-- Ready to restart -->
+            <DockPanel Visibility="{Binding IsReady, Converter={StaticResource BoolVis}}">
+                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
+                    <Button Style="{StaticResource BannerButton}" Content="On next launch" Command="{Binding LaterCommand}" />
+                    <Button Style="{StaticResource BannerPrimary}" Content="Restart now" Command="{Binding RestartNowCommand}" />
+                </StackPanel>
+                <Path Width="14" Height="14" Stretch="None" Stroke="{StaticResource OkText}" StrokeThickness="1.6" VerticalAlignment="Center" Margin="0,0,10,0"
+                      Data="M3,8.5 L6.5,12 L13,4.5" />
+                <TextBlock VerticalAlignment="Center" TextTrimming="CharacterEllipsis">
+                    <Run Foreground="{StaticResource TextStrong}" Text="{Binding NewVersion, StringFormat='RemoteMan {0} is ready.', Mode=OneWay}" />
+                    <Run Foreground="{StaticResource Muted}" Text="  Restart to finish. Open sessions will be disconnected." />
+                </TextBlock>
+            </DockPanel>
+
+            <!-- Installed (first start after Setup.exe) -->
+            <DockPanel Visibility="{Binding IsInstalled, Converter={StaticResource BoolVis}}">
+                <Button DockPanel.Dock="Right" Style="{StaticResource BannerButton}" Content="Dismiss" Command="{Binding DismissCommand}" VerticalAlignment="Center" />
+                <Path Width="14" Height="14" Stretch="None" Stroke="{StaticResource OkText}" StrokeThickness="1.6" VerticalAlignment="Center" Margin="0,0,10,0"
+                      Data="M3,8.5 L6.5,12 L13,4.5" />
+                <TextBlock VerticalAlignment="Center" TextTrimming="CharacterEllipsis">
+                    <Run Foreground="{StaticResource TextStrong}" Text="{Binding CurrentVersion, StringFormat='RemoteMan {0} was installed successfully.', Mode=OneWay}" />
+                    <Run Foreground="{StaticResource Muted}" Text="  You'll find it in the Start menu and on your desktop. Updates install from here when they're out." />
+                </TextBlock>
+            </DockPanel>
+
+            <!-- Updated (first start on a new version) -->
+            <DockPanel Visibility="{Binding IsUpdated, Converter={StaticResource BoolVis}}">
+                <Button DockPanel.Dock="Right" Style="{StaticResource BannerButton}" Content="Dismiss" Command="{Binding DismissCommand}" VerticalAlignment="Center" />
+                <Path Width="14" Height="14" Stretch="None" Stroke="{StaticResource OkText}" StrokeThickness="1.6" VerticalAlignment="Center" Margin="0,0,10,0"
+                      Data="M3,8.5 L6.5,12 L13,4.5" />
+                <TextBlock VerticalAlignment="Center" TextTrimming="CharacterEllipsis">
+                    <Run Foreground="{StaticResource TextStrong}" Text="{Binding CurrentVersion, StringFormat='RemoteMan was updated to {0}.', Mode=OneWay}" />
+                    <Run Text="  " />
+                    <Hyperlink Command="{Binding OpenReleaseNotesCommand}">What's new</Hyperlink>
+                </TextBlock>
+            </DockPanel>
+
+            <!-- Checking / up to date (after Help > Check for updates) -->
+            <DockPanel Visibility="{Binding IsInfo, Converter={StaticResource BoolVis}}">
+                <Button DockPanel.Dock="Right" Style="{StaticResource BannerButton}" Content="Dismiss" Command="{Binding DismissCommand}" VerticalAlignment="Center" />
+                <TextBlock VerticalAlignment="Center" Foreground="{StaticResource Muted}">
+                    <TextBlock.Style>
+                        <Style TargetType="TextBlock">
+                            <Setter Property="Text" Value="Checking for updates…" />
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding State}" Value="{x:Static u:UpdateState.UpToDate}">
+                                    <Setter Property="Text" Value="{Binding CurrentVersion, StringFormat='You have the latest version ({0}).'}" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </TextBlock.Style>
+                </TextBlock>
+            </DockPanel>
+
+            <!-- Failed -->
+            <DockPanel Visibility="{Binding IsFailed, Converter={StaticResource BoolVis}}">
+                <Button DockPanel.Dock="Right" Style="{StaticResource BannerButton}" Content="Dismiss" Command="{Binding DismissCommand}" VerticalAlignment="Center" />
+                <TextBlock VerticalAlignment="Center" Foreground="{StaticResource Text}" TextTrimming="CharacterEllipsis" Text="{Binding Message}" ToolTip="{Binding Message}" />
+            </DockPanel>
+        </Grid>
+    </Border>
+</UserControl>

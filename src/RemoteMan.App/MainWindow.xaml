@@ -3,6 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="clr-namespace:RemoteMan.App.ViewModels"
         xmlns:views="clr-namespace:RemoteMan.App.Views"
+        xmlns:updates="clr-namespace:RemoteMan.App.Updates"
         Title="RemoteMan" Width="1440" Height="900" MinWidth="800" MinHeight="500"
         Style="{StaticResource RemoteManWindow}" WindowStartupLocation="CenterScreen">
 
@@ -84,6 +85,13 @@
                         <MenuItem Header="Connect" InputGestureText="Enter" Command="{Binding ConnectCommand}" />
                         <MenuItem Header="Close tab" InputGestureText="Ctrl+W" Command="{Binding CloseSessionCommand}" CommandParameter="{Binding ActiveSession}" />
                     </MenuItem>
+                    <MenuItem Header="_Help" DataContext="{x:Static updates:UpdateService.Instance}">
+                        <MenuItem Header="Check for updates" Command="{Binding CheckNowCommand}" />
+                        <MenuItem Header="Check automatically" IsCheckable="True" IsChecked="{Binding AutoCheck}" />
+                        <MenuItem Header="Release notes" Command="{Binding OpenReleaseNotesCommand}" />
+                        <Separator />
+                        <MenuItem Header="{Binding CurrentVersion}" HeaderStringFormat="RemoteMan {0}" IsEnabled="False" />
+                    </MenuItem>
                 </Menu>
                 <Border DockPanel.Dock="Right" Width="340" Height="22" VerticalAlignment="Center" Background="{StaticResource Bg}"
                         BorderBrush="{StaticResource InputBorder}" BorderThickness="1">
@@ -108,6 +116,9 @@
             </DockPanel>
         </Border>
 
+        <!-- Update banner (hidden unless there is an update to show) -->
+        <updates:UpdateBanner DockPanel.Dock="Top" />
+
         <!-- Status bar -->
         <Border DockPanel.Dock="Bottom" Height="22" Background="{StaticResource Header}" BorderBrush="{StaticResource Border}" BorderThickness="0,1,0,0">
             <DockPanel Margin="8,0">
@@ -120,10 +131,10 @@
                             </Style>
                         </Rectangle.Style>
                     </Rectangle>
-                    <TextBlock Text="{Binding DataSourceText}" Style="{StaticResource Muted}" FontSize="11" />
-                    <TextBlock Text="{Binding OnlineText}" Style="{StaticResource Muted}" FontSize="11" Margin="14,0,0,0" />
+                    <TextBlock Text="{Binding DataSourceText}" Style="{StaticResource MutedText}" FontSize="11" />
+                    <TextBlock Text="{Binding OnlineText}" Style="{StaticResource MutedText}" FontSize="11" Margin="14,0,0,0" />
                 </StackPanel>
-                <TextBlock DockPanel.Dock="Right" Text="{Binding ActiveSession.StatusText}" Style="{StaticResource Muted}" FontSize="11" VerticalAlignment="Center" />
+                <TextBlock DockPanel.Dock="Right" Text="{Binding ActiveSession.StatusText}" Style="{StaticResource MutedText}" FontSize="11" VerticalAlignment="Center" />
                 <TextBlock Text="{Binding Message}" Foreground="{StaticResource Presence}" FontSize="11" Margin="14,0" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
             </DockPanel>
         </Border>
@@ -183,7 +194,7 @@
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate>
                                         <DockPanel Margin="0,1">
-                                            <TextBlock Width="58" Text="{Binding Key}" Style="{StaticResource Muted}" />
+                                            <TextBlock Width="58" Text="{Binding Key}" Style="{StaticResource MutedText}" />
                                             <TextBlock x:Name="v" Text="{Binding Value}" TextTrimming="CharacterEllipsis" ToolTip="{Binding Value}" />
                                         </DockPanel>
                                         <DataTemplate.Triggers>

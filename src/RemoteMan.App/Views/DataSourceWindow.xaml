@@ -27,17 +27,17 @@
                 <Grid>
                     <Grid.ColumnDefinitions><ColumnDefinition Width="120" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
                     <Grid.RowDefinitions><RowDefinition /><RowDefinition /><RowDefinition Height="Auto" /><RowDefinition /></Grid.RowDefinitions>
-                    <TextBlock Text="Name" Style="{StaticResource Muted}" VerticalAlignment="Center" />
+                    <TextBlock Text="Name" Style="{StaticResource MutedText}" VerticalAlignment="Center" />
                     <TextBox x:Name="NameBox" Grid.Column="1" Margin="0,2" />
-                    <TextBlock Grid.Row="1" Text="Type" Style="{StaticResource Muted}" VerticalAlignment="Center" />
+                    <TextBlock Grid.Row="1" Text="Type" Style="{StaticResource MutedText}" VerticalAlignment="Center" />
                     <ComboBox x:Name="KindBox" Grid.Row="1" Grid.Column="1" Margin="0,2" Width="200" HorizontalAlignment="Left" SelectionChanged="OnKindChanged" />
-                    <TextBlock Grid.Row="2" Text="Servers" Style="{StaticResource Muted}" Margin="0,4,0,0" />
+                    <TextBlock Grid.Row="2" Text="Servers" Style="{StaticResource MutedText}" Margin="0,4,0,0" />
                     <TextBox x:Name="ConnBox" Grid.Row="2" Grid.Column="1" Margin="0,2" Height="110" AcceptsReturn="True" TextWrapping="NoWrap"
                              VerticalContentAlignment="Top" FontFamily="{StaticResource MonoFont}" FontSize="11" />
-                    <TextBlock Grid.Row="3" Text="Vault passphrase" Style="{StaticResource Muted}" VerticalAlignment="Center" />
+                    <TextBlock Grid.Row="3" Text="Vault passphrase" Style="{StaticResource MutedText}" VerticalAlignment="Center" />
                     <PasswordBox x:Name="VaultBox" Grid.Row="3" Grid.Column="1" Margin="0,2" ToolTip="Shared by everyone on this data source; encrypts passwords and keys" />
                 </Grid>
-                <TextBlock x:Name="Hint" Style="{StaticResource Muted}" TextWrapping="Wrap" Margin="120,8,0,0" FontSize="11" />
+                <TextBlock x:Name="Hint" Style="{StaticResource MutedText}" TextWrapping="Wrap" Margin="120,8,0,0" FontSize="11" />
             </StackPanel>
         </Grid>
     </DockPanel>

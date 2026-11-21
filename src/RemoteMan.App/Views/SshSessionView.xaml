@@ -33,7 +33,7 @@
                         <Button DockPanel.Dock="Right" Content="Delete" Click="OnDelete" />
                         <Rectangle />
                     </DockPanel>
-                    <TextBlock x:Name="TransferText" Style="{StaticResource Muted}" FontSize="11" Margin="0,4,0,0" TextTrimming="CharacterEllipsis" />
+                    <TextBlock x:Name="TransferText" Style="{StaticResource MutedText}" FontSize="11" Margin="0,4,0,0" TextTrimming="CharacterEllipsis" />
                     <ProgressBar x:Name="TransferBar" Height="2" Margin="0,2,0,0" Visibility="Collapsed" Background="Transparent" BorderThickness="0" Foreground="{StaticResource Accent}" />
                 </StackPanel>
             </Border>
@@ -48,7 +48,7 @@
                                 <ControlTemplate TargetType="ListViewItem">
                                     <Border x:Name="b" Background="Transparent" Padding="6,0">
                                         <DockPanel>
-                                            <TextBlock DockPanel.Dock="Right" Text="{Binding SizeText}" Style="{StaticResource Muted}" FontSize="11" VerticalAlignment="Center" />
+                                            <TextBlock DockPanel.Dock="Right" Text="{Binding SizeText}" Style="{StaticResource MutedText}" FontSize="11" VerticalAlignment="Center" />
                                             <TextBlock x:Name="icon" Text="·" Width="14" Foreground="{StaticResource Faint}" VerticalAlignment="Center" />
                                             <TextBlock Text="{Binding Name}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
                                         </DockPanel>
