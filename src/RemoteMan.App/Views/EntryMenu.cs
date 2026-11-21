@@ -96,16 +96,16 @@ public static class EntryMenu
             menu.Items.Add(PasteItem(vm, e.Id));
             menu.Items.Add(Item("Expand all inside", "expand", () => vm.SetExpanded(e.Id, true)));
             menu.Items.Add(Item("Collapse all inside", "collapse", () => vm.SetExpanded(e.Id, false)));
-            menu.Items.Add(Item("Change icon…", "folder", () =>
-            {
-                if (FolderIconPicker.Show(owner, e, out var icon, out var color))
-                    _ = vm.SaveChangeAsync(e, x => { x.Icon = icon; x.IconColor = color; }, $"Changed the icon of {e.Name}");
-            }));
             menu.Items.Add(new Separator());
         }
 
         // --- organise ---
         menu.Items.Add(Item(isFolder ? "Edit folder (name, login for entries inside)" : "Edit", "edit", () => vm.EditCommand.Execute(null), "F2"));
+        menu.Items.Add(Item("Change icon…", "folder", () =>
+        {
+            if (EntryIconPicker.Show(owner, e, out var icon, out var color))
+                _ = vm.SaveChangeAsync(e, x => { x.Icon = icon; x.IconColor = color; }, $"Changed the icon of {e.Name}");
+        }));
         menu.Items.Add(Item("Copy", "copy", () => vm.CopyEntry(e), "Ctrl+C"));
         if (!isFolder) menu.Items.Add(Item("Duplicate…", "duplicate", () => vm.DuplicateCommand.Execute(null), "Ctrl+D"));
         var move = Item("Move to", "move");

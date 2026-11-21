@@ -28,7 +28,7 @@ public sealed partial class EntryNode : ObservableObject
         Depth = depth;
     }
 
-    [ObservableProperty] [NotifyPropertyChangedFor(nameof(Name), nameof(KindTag), nameof(IsFolder), nameof(HasLinkedCredential), nameof(FolderGlyph), nameof(FolderBrush))]
+    [ObservableProperty] [NotifyPropertyChangedFor(nameof(Name), nameof(KindTag), nameof(IsFolder), nameof(HasLinkedCredential), nameof(FolderGlyph), nameof(FolderBrush), nameof(HasCustomIcon), nameof(IconImage), nameof(KindName))]
     private Entry _entry;
 
     [ObservableProperty] private bool _isExpanded = true;
@@ -56,6 +56,12 @@ public sealed partial class EntryNode : ObservableObject
     /// <summary>Folder icon chosen in the folder icon picker (plain folder by default).</summary>
     public System.Windows.Media.Geometry FolderGlyph => RemoteMan.App.Views.FolderIcons.GlyphFor(Entry.Icon);
     public System.Windows.Media.Brush FolderBrush => RemoteMan.App.Views.FolderIcons.BrushFor(Entry.IconColor);
+    /// <summary>Any entry: a glyph or vendor mark picked with Change icon, shown instead of the protocol or folder icon.</summary>
+    public bool HasCustomIcon => RemoteMan.App.Views.EntryIcons.IsCustom(Entry.Icon, Entry.IconColor, IsFolder);
+    public System.Windows.Media.ImageSource? IconImage =>
+        HasCustomIcon ? RemoteMan.App.Views.EntryIcons.Render(Entry.Icon, Entry.IconColor, IsFolder ? "DIR" : KindTag) : null;
+    /// <summary>Tooltip on a custom icon, so the protocol stays visible.</summary>
+    public string KindName => RemoteMan.App.Views.EntryIcons.KindName(IsFolder ? "DIR" : KindTag);
 
     public ObservableCollection<EntryNode> Children { get; } = new();
     public ObservableCollection<PresenceChip> People { get; } = new();

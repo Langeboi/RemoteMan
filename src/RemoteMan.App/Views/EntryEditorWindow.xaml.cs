@@ -59,8 +59,7 @@ public partial class EntryEditorWindow : Window
         }
 
         NameBox.Text = entry.Name;
-        Show(FolderIconButton, kind == EntryKind.Folder);
-        UpdateFolderIconPreview();
+        UpdateIconPreview();
         TagsBox.Text = entry.Tags;
         _zabbixHostId = entry.ZabbixHostId;
 
@@ -217,18 +216,18 @@ public partial class EntryEditorWindow : Window
         JumpPath.Text = names.Count == 0 ? "" : $"this PC → {string.Join(" → ", names)} → {target}";
     }
 
-    private void UpdateFolderIconPreview()
+    private void UpdateIconPreview()
     {
-        FolderIconPreview.Data = FolderIcons.GlyphFor(_e.Icon);
-        FolderIconPreview.Stroke = FolderIcons.BrushFor(_e.IconColor);
+        var tag = _e.Kind == EntryKind.Folder ? "DIR" : ViewModels.EntryNode.KindTagFor(_e.Kind);
+        IconPreview.Source = EntryIcons.Render(_e.Icon, _e.IconColor, tag);
     }
 
-    private void OnFolderIcon(object sender, RoutedEventArgs e)
+    private void OnChangeIcon(object sender, RoutedEventArgs e)
     {
         _e.Name = NameBox.Text.Trim().Length > 0 ? NameBox.Text.Trim() : _e.Name;
-        if (!FolderIconPicker.Show(this, _e, out var icon, out var color)) return;
+        if (!EntryIconPicker.Show(this, _e, out var icon, out var color)) return;
         _e.Icon = icon; _e.IconColor = color;
-        UpdateFolderIconPreview();
+        UpdateIconPreview();
     }
 
     private static void Show(UIElement el, bool visible) => el.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;

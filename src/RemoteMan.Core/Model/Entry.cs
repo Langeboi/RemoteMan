@@ -76,9 +76,9 @@ public sealed class Entry
     public ProxmoxSettings? Proxmox { get; set; }
     public PowerShellSettings? PowerShell { get; set; }
 
-    /// <summary>Folders: glyph name (see the folder icon picker); null = plain folder.</summary>
+    /// <summary>Any entry: glyph or vendor mark key from Change icon; null = the normal protocol or folder icon.</summary>
     public string? Icon { get; set; }
-    /// <summary>Folders: icon colour as #RRGGBB; null = the default grey.</summary>
+    /// <summary>Any entry: icon colour as #RRGGBB; null = the normal colour for the kind.</summary>
     public string? IconColor { get; set; }
 
     // --- sync metadata (owned by the data source) ---

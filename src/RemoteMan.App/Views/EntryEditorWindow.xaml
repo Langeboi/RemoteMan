@@ -62,10 +62,10 @@
                     <Grid.RowDefinitions><RowDefinition /><RowDefinition /><RowDefinition /><RowDefinition /><RowDefinition /><RowDefinition /></Grid.RowDefinitions>
                     <TextBlock Text="Name" Style="{StaticResource Label}" />
                     <DockPanel Grid.Column="1">
-                        <Button x:Name="FolderIconButton" DockPanel.Dock="Right" Margin="6,2,0,2" Padding="8,0" Click="OnFolderIcon" ToolTip="Folder icon and colour"
-                                AutomationProperties.Name="Folder icon">
+                        <Button x:Name="IconButton" DockPanel.Dock="Right" Margin="6,2,0,2" Padding="8,0" Click="OnChangeIcon" ToolTip="Icon and colour in the tree"
+                                AutomationProperties.Name="Change icon">
                             <StackPanel Orientation="Horizontal">
-                                <Path x:Name="FolderIconPreview" Width="16" Height="16" Stretch="None" StrokeThickness="1.3" StrokeLineJoin="Round" Margin="0,0,6,0" VerticalAlignment="Center" />
+                                <Image x:Name="IconPreview" Width="16" Height="16" Margin="0,0,6,0" VerticalAlignment="Center" />
                                 <TextBlock Text="Icon…" VerticalAlignment="Center" />
                             </StackPanel>
                         </Button>
