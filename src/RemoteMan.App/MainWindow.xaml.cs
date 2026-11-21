@@ -25,6 +25,7 @@ public partial class MainWindow : Window
             Choose = (title, text, buttons) => Views.ChoiceDialog.Show(this, title, text, buttons, Views.DialogIcon.Question),
             Confirm = (title, text, action) => Views.ChoiceDialog.Confirm(this, title, text, action, danger: true),
         };
+        _vm.OpenWindow = session => new Views.SessionWindow(session, this).Show();
         _vm.EditDialog = (entry, store, protector) =>
         {
             var w = new EntryEditorWindow(entry, store, protector) { Owner = this, Zabbix = _vm.ZabbixSnapshot };

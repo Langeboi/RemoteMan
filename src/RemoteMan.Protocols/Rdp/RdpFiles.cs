@@ -14,23 +14,35 @@ public static class RdpFiles
         var sb = new StringBuilder();
         sb.AppendLine($"full address:s:{ep.Host}{(ep.Port > 0 && ep.Port != 3389 ? ":" + ep.Port : "")}");
         if (user is { Length: > 0 }) sb.AppendLine($"username:s:{user}");
-        sb.AppendLine($"screen mode id:i:{(s.DesktopWidth > 0 ? 1 : 2)}");
-        if (s.DesktopWidth > 0) { sb.AppendLine($"desktopwidth:i:{s.DesktopWidth}"); sb.AppendLine($"desktopheight:i:{s.DesktopHeight}"); }
+        var multi = s.Monitors != RdpMonitors.One;
+        sb.AppendLine($"screen mode id:i:{(s.DesktopWidth > 0 && !multi ? 1 : 2)}");
+        if (s.DesktopWidth > 0 && !multi) { sb.AppendLine($"desktopwidth:i:{s.DesktopWidth}"); sb.AppendLine($"desktopheight:i:{s.DesktopHeight}"); }
+        if (multi) sb.AppendLine("use multimon:i:1");
+        if (s.Monitors == RdpMonitors.Selected && s.SelectedMonitors is { Length: > 0 } mons) sb.AppendLine($"selectedmonitors:s:{mons.Replace(" ", "")}");
+        if (s.ScalePercent >= 100) sb.AppendLine($"desktopscalefactor:i:{s.ScalePercent}");
         sb.AppendLine("dynamic resolution:i:1");
-        sb.AppendLine("session bpp:i:32");
+        sb.AppendLine($"session bpp:i:{(s.ColorDepth is 15 or 16 or 24 or 32 ? s.ColorDepth : 32)}");
         sb.AppendLine($"redirectclipboard:i:{(s.RedirectClipboard ? 1 : 0)}");
-        sb.AppendLine($"drivestoredirect:s:{(s.RedirectDrives ? "*" : "")}");
+        var letters = (s.Drives ?? "").Split(',', ';', ' ').Select(x => x.Trim().TrimEnd(':', '\\')).Where(x => x.Length == 1).Select(x => x.ToUpperInvariant() + ":").ToList();
+        sb.AppendLine($"drivestoredirect:s:{(!s.RedirectDrives ? "" : letters.Count > 0 ? string.Join(";", letters) : "*")}");
+        sb.AppendLine($"redirectprinters:i:{(s.RedirectPrinters ? 1 : 0)}");
+        sb.AppendLine($"audiomode:i:{(int)s.Audio}");
+        sb.AppendLine($"audiocapturemode:i:{(s.Microphone ? 1 : 0)}");
+        sb.AppendLine($"keyboardhook:i:{(int)s.WindowsKeys}");
         sb.AppendLine($"administrative session:i:{(s.AdminSession ? 1 : 0)}");
         sb.AppendLine($"authentication level:i:{(s.IgnoreCertificateErrors ? 0 : 2)}");
         sb.AppendLine("enablecredsspsupport:i:1");
-        sb.AppendLine("networkautodetect:i:1");
-        sb.AppendLine("bandwidthautodetect:i:1");
+        var type = s.Speed switch { RdpSpeed.Lan => 6, RdpSpeed.Broadband => 4, RdpSpeed.Slow => 2, _ => 7 };
+        sb.AppendLine($"connection type:i:{type}");
+        sb.AppendLine($"networkautodetect:i:{(type == 7 ? 1 : 0)}");
+        sb.AppendLine($"bandwidthautodetect:i:{(type == 7 ? 1 : 0)}");
+        if (e.Connection?.AutoReconnect == false) sb.AppendLine("autoreconnection enabled:i:0");
         if (s.UseRdGateway && s.GatewayHost is { Length: > 0 } gw)
         {
             sb.AppendLine($"gatewayhostname:s:{gw}");
-            sb.AppendLine("gatewayusagemethod:i:1");
+            sb.AppendLine($"gatewayusagemethod:i:{(s.GatewayBypassLocal ? 2 : 1)}");
             sb.AppendLine("gatewayprofileusagemethod:i:1");
-            sb.AppendLine("promptcredentialonce:i:1");
+            sb.AppendLine($"promptcredentialonce:i:{(s.GatewayCredentialId is null ? 1 : 0)}");
         }
         return sb.ToString();
     }

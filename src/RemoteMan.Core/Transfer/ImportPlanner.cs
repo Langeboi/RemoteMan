@@ -12,6 +12,8 @@ public sealed class ImportItem
     public string? Password { get; set; }
     public string? PrivateKey { get; set; }
     public string? Passphrase { get; set; }
+    public string? TotpSecret { get; set; }
+    public Dictionary<int, string>? SecretFields { get; set; }
     /// <summary>Unticked in the preview: left out of the import.</summary>
     public bool Include { get; set; } = true;
     public int Depth { get; set; }
@@ -63,7 +65,7 @@ public static class ImportPlanner
         {
             var e = new Entry { Id = x.Id, ParentId = x.ParentId, Kind = x.Kind, Name = x.Name };
             EntryJson.ApplyPayload(e, x.Payload);
-            r.Items.Add(new ImportItem(e) { Password = x.Password, PrivateKey = x.PrivateKey, Passphrase = x.Passphrase });
+            r.Items.Add(new ImportItem(e) { Password = x.Password, PrivateKey = x.PrivateKey, Passphrase = x.Passphrase, TotpSecret = x.TotpSecret, SecretFields = x.SecretFields });
         }
         r.SortAsTree();
         return r;
@@ -117,7 +119,11 @@ public static class ImportPlanner
                 c.ProtectedPassword = Protect(protector, item.Password);
                 c.ProtectedPrivateKey = Protect(protector, item.PrivateKey);
                 c.ProtectedPassphrase = Protect(protector, item.Passphrase);
+                c.ProtectedTotpSecret = Protect(protector, item.TotpSecret);
             }
+            if (e.Fields is { } fields)
+                for (var i = 0; i < fields.Count; i++)
+                    if (fields[i].Secret) fields[i].Value = item.SecretFields is { } sf && sf.TryGetValue(i, out var v) ? Protect(protector, v) : null;
             output.Add(e);
         }
 
@@ -127,6 +133,7 @@ public static class ImportPlanner
         {
             e.CredentialId = Remap(e.CredentialId, map, known);
             if (e.Ssh is { } s) s.JumpHostId = Remap(s.JumpHostId, map, known);
+            if (e.Rdp is { } r) { r.GatewayCredentialId = Remap(r.GatewayCredentialId, map, known); r.SshTunnelId = Remap(r.SshTunnelId, map, known); }
         }
         return output;
     }

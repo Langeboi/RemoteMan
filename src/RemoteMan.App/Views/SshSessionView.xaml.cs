@@ -88,7 +88,8 @@ public partial class SshSessionView : UserControl
         switch (m.GetProperty("t").GetString())
         {
             case "ready":
-                Post(new { t = "config", copyOnSelect = _vm?.Settings.CopyOnSelect ?? true });
+                Post(new { t = "config", copyOnSelect = _vm?.Settings.CopyOnSelect ?? true, backspaceCtrlH = _vm?.Settings.BackspaceCtrlH ?? false });
+                _cols = (uint)m.GetProperty("cols").GetInt32(); _rows = (uint)m.GetProperty("rows").GetInt32();
                 PostLook();
                 TerminalPrefs.Changed += OnPrefsChanged;
                 await StartAsync((uint)m.GetProperty("cols").GetInt32(), (uint)m.GetProperty("rows").GetInt32());
@@ -97,7 +98,8 @@ public partial class SshSessionView : UserControl
                 _chan?.Send(m.GetProperty("d").GetString() ?? "");
                 break;
             case "resize":
-                _chan?.Resize((uint)m.GetProperty("cols").GetInt32(), (uint)m.GetProperty("rows").GetInt32());
+                _cols = (uint)m.GetProperty("cols").GetInt32(); _rows = (uint)m.GetProperty("rows").GetInt32();
+                _chan?.Resize(_cols, _rows);
                 break;
             case "prefs":
                 TerminalPrefs.Save(m.GetProperty("d").GetRawText());
@@ -139,14 +141,17 @@ public partial class SshSessionView : UserControl
         }
         _ssh = new SshSession();
         _chan = _ssh;
-        _ssh.Output += s => { lock (_pending) _pending.Append(s); _vm.Tail.Append(s); };
+        var ssh0 = _ssh;
+        _ssh.Output += s => { lock (_pending) _pending.Append(s); _vm.Tail.Append(s); OnOutput(s); };
         _ssh.Info += s => Dispatcher.BeginInvoke(() => Post(new { t = "info", d = s }));
         _ssh.Closed += ex => Dispatcher.BeginInvoke(() =>
         {
+            if (!ReferenceEquals(_ssh, ssh0)) return;  // an older connection, already replaced
             Post(new { t = "info", d = ex is null ? "\r\n[session closed]" : $"\r\n[disconnected: {ex.Message}]" });
             _vm.StatusText = "SSH disconnected";
             _vm.Sender = null;
-            if (ex is not null) _vm.ReportProblem(RemoteMan.Core.Networking.ConnectionProblem.FromException(ex, EntryKind.Ssh));
+            EndLog();
+            if (ex is not null && !TryReconnect()) _vm.ReportProblem(RemoteMan.Core.Networking.ConnectionProblem.FromException(ex, EntryKind.Ssh));
         });
 
         var fb = _vm.UsedFallback ? " (fallback)" : "";
@@ -157,7 +162,10 @@ public partial class SshSessionView : UserControl
             await _ssh.ConnectAsync(targets, _vm.Jumps, _vm.Credential, _vm.Settings, KnownHosts, cols, rows);
             Post(new { t = "info", d = _ssh.NegotiatedSummary ?? "" });
             var via = _vm.Jumps.Count > 0 ? $" via {string.Join(" → ", _vm.Jumps.Select(j => j.Name))}" : "";
-            _vm.StatusText = $"SSH {_ssh.ConnectedEndpoint ?? _vm.Endpoint}{via}  {_ssh.NegotiatedSummary}";
+            var fwd = _ssh.ActiveForwards.Count > 0 ? $"  ·  {_ssh.ActiveForwards.Count} forward{(_ssh.ActiveForwards.Count == 1 ? "" : "s")}" : "";
+            _vm.StatusText = $"SSH {_ssh.ConnectedEndpoint ?? _vm.Endpoint}{via}  {_ssh.NegotiatedSummary}{fwd}";
+            _reconnects = 0;
+            StartLogAndScript("\r");
             var ssh = _ssh;
             _vm.Sender = text => ssh.Send(text);
             _vm.SendToTerminal = text =>
@@ -174,6 +182,7 @@ public partial class SshSessionView : UserControl
         {
             Post(new { t = "info", d = $"Connection failed: {ex.Message}" });
             _vm.StatusText = "SSH failed";
+            if (_reconnects > 0 && TryReconnect()) return;
             _vm.ReportProblem(RemoteMan.Core.Networking.ConnectionProblem.FromException(ex, kind));
         }
     }
@@ -188,7 +197,7 @@ public partial class SshSessionView : UserControl
             if (kind == EntryKind.Serial)
             {
                 var s = vm.Entry.Serial ?? new SerialSettings();
-                var serial = new RemoteMan.Protocols.Terminal.SerialChannel();
+                var serial = new RemoteMan.Protocols.Terminal.SerialChannel { Encoding = RemoteMan.Protocols.Terminal.TerminalEncoding.For(vm.Settings.Encoding) };
                 Hook(serial, label);
                 Post(new { t = "info", d = $"Opening {s.PortName} at {s.BaudRate} baud…" });
                 serial.Open(s);
@@ -197,7 +206,7 @@ public partial class SshSessionView : UserControl
             }
             else
             {
-                var telnet = new RemoteMan.Protocols.Terminal.TelnetChannel();
+                var telnet = new RemoteMan.Protocols.Terminal.TelnetChannel { Encoding = RemoteMan.Protocols.Terminal.TerminalEncoding.For(vm.Settings.Encoding) };
                 Hook(telnet, label);
                 Post(new { t = "info", d = $"Connecting to {vm.Endpoint}…" });
                 await telnet.ConnectAsync(vm.Endpoint, vm.Credential, cols, rows);
@@ -208,26 +217,31 @@ public partial class SshSessionView : UserControl
             vm.Sender = text => chan.Send(text);
             vm.SendToTerminal = text => { _chan?.Send(text.TrimEnd('\r', '\n').Replace("\r\n", "\r").Replace('\n', '\r')); Post(new { t = "focus" }); };
             _flush.Start();
+            _reconnects = 0;
+            StartLogAndScript("\r");
         }
         catch (Exception ex)
         {
             Post(new { t = "info", d = $"Connection failed: {ex.Message}" });
             vm.StatusText = $"{label} failed";
+            if (_reconnects > 0 && TryReconnect()) return;
             vm.ReportProblem(RemoteMan.Core.Networking.ConnectionProblem.FromException(ex, kind));
         }
     }
 
     private void Hook(RemoteMan.Protocols.Terminal.ITerminalChannel c, string label)
     {
-        c.Output += s => { lock (_pending) _pending.Append(s); _vm?.Tail.Append(s); };
+        c.Output += s => { lock (_pending) _pending.Append(s); _vm?.Tail.Append(s); OnOutput(s); };
         c.Info += s => Dispatcher.BeginInvoke(() => Post(new { t = "info", d = s }));
         c.Closed += ex => Dispatcher.BeginInvoke(() =>
         {
+            if (_chan is not null && !ReferenceEquals(_chan, c)) return;  // an older connection, already replaced
             Post(new { t = "info", d = ex is null ? "\r\n[session closed]" : $"\r\n[disconnected: {ex.Message}]" });
             if (_vm is null) return;
             _vm.StatusText = $"{label} disconnected";
             _vm.Sender = null;
-            if (ex is not null) _vm.ReportProblem(RemoteMan.Core.Networking.ConnectionProblem.FromException(ex, _vm.Entry.Kind));
+            EndLog();
+            if (ex is not null && !TryReconnect()) _vm.ReportProblem(RemoteMan.Core.Networking.ConnectionProblem.FromException(ex, _vm.Entry.Kind));
         });
     }
 
@@ -661,7 +675,15 @@ public partial class SshSessionView : UserControl
 
     private void PostLook()
     {
-        if (Web.CoreWebView2 is { } core) core.PostWebMessageAsJson("{\"t\":\"look\",\"d\":" + TerminalPrefs.Load().ToJsonString() + "}");
+        var look = TerminalPrefs.Load();
+        // The entry's own terminal settings (Advanced > Terminal) win over the app-wide look.
+        if (_vm?.Settings is { } st)
+        {
+            if (!string.IsNullOrWhiteSpace(st.Theme)) look["theme"] = st.Theme;
+            if (st.FontSize > 0) look["fontSize"] = st.FontSize;
+            if (st.Scrollback > 0) look["scrollback"] = st.Scrollback;
+        }
+        if (Web.CoreWebView2 is { } core) core.PostWebMessageAsJson("{\"t\":\"look\",\"d\":" + look.ToJsonString() + "}");
     }
 
     private void OnLook(object sender, RoutedEventArgs e)
@@ -697,8 +719,102 @@ public partial class SshSessionView : UserControl
         menu.IsOpen = true;
     }
 
+    // ---------------- session log, login script, reconnect ----------------
+
+    private uint _cols = 80, _rows = 24;
+    private int _reconnects;
+    private bool _closing;
+    private System.IO.StreamWriter? _log;
+    private bool _logAtLineStart = true;
+    private RemoteMan.Core.Terminal.LoginScriptRunner? _script;
+
+    private void OnOutput(string s)
+    {
+        _script?.Feed(s);
+        var log = _log;
+        if (log is null) return;
+        var text = RemoteMan.Core.Terminal.TerminalText.ForLog(s);
+        if (text.Length == 0) return;
+        lock (log)
+        {
+            var sb = new StringBuilder();
+            foreach (var ch in text)
+            {
+                if (_logAtLineStart) { sb.Append(DateTime.Now.ToString("HH:mm:ss ")); _logAtLineStart = false; }
+                sb.Append(ch);
+                if (ch == '\n') _logAtLineStart = true;
+            }
+            try { log.Write(sb.ToString()); } catch (Exception) { }
+        }
+    }
+
+    private void StartLogAndScript(string enter)
+    {
+        if (_vm is null) return;
+        var st = _vm.Settings;
+        if (st.LogSession && _log is null)
+        {
+            try
+            {
+                var folder = string.IsNullOrWhiteSpace(st.LogFolder)
+                    ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "RemoteMan logs")
+                    : Environment.ExpandEnvironmentVariables(st.LogFolder);
+                Directory.CreateDirectory(folder);
+                var safe = string.Concat(_vm.Entry.Name.Select(ch => Path.GetInvalidFileNameChars().Contains(ch) ? '_' : ch));
+                var file = Path.Combine(folder, $"{safe}_{DateTime.Now:yyyy-MM-dd_HHmmss}.log");
+                _log = new System.IO.StreamWriter(file, append: true, new UTF8Encoding(false)) { AutoFlush = true };
+                _log.WriteLine($"# {_vm.Entry.Name} ({_vm.Endpoint}) {DateTime.Now:yyyy-MM-dd HH:mm:ss}");
+                _logAtLineStart = true;
+                Post(new { t = "info", d = $"Logging to {file}" });
+            }
+            catch (Exception ex) { Post(new { t = "info", d = $"Session log not started: {ex.Message}" }); }
+        }
+        if (st.LoginScript is { Count: > 0 } steps)
+        {
+            var vm = _vm;
+            _script = new RemoteMan.Core.Terminal.LoginScriptRunner(steps,
+                t => RemoteMan.Core.Terminal.LoginScriptRunner.Expand(t, vm.FieldValues, () => vm.Credential.TotpCode, vm.Endpoint.Host, vm.Credential.UserName, vm.Entry.Name),
+                text => _chan?.Send(text), enter);
+            _script.Start();
+        }
+    }
+
+    private void EndLog()
+    {
+        var log = _log;
+        _log = null;
+        _script = null;
+        if (log is null) return;
+        lock (log) { try { log.WriteLine(); log.WriteLine($"# closed {DateTime.Now:yyyy-MM-dd HH:mm:ss}"); log.Dispose(); } catch (Exception) { } }
+    }
+
+    /// <summary>The connection dropped: try again a few times (Advanced > Connection > Reconnect). False when it won't.</summary>
+    private bool TryReconnect()
+    {
+        if (_closing || _vm is not { AutoReconnect: true } || _reconnects >= 5 || _vm.Entry.Kind == EntryKind.Serial) return false;
+        _reconnects++;
+        var wait = TimeSpan.FromSeconds(Math.Min(30, 3 * _reconnects));
+        Post(new { t = "info", d = $"Reconnecting in {wait.TotalSeconds:0} s (try {_reconnects} of 5)…" });
+        _vm.StatusText = "Reconnecting…";
+        var timer = new DispatcherTimer { Interval = wait };
+        timer.Tick += async (_, _) =>
+        {
+            timer.Stop();
+            if (_closing) return;
+            _sftp?.Dispose(); _sftp = null;
+            var old = _chan;
+            _ssh = null; _chan = null;
+            try { old?.Dispose(); } catch (Exception) { }
+            await StartAsync(_cols, _rows);
+        };
+        timer.Start();
+        return true;
+    }
+
     private void Close()
     {
+        _closing = true;
+        EndLog();
         TerminalPrefs.Changed -= OnPrefsChanged;
         if (_vm is not null) _vm.Sender = null;
         if (_main is not null)

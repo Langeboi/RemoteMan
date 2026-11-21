@@ -20,6 +20,9 @@ public sealed class ExportedEntry
     public string? Password { get; set; }
     public string? PrivateKey { get; set; }
     public string? Passphrase { get; set; }
+    public string? TotpSecret { get; set; }
+    /// <summary>Values of secret custom fields, by position in the entry's field list.</summary>
+    public Dictionary<int, string>? SecretFields { get; set; }
 }
 
 /// <summary>The decrypted content of an .rmx file.</summary>
@@ -94,8 +97,18 @@ public static class ExportFile
                     x.Password = TryUnprotect(protector!, c.ProtectedPassword);
                     x.PrivateKey = TryUnprotect(protector!, c.ProtectedPrivateKey);
                     x.Passphrase = TryUnprotect(protector!, c.ProtectedPassphrase);
+                    x.TotpSecret = TryUnprotect(protector!, c.ProtectedTotpSecret);
                 }
-                c.ProtectedPassword = c.ProtectedPrivateKey = c.ProtectedPassphrase = null;
+                c.ProtectedPassword = c.ProtectedPrivateKey = c.ProtectedPassphrase = c.ProtectedTotpSecret = null;
+            }
+            if (copy.Fields is { } fields)
+            {
+                for (var i = 0; i < fields.Count; i++)
+                {
+                    if (!fields[i].Secret) continue;
+                    if (bundle.IncludesSecrets && TryUnprotect(protector!, fields[i].Value) is { } v) (x.SecretFields ??= new())[i] = v;
+                    fields[i].Value = null;
+                }
             }
             x.Payload = EntryJson.ToPayload(copy);
             bundle.Entries.Add(x);
@@ -128,7 +141,8 @@ public static class ExportFile
         }
         // Credentials linked from inside the folder come along, so the export is usable on its own.
         var have = result.Select(e => e.Id).ToHashSet();
-        foreach (var credId in result.Select(e => e.CredentialId).Concat(result.Select(e => e.Ssh?.JumpHostId)).OfType<Guid>().Distinct().ToList())
+        foreach (var credId in result.Select(e => e.CredentialId).Concat(result.Select(e => e.Ssh?.JumpHostId))
+            .Concat(result.Select(e => e.Rdp?.GatewayCredentialId)).Concat(result.Select(e => e.Rdp?.SshTunnelId)).OfType<Guid>().Distinct().ToList())
             if (!have.Contains(credId) && all.FirstOrDefault(e => e.Id == credId) is { } extra) { result.Add(extra); have.Add(credId); }
         return result;
     }

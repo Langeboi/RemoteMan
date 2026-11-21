@@ -18,6 +18,23 @@ public abstract partial class SessionViewModel : ObservableObject, IDisposable
     }
 
     public Entry Entry { get; }
+
+    /// <summary>Colour stripe on the tab (entry's Misc > Tab colour); null = none.</summary>
+    public System.Windows.Media.Brush? TabBrush => Entry.TabColor is { Length: > 0 } c
+        && System.Windows.Media.ColorConverter.ConvertFromString(c) is System.Windows.Media.Color color
+        ? new System.Windows.Media.SolidColorBrush(color) : null;
+
+    /// <summary>The entry's custom fields by name, secrets decrypted (login scripts, copy).</summary>
+    public IReadOnlyDictionary<string, string> FieldValues { get; set; } = new Dictionary<string, string>();
+
+    /// <summary>Reconnect when the connection drops (Advanced > Connection).</summary>
+    public bool AutoReconnect => Entry.Connection?.AutoReconnect ?? true;
+
+    /// <summary>Opens in its own borderless full-screen window (not a tab).</summary>
+    public bool FullScreen { get; set; }
+
+    /// <summary>Things that live as long as the tab, e.g. the SSH tunnel an RDP session goes through.</summary>
+    public List<IDisposable> Owned { get; } = new();
     public HostEndpoint Endpoint { get; }
     public ResolvedCredential Credential { get; }
     public bool UsedFallback { get; }
@@ -44,7 +61,16 @@ public abstract partial class SessionViewModel : ObservableObject, IDisposable
 
     /// <summary>The view tears down its connection when this fires.</summary>
     public event EventHandler? Disposed;
-    public void Dispose() => Disposed?.Invoke(this, EventArgs.Empty);
+    public void Dispose()
+    {
+        Disposed?.Invoke(this, EventArgs.Empty);
+        foreach (var d in Owned) { try { d.Dispose(); } catch (Exception) { } }
+        Owned.Clear();
+        Closed?.Invoke(this);
+    }
+
+    /// <summary>After the tab is gone (runs the entry's "after closing" command).</summary>
+    public event Action<SessionViewModel>? Closed;
 }
 
 public sealed class SshSessionViewModel(Entry e, HostEndpoint ep, ResolvedCredential c, bool fb) : SessionViewModel(e, ep, c, fb)
@@ -78,6 +104,10 @@ public sealed class SshSessionViewModel(Entry e, HostEndpoint ep, ResolvedCreden
 public sealed class RdpSessionViewModel(Entry e, HostEndpoint ep, ResolvedCredential c, bool fb) : SessionViewModel(e, ep, c, fb)
 {
     public RdpSettings Settings => Entry.Rdp ?? new RdpSettings();
+    /// <summary>The RD Gateway's own login, when the entry picks one.</summary>
+    public ResolvedCredential? GatewayCredential { get; init; }
+    /// <summary>"via bastion" when the connection goes through an SSH tunnel.</summary>
+    public string? Via { get; init; }
 }
 
 /// <summary>SFTP and FTP entries: a file browser tab.</summary>
