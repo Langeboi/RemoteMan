@@ -36,8 +36,8 @@ public partial class RdpSessionView : UserControl
         _rdp.Width = (int)((ActualWidth - 22) * dpi);
         _rdp.Height = (int)(ActualHeight * dpi);
 
-        _rdp.Connected += () => vm.StatusText = $"RDP {vm.Endpoint}{(vm.UsedFallback ? " (fallback)" : "")}";
-        _rdp.LoginComplete += () => { if (_rdp is { } r) vm.StatusText = $"RDP {vm.Endpoint}  {r.Width}x{r.Height}"; };
+        _rdp.Connected += () => vm.StatusText = $"RDP {vm.Via ?? vm.Endpoint.ToString()}{(vm.UsedFallback ? " (fallback)" : "")}";
+        _rdp.LoginComplete += () => { if (_rdp is { } r) vm.StatusText = $"RDP {vm.Via ?? vm.Endpoint.ToString()}  {r.Width}x{r.Height}"; };
         _rdp.Disconnected += reason =>
         {
             if (_rdp is null) return; // tab is closing
@@ -70,10 +70,11 @@ public partial class RdpSessionView : UserControl
 
         try
         {
-            vm.StatusText = $"RDP connecting to {vm.Endpoint}…";
+            vm.StatusText = $"RDP connecting to {vm.Via ?? vm.Endpoint.ToString()}…";
             if (vm.Credential.UseWindowsLogin && !SsoPolicy.AllowsDefaultCredentials(vm.Endpoint.Host))
                 vm.StatusText = SsoPolicy.Hint;
-            _rdp.Connect(vm.Endpoint, vm.Credential, vm.Settings);
+            _rdp.Connect(vm.Endpoint, vm.Credential, vm.Settings, new RdpConnectOptions(
+                FullScreen: vm.FullScreen, AutoReconnect: vm.AutoReconnect, GatewayCredential: vm.GatewayCredential, Title: vm.Entry.Name));
         }
         catch (Exception ex)
         {

@@ -123,3 +123,48 @@ public class EntrySettingsTests : IDisposable
         Assert.Equal("iso-8859-1", e.Ssh.Encoding);
     }
 }
+
+public class LoginScriptTests
+{
+    [Fact]
+    public void TypesEachReplyAfterItsPromptAppears()
+    {
+        var sent = new List<string>();
+        var fields = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase) { ["enable"] = "s3cret" };
+        var r = new RemoteMan.Core.Terminal.LoginScriptRunner(
+        [
+            new ScriptStep { WaitFor = ">", Send = "enable" },
+            new ScriptStep { WaitFor = "Password:", Send = "{secret:enable}" },
+            new ScriptStep { WaitFor = "#", Send = "terminal length 0" },
+        ], t => RemoteMan.Core.Terminal.LoginScriptRunner.Expand(t, fields, () => null, "sw01", "admin", "core-sw"), sent.Add);
+        r.Start();
+        Assert.Empty(sent);
+        r.Feed("\x1b[32mUser Access Verification\x1b[0m\r\nsw01");
+        Assert.Empty(sent);
+        r.Feed(">");
+        Assert.Equal(["enable\r"], sent);
+        // The echo of "enable" and the old prompt don't trigger the next step.
+        r.Feed("enable\r\nPass");
+        Assert.Single(sent);
+        r.Feed("word: ");
+        Assert.Equal("s3cret\r", sent[1]);
+        r.Feed("\r\nsw01#");
+        Assert.Equal("terminal length 0\r", sent[2]);
+        Assert.True(r.Done);
+    }
+
+    [Fact]
+    public void StepWithoutWaitIsTypedAtOnce()
+    {
+        var sent = new List<string>();
+        var r = new RemoteMan.Core.Terminal.LoginScriptRunner([new ScriptStep { Send = "sudo -i" }], t => t, sent.Add, "\n");
+        r.Start();
+        Assert.Equal(["sudo -i\n"], sent);
+    }
+
+    [Fact]
+    public void LogTextDropsEscapesAndAppliesBackspace()
+    {
+        Assert.Equal("ls -a\nok", RemoteMan.Core.Terminal.TerminalText.ForLog("\x1b[01;34mls -lx\b\ba\x1b[0m\r\nok"));
+    }
+}

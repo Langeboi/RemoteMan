@@ -19,13 +19,16 @@ public sealed class SerialChannel : ITerminalChannel
         catch (Exception) { return []; }
     }
 
+    /// <summary>Character set of the device (set before opening).</summary>
+    public Encoding Encoding { get; set; } = Encoding.UTF8;
+
     public void Open(SerialSettings s)
     {
         var port = new SerialPort(s.PortName, s.BaudRate, Enum.TryParse<Parity>(s.Parity, true, out var parity) ? parity : Parity.None,
             s.DataBits is >= 5 and <= 8 ? s.DataBits : 8, Enum.TryParse<StopBits>(s.StopBits, true, out var stop) && stop != StopBits.None ? stop : StopBits.One)
         {
             Handshake = Enum.TryParse<Handshake>(s.FlowControl, true, out var hs) ? hs : Handshake.None,
-            Encoding = Encoding.UTF8,
+            Encoding = Encoding,
             DtrEnable = true,
             RtsEnable = s.FlowControl != "RequestToSend",
             ReadTimeout = SerialPort.InfiniteTimeout,

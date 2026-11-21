@@ -17,7 +17,11 @@ public sealed class TelnetChannel : ITerminalChannel
     private readonly TcpClient _tcp = new();
     private NetworkStream? _stream;
     private readonly CancellationTokenSource _cts = new();
-    private readonly Decoder _decoder = Encoding.UTF8.GetDecoder();
+    private Encoding _encoding = new UTF8Encoding(false);
+    private Decoder _decoder = new UTF8Encoding(false).GetDecoder();
+
+    /// <summary>Character set of the remote side (set before connecting).</summary>
+    public Encoding Encoding { get => _encoding; set { _encoding = value; _decoder = value.GetDecoder(); } }
     private uint _cols = 80, _rows = 24;
     private bool _naws;
     private string? _user, _password;
@@ -146,7 +150,7 @@ public sealed class TelnetChannel : ITerminalChannel
     public void Send(string data)
     {
         // Enter is CR LF on the wire (what most devices expect); a literal 0xFF byte is doubled.
-        var bytes = Encoding.UTF8.GetBytes(data.Replace("\r", "\r\n"));
+        var bytes = _encoding.GetBytes(data.Replace("\r", "\r\n"));
         var outBuf = new List<byte>(bytes.Length + 4);
         foreach (var b in bytes) { outBuf.Add(b); if (b == Iac) outBuf.Add(Iac); }
         Write(outBuf.ToArray());

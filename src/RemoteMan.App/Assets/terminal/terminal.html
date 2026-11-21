@@ -120,7 +120,7 @@
 
   // Copy on select (mouse up after a drag or double-click), paste on right click, like PuTTY.
   // The host owns the Windows clipboard, so this works without page clipboard permissions.
-  let copyOnSelect = true;
+  let copyOnSelect = true, backspaceCtrlH = false;
   document.getElementById('t').addEventListener('mouseup', () => {
     if (copyOnSelect && term.hasSelection()) host.postMessage({ t: 'copy', d: term.getSelection() });
   });
@@ -133,7 +133,7 @@
     if (e.dataTransfer.files.length) host.postMessageWithAdditionalObjects({ t: 'upload' }, e.dataTransfer.files);
   });
 
-  term.onData(d => host.postMessage({ t: 'data', d }));
+  term.onData(d => host.postMessage({ t: 'data', d: backspaceCtrlH ? d.replace(/\x7f/g, '\b') : d }));
   term.onResize(({ cols, rows }) => host.postMessage({ t: 'resize', cols, rows }));
   new ResizeObserver(() => fit.fit()).observe(document.body);
 
@@ -142,7 +142,7 @@
     if (m.t === 'out') term.write(m.d);
     else if (m.t === 'info') term.write('\x1b[38;2;156;162;169m' + m.d + '\x1b[0m\r\n');
     else if (m.t === 'focus') term.focus();
-    else if (m.t === 'config') copyOnSelect = m.copyOnSelect;
+    else if (m.t === 'config') { copyOnSelect = m.copyOnSelect; backspaceCtrlH = !!m.backspaceCtrlH; }
     else if (m.t === 'look') applyLook(m.d);
     else if (m.t === 'find') openFind();
     else if (m.t === 'clear') term.clear();
