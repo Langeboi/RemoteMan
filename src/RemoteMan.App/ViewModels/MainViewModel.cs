@@ -13,7 +13,7 @@ using RemoteMan.Protocols.Ssh;
 
 namespace RemoteMan.App.ViewModels;
 
-public sealed record PropertyRow(string Key, string Value, string? State = null);
+public sealed record PropertyRow(string Key, string Value, string? State = null, System.Windows.Input.ICommand? Copy = null);
 
 public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
 {
@@ -242,6 +242,19 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
                 Properties.Add(new PropertyRow("Browser", (e.Web?.Browser ?? BrowserKind.Embedded).ToString().ToLowerInvariant()));
                 break;
         }
+        if (e.Kind == EntryKind.Rdp && e.Rdp?.SshTunnelId is { } tid) Properties.Add(new PropertyRow("Tunnel", _store.Get(tid)?.Name ?? "missing SSH entry"));
+        if (e.IsConnectable && e.OpenIn != OpenMode.Tab) Properties.Add(new PropertyRow("Opens", e.OpenIn == OpenMode.Window ? "in its own window" : "full screen"));
+        if (e.Connection is { WakeOnLan: true } wol) Properties.Add(new PropertyRow("Wake", wol.MacAddress ?? "on"));
+        if (e.Ssh?.Forwards is { Count: > 0 } fw) Properties.Add(new PropertyRow("Forwards", string.Join(", ", fw.Where(f => f.Enabled))));
+        if (e.Description is { Length: > 0 } desc) Properties.Add(new PropertyRow("Notes", desc));
+        // Custom fields, each with a copy button; secrets stay hidden and copy like a password.
+        foreach (var f in e.Fields ?? [])
+        {
+            var field = f;
+            var copy = new CommunityToolkit.Mvvm.Input.RelayCommand(() => CopyField(field));
+            Properties.Add(new PropertyRow(f.Name, f.Secret ? (f.Value is null ? "" : "••••••••") : f.Value ?? "", null, f.Value is null ? null : copy));
+        }
+        if (HasTotp(e)) Properties.Add(new PropertyRow("2FA", "code ready", null, new CommunityToolkit.Mvvm.Input.RelayCommand(CopyTotp)));
         var people = _store.PresenceFor(e.Id).Select(p => $"{p.User} ({p.State.ToString().ToLowerInvariant()})").ToList();
         if (people.Count > 0) Properties.Add(new PropertyRow("Users", string.Join(", ", people), "presence"));
         if (e.CreatedBy is not null) Properties.Add(new PropertyRow("Created", $"{e.CreatedAt?.ToLocalTime():g} by {e.CreatedBy}"));
@@ -906,6 +919,36 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
         if (SelectedCredential() is not { Password: { } pw }) { Message = "No password stored"; return; }
         CredentialClipboard.CopyText(pw, secret: true);
         Message = $"Password copied, clears in {CredentialClipboard.ClearAfter.TotalSeconds:0} s";
+    }
+
+    private void CopyField(CustomField f)
+    {
+        if (f.Value is null || _protector is null) return;
+        try
+        {
+            if (f.Secret) { CredentialClipboard.CopyText(_protector.Unprotect(f.Value), secret: true); Message = $"{f.Name} copied, clears in {CredentialClipboard.ClearAfter.TotalSeconds:0} s"; }
+            else { CredentialClipboard.CopyText(f.Value, secret: false); Message = $"{f.Name} copied"; }
+        }
+        catch (Exception ex) { Message = $"Couldn't read {f.Name}: {ex.Message}"; }
+    }
+
+    /// <summary>True when the entry's login (own, saved or from the folder) has a two-factor secret.</summary>
+    public bool HasTotp(Entry e)
+    {
+        if (_store is null) return false;
+        if (e.Kind == EntryKind.Credential) return e.Credential?.ProtectedTotpSecret is not null;
+        var (_, holder) = _store.ResolveLogin(e);
+        return holder?.Credential?.ProtectedTotpSecret is not null;
+    }
+
+    [RelayCommand]
+    private void CopyTotp()
+    {
+        if (_store is null || _protector is null || Selected?.Entry is not { } e) return;
+        var secret = Secrets.Resolve(e, _store, _protector).TotpSecret;
+        if (secret is null || !RemoteMan.Core.Security.Totp.IsValid(secret)) { Message = $"{e.Name} has no 2FA secret"; return; }
+        CredentialClipboard.CopyText(RemoteMan.Core.Security.Totp.Code(secret), secret: true);
+        Message = $"2FA code copied, valid for {RemoteMan.Core.Security.Totp.SecondsLeft(secret)} s";
     }
 
     [RelayCommand]
