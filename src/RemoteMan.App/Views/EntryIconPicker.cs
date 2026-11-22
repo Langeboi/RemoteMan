@@ -39,9 +39,13 @@ public static class EntryIconPicker
         panel.Children.Add(Label($"Glyph (the first one is the normal {kindName} icon)"));
         var glyphs = new UniformGrid { Columns = 8, Margin = new Thickness(0, 0, 0, 10) };
         panel.Children.Add(glyphs);
-        panel.Children.Add(Label("Vendors and products"));
-        var vendors = new UniformGrid { Columns = 8, Margin = new Thickness(0, 0, 0, 10) };
-        panel.Children.Add(vendors);
+        // Vendor and product marks, one small section per category, scrolling so the dialog keeps a sensible height.
+        var vendorStack = new StackPanel();
+        panel.Children.Add(new ScrollViewer
+        {
+            Content = vendorStack, MaxHeight = 330, VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+            HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled, Margin = new Thickness(0, 0, 0, 10),
+        });
         var colorLabel = Label("Colour");
         panel.Children.Add(colorLabel);
         var colors = new WrapPanel();
@@ -90,7 +94,13 @@ public static class EntryIconPicker
         AddGlyph(glyphs, null, $"Normal {kindName} icon");
         foreach (var g in FolderIcons.Glyphs)
             if (!(folder && g.Key == "folder")) AddGlyph(glyphs, g.Key, g.Name);
-        foreach (var m in VendorMarks.All) AddGlyph(vendors, m.Key, m.Name);
+        foreach (var group in VendorMarks.Groups)
+        {
+            vendorStack.Children.Add(Label(group));
+            var grid = new UniformGrid { Columns = 8, Margin = new Thickness(0, 0, 0, 6) };
+            foreach (var m in VendorMarks.All.Where(m => m.Group == group)) AddGlyph(grid, m.Key, m.Name);
+            vendorStack.Children.Add(grid);
+        }
 
         void AddColor(string? value, string name, Brush fill)
         {

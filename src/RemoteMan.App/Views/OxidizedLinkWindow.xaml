@@ -22,7 +22,7 @@
         </Border>
         <Grid Background="{StaticResource Panel}" Margin="0">
             <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="*" /></Grid.RowDefinitions>
-            <Border Margin="12,10,12,0" Padding="10,8" Background="#1A1E22" BorderBrush="{StaticResource Border}" BorderThickness="1" CornerRadius="{StaticResource Radius}">
+            <Border Margin="12,10,12,0" Padding="10,8" Background="{StaticResource Inset}" BorderBrush="{StaticResource Border}" BorderThickness="1" CornerRadius="{StaticResource Radius}">
                 <DockPanel>
                     <Button x:Name="UnlinkButton" DockPanel.Dock="Right" Content="Unlink" MinWidth="70" Click="OnUnlink" VerticalAlignment="Center" />
                     <StackPanel>
@@ -55,7 +55,7 @@
                             <Ellipse Width="7" Height="7" Fill="{Binding Dot}" HorizontalAlignment="Left" VerticalAlignment="Center" ToolTip="{Binding State}" />
                             <StackPanel Grid.Column="1" Margin="0,0,8,0">
                                 <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
-                                <TextBlock Text="{Binding Suggestion}" FontSize="10" Foreground="#7FD3C4"
+                                <TextBlock Text="{Binding Suggestion}" FontSize="10" Foreground="{StaticResource Link}"
                                            Visibility="{Binding HasSuggestion, Converter={StaticResource BoolVisO}}" />
                             </StackPanel>
                             <TextBlock Grid.Column="2" Text="{Binding Address}" FontFamily="{StaticResource MonoFont}" FontSize="11" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />

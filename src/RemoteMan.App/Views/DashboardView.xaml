@@ -17,9 +17,9 @@
 
         <!-- A widget: panel card with a small caps title row -->
         <Style TargetType="Border" x:Key="Widget">
-            <Setter Property="Background" Value="{StaticResource Panel}" />
-            <Setter Property="BorderBrush" Value="{StaticResource Border}" />
-            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Background" Value="{StaticResource Depth.Card}" />
+            <Setter Property="BorderBrush" Value="{StaticResource Depth.CardBorder}" />
+            <Setter Property="BorderThickness" Value="{StaticResource Depth.CardBorderThickness}" />
             <Setter Property="CornerRadius" Value="{StaticResource Radius}" />
             <Setter Property="Margin" Value="0,0,12,12" />
         </Style>
@@ -224,7 +224,7 @@
                         <Border DockPanel.Dock="Top" Style="{StaticResource WidgetHeader}">
                             <DockPanel>
                                 <TextBlock DockPanel.Dock="Right" FontSize="11.5" VerticalAlignment="Center" Margin="12,0,0,0">
-                                    <Hyperlink Command="{Binding OpenZabbixCommand}" Foreground="#7FD3C4" ToolTip="Open the problem list in the Zabbix web UI">Open Zabbix</Hyperlink>
+                                    <Hyperlink Command="{Binding OpenZabbixCommand}" Foreground="{StaticResource Link}" ToolTip="Open the problem list in the Zabbix web UI">Open Zabbix</Hyperlink>
                                 </TextBlock>
                                 <TextBlock Text="Zabbix" Style="{StaticResource WidgetTitle}" Margin="0,0,12,0" />
                                 <TextBlock Text="{Binding ZabbixMeta}" Style="{StaticResource WidgetMeta}" HorizontalAlignment="Right" />
@@ -267,7 +267,7 @@
                                         <DataTemplate DataType="{x:Type vm:DashProblem}">
                                             <Button Style="{StaticResource RowButton}" Padding="0" Margin="0,0,0,4" ToolTip="Select this entry in the tree"
                                                     Command="{Binding DataContext.RevealProblemCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" CommandParameter="{Binding}">
-                                                <Border Background="#1A1E22" CornerRadius="{StaticResource Radius}" Padding="8,5">
+                                                <Border Background="{StaticResource Inset}" CornerRadius="{StaticResource Radius}" Padding="8,5">
                                                     <DockPanel>
                                                         <Path Style="{StaticResource HealthGlyph}" Tag="{Binding Tag}" VerticalAlignment="Top" Margin="0,0,8,0">
                                                             <Path.LayoutTransform><ScaleTransform ScaleX="0.85" ScaleY="0.85" /></Path.LayoutTransform>

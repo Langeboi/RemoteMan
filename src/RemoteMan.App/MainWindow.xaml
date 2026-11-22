@@ -216,7 +216,7 @@
         </Border.Style>
     <DockPanel>
         <!-- Title bar: app mark, a few actions, search everywhere, who's online, window buttons -->
-        <Border DockPanel.Dock="Top" Height="36" Background="{StaticResource Header}" BorderBrush="{StaticResource Border}" BorderThickness="0,0,0,1">
+        <Border DockPanel.Dock="Top" Height="36" Background="{StaticResource Depth.Header}" BorderBrush="{StaticResource Border}" BorderThickness="0,0,0,1">
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto" />
@@ -228,7 +228,7 @@
 
                 <StackPanel Orientation="Horizontal" Margin="10,0,0,0" VerticalAlignment="Center">
                     <Border Width="20" Height="20" CornerRadius="{StaticResource Radius}" Background="{StaticResource Accent}">
-                        <TextBlock Text="R" FontWeight="Bold" Foreground="{StaticResource Bg}" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        <TextBlock Text="R" FontWeight="Bold" Foreground="{StaticResource OnAccent}" HorizontalAlignment="Center" VerticalAlignment="Center" />
                     </Border>
                     <TextBlock Text="RemoteMan" FontWeight="SemiBold" Margin="8,0,10,0" VerticalAlignment="Center" />
                     <Border Width="1" Height="20" Background="{StaticResource Border}" />
@@ -324,7 +324,7 @@
         <updates:UpdateBanner DockPanel.Dock="Top" />
 
         <!-- Status bar: quick connect, messages, active session, the Q, users online, version -->
-        <Border DockPanel.Dock="Bottom" Height="26" Background="{StaticResource Header}" BorderBrush="{StaticResource Border}" BorderThickness="0,1,0,0">
+        <Border DockPanel.Dock="Bottom" Height="26" Background="{StaticResource Depth.Header}" BorderBrush="{StaticResource Border}" BorderThickness="0,1,0,0">
             <DockPanel>
                 <Border DockPanel.Dock="Left" BorderBrush="{StaticResource Border}" BorderThickness="0,0,1,0" Padding="10,0">
                     <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
@@ -369,7 +369,7 @@
                     </ToggleButton>
                     <Popup AllowsTransparency="True" IsOpen="{Binding IsChecked, ElementName=ZButton}" StaysOpen="False" Placement="Top" PlacementTarget="{Binding ElementName=ZButton}"
                            HorizontalOffset="-240" VerticalOffset="-4" Closed="OnZPopupClosed">
-                        <Border Width="300" Background="#1D2125" BorderBrush="#353B42" BorderThickness="1" CornerRadius="{StaticResource Radius}" Padding="12">
+                        <Border Width="300" Background="{StaticResource ButtonBg}" BorderBrush="{StaticResource ButtonBorder}" BorderThickness="1" CornerRadius="{StaticResource Radius}" Padding="12">
                             <StackPanel>
                                 <TextBlock Text="Zabbix" FontWeight="SemiBold" Margin="0,0,0,6" />
                                 <DockPanel>
@@ -405,7 +405,7 @@
                     </ToggleButton>
                     <Popup AllowsTransparency="True" IsOpen="{Binding IsChecked, ElementName=QButton}" StaysOpen="False" Placement="Top" PlacementTarget="{Binding ElementName=QButton}"
                            HorizontalOffset="-240" VerticalOffset="-4" Closed="OnQPopupClosed">
-                        <Border Width="300" Background="#1D2125" BorderBrush="#353B42" BorderThickness="1" CornerRadius="{StaticResource Radius}" Padding="12">
+                        <Border Width="300" Background="{StaticResource ButtonBg}" BorderBrush="{StaticResource ButtonBorder}" BorderThickness="1" CornerRadius="{StaticResource Radius}" Padding="12">
                             <StackPanel>
                                 <TextBlock Text="Shared database" FontWeight="SemiBold" Margin="0,0,0,6" />
                                 <TextBlock Text="{Binding DataSourceText}" TextWrapping="Wrap" />
@@ -507,6 +507,10 @@
 
             <GridSplitter Grid.Column="1" Width="1" HorizontalAlignment="Stretch" />
 
+            <!-- Shading: soft shadows under the title bar and along the tree's edge (transparent when Flat). Sessions draw over them. -->
+            <Border Grid.ColumnSpan="3" Height="6" VerticalAlignment="Top" Background="{StaticResource Depth.ShadowDown}" IsHitTestVisible="False" Panel.ZIndex="100" />
+            <Border Grid.Column="2" Width="6" HorizontalAlignment="Left" Background="{StaticResource Depth.ShadowRight}" IsHitTestVisible="False" Panel.ZIndex="100" />
+
             <!-- Working area: one or two panes, each with its own tabs -->
             <Grid Grid.Column="2" Background="{StaticResource Work}">
                 <Grid Margin="4">
@@ -524,11 +528,11 @@
                     <Border Grid.Column="2" Grid.RowSpan="2" Style="{StaticResource PaneFrame}" Tag="{Binding RightPaneTag}"
                             Visibility="{Binding IsSplit, Converter={StaticResource BoolVis}}" />
 
-                    <Border Margin="1,1,1,0" Background="{StaticResource Panel}" BorderBrush="{StaticResource Border}" BorderThickness="0,0,0,1" CornerRadius="{StaticResource TopRadius}">
+                    <Border Margin="1,1,1,0" Background="{StaticResource Depth.Header}" BorderBrush="{StaticResource Border}" BorderThickness="0,0,0,1" CornerRadius="{StaticResource TopRadius}">
                         <ListBox Style="{StaticResource TabStrip}" Tag="{Binding LeftPaneTag}" ItemsSource="{Binding LeftSessions}" SelectedItem="{Binding LeftActive}"
                                  PreviewMouseDown="OnLeftPaneMouseDown" AutomationProperties.Name="Left pane tabs" />
                     </Border>
-                    <Border Grid.Column="2" Margin="1,1,1,0" Background="{StaticResource Panel}" BorderBrush="{StaticResource Border}" BorderThickness="0,0,0,1" CornerRadius="{StaticResource TopRadius}"
+                    <Border Grid.Column="2" Margin="1,1,1,0" Background="{StaticResource Depth.Header}" BorderBrush="{StaticResource Border}" BorderThickness="0,0,0,1" CornerRadius="{StaticResource TopRadius}"
                             Visibility="{Binding IsSplit, Converter={StaticResource BoolVis}}">
                         <ListBox Style="{StaticResource TabStrip}" Tag="{Binding RightPaneTag}" ItemsSource="{Binding RightSessions}" SelectedItem="{Binding RightActive}"
                                  PreviewMouseDown="OnRightPaneMouseDown" AutomationProperties.Name="Right pane tabs" />
