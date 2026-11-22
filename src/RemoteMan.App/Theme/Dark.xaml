@@ -77,6 +77,19 @@
     <SolidColorBrush x:Key="Link" Color="{StaticResource C.Link}" />
     <SolidColorBrush x:Key="Inset" Color="{StaticResource C.Inset}" />
 
+    <!-- Shading (More > Theme). These are the Flat values; Services/Themes.cs writes Subtle or Raised over them at startup.
+         All of it is brushes (gradients and highlight lines), no Effects, so sessions keep hardware rendering. -->
+    <SolidColorBrush x:Key="Depth.Sheen" Color="Transparent" />
+    <SolidColorBrush x:Key="Depth.HiLine" Color="Transparent" />
+    <SolidColorBrush x:Key="Depth.Inset" Color="Transparent" />
+    <SolidColorBrush x:Key="Depth.ShadowDown" Color="Transparent" />
+    <SolidColorBrush x:Key="Depth.ShadowRight" Color="Transparent" />
+    <SolidColorBrush x:Key="Depth.Header" Color="{StaticResource C.Header}" />
+    <SolidColorBrush x:Key="Depth.Card" Color="{StaticResource C.Panel}" />
+    <SolidColorBrush x:Key="Depth.CardBorder" Color="{StaticResource C.Border}" />
+    <Thickness x:Key="Depth.CardBorderThickness">1</Thickness>
+    <SolidColorBrush x:Key="Depth.ButtonBorder" Color="{StaticResource C.ButtonBorder}" />
+
     <FontFamily x:Key="UiFont">Segoe UI Variable Text, Segoe UI</FontFamily>
     <FontFamily x:Key="MonoFont">Cascadia Mono, Consolas</FontFamily>
 
@@ -184,7 +197,7 @@
     <Style TargetType="Button">
         <Setter Property="Foreground" Value="{StaticResource Text}" />
         <Setter Property="Background" Value="{StaticResource ButtonBg}" />
-        <Setter Property="BorderBrush" Value="{StaticResource ButtonBorder}" />
+        <Setter Property="BorderBrush" Value="{StaticResource Depth.ButtonBorder}" />
         <Setter Property="BorderThickness" Value="1" />
         <Setter Property="Padding" Value="10,0" />
         <Setter Property="MinHeight" Value="24" />
@@ -193,10 +206,17 @@
             <Setter.Value>
                 <ControlTemplate TargetType="Button">
                     <Border x:Name="b" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
-                            BorderThickness="{TemplateBinding BorderThickness}" Padding="{TemplateBinding Padding}" CornerRadius="{StaticResource Radius}">
-                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                            BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="{StaticResource Radius}">
+                        <Grid>
+                            <!-- Shading: a light wash from the top and a 1px highlight line (transparent when Flat) -->
+                            <Border x:Name="sheen" Background="{StaticResource Depth.Sheen}" BorderBrush="{StaticResource Depth.HiLine}" BorderThickness="0,1,0,0"
+                                    CornerRadius="2" IsHitTestVisible="False" />
+                            <ContentPresenter Margin="{TemplateBinding Padding}" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Grid>
                     </Border>
                     <ControlTemplate.Triggers>
+                        <!-- Borderless (flat) buttons get no shading -->
+                        <Trigger Property="BorderThickness" Value="0"><Setter TargetName="sheen" Property="Visibility" Value="Collapsed" /></Trigger>
                         <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="b" Property="Background" Value="{StaticResource ButtonHover}" /></Trigger>
                         <Trigger Property="IsPressed" Value="True"><Setter TargetName="b" Property="Background" Value="{StaticResource Select}" /></Trigger>
                         <Trigger Property="IsKeyboardFocused" Value="True"><Setter TargetName="b" Property="BorderBrush" Value="{StaticResource Accent}" /></Trigger>
@@ -256,10 +276,15 @@
                 <ControlTemplate TargetType="TextBox">
                     <Border x:Name="b" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
                             BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="{StaticResource Radius}" SnapsToDevicePixels="True">
-                        <ScrollViewer x:Name="PART_ContentHost" Focusable="False" HorizontalScrollBarVisibility="Hidden" VerticalScrollBarVisibility="Hidden"
-                                      Padding="{TemplateBinding Padding}" VerticalAlignment="{TemplateBinding VerticalContentAlignment}" />
+                        <Grid>
+                            <!-- Shading: a soft inner shadow along the top, so the field looks sunk in -->
+                            <Border x:Name="inset" Background="{StaticResource Depth.Inset}" CornerRadius="2" IsHitTestVisible="False" />
+                            <ScrollViewer x:Name="PART_ContentHost" Focusable="False" HorizontalScrollBarVisibility="Hidden" VerticalScrollBarVisibility="Hidden"
+                                          Padding="{TemplateBinding Padding}" VerticalAlignment="{TemplateBinding VerticalContentAlignment}" />
+                        </Grid>
                     </Border>
                     <ControlTemplate.Triggers>
+                        <Trigger Property="BorderThickness" Value="0"><Setter TargetName="inset" Property="Visibility" Value="Collapsed" /></Trigger>
                         <Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="0.55" /></Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>
@@ -289,6 +314,7 @@
                                 <ColumnDefinition />
                                 <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
+                            <Border Grid.ColumnSpan="2" Background="{StaticResource Depth.Inset}" CornerRadius="2" IsHitTestVisible="False" />
                             <ScrollViewer x:Name="PART_ContentHost" Focusable="False" HorizontalScrollBarVisibility="Hidden" VerticalScrollBarVisibility="Hidden"
                                           Padding="{TemplateBinding Padding}" VerticalAlignment="{TemplateBinding VerticalContentAlignment}" />
                             <!-- Shown instead of the dots while the eye is pressed (see PasswordReveal) -->

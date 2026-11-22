@@ -15,6 +15,9 @@ public sealed record ThemeDef(string Id, string Name, string Description, IReadO
 /// <see cref="Apply"/> writes the chosen theme's colours over those keys. Everything in the app looks its colours up
 /// with StaticResource, so a different theme takes effect on the next start.
 /// </summary>
+/// <summary>How much light and shadow the controls get. Subtle is the default.</summary>
+public enum Shading { Flat, Subtle, Raised }
+
 public static class Themes
 {
     public const string DefaultId = "graphite";
@@ -115,10 +118,11 @@ public static class Themes
     }
 
     /// <summary>Writes the theme's colours and brushes over the classic ones. Call before any window is created.</summary>
-    public static void Apply(ResourceDictionary appResources, string? id)
+    public static void Apply(ResourceDictionary appResources, string? id, Shading shading = Shading.Subtle)
     {
         var theme = Find(id);
         Current = theme;
+        CurrentShading = shading;
         var target = appResources.MergedDictionaries.FirstOrDefault(d => d.Contains("C.Accent")) ?? appResources;
         foreach (var (key, color) in theme.Resolve())
         {
@@ -130,6 +134,50 @@ public static class Themes
         // Menus share the button colours.
         target["MenuBg"] = target["ButtonBg"];
         target["MenuBorder"] = target["ButtonBorder"];
+        ApplyShading(target, theme.Resolve(), shading);
+    }
+
+    /// <summary>The shading that was applied at startup.</summary>
+    public static Shading CurrentShading { get; private set; } = Shading.Subtle;
+
+    /// <summary>
+    /// Shading is drawn with brushes only (a light wash and highlight line on buttons, an inner shadow in fields, gradient
+    /// borders on cards, shadow strips along the title bar and tree). No Effects, which would put sessions in software rendering.
+    /// </summary>
+    private static void ApplyShading(ResourceDictionary target, IReadOnlyDictionary<string, Color> c, Shading shading)
+    {
+        static Brush Frozen(Brush b) { b.Freeze(); return b; }
+        static Brush Solid(Color x) => Frozen(new SolidColorBrush(x));
+        static Brush Vertical(Color top, Color bottom, double stop = 1) =>
+            Frozen(new LinearGradientBrush(new GradientStopCollection { new(top, 0), new(bottom, stop) }, new Point(0, 0), new Point(0, 1)));
+        static Brush Horizontal(Color left, Color right) =>
+            Frozen(new LinearGradientBrush(new GradientStopCollection { new(left, 0), new(right, 1) }, new Point(0, 0), new Point(1, 0)));
+        static Color A(Color x, byte alpha) => System.Windows.Media.Color.FromArgb(alpha, x.R, x.G, x.B);
+
+        if (shading == Shading.Flat)
+        {
+            var none = Solid(Colors.Transparent);
+            foreach (var k in new[] { "Depth.Sheen", "Depth.HiLine", "Depth.Inset", "Depth.ShadowDown", "Depth.ShadowRight" }) target[k] = none;
+            target["Depth.Header"] = Solid(c["Header"]);
+            target["Depth.Card"] = Solid(c["Panel"]);
+            target["Depth.CardBorder"] = Solid(c["Border"]);
+            target["Depth.CardBorderThickness"] = new Thickness(1);
+            target["Depth.ButtonBorder"] = Solid(c["ButtonBorder"]);
+            return;
+        }
+
+        var raised = shading == Shading.Raised;
+        Color white = Colors.White, black = Colors.Black;
+        target["Depth.Sheen"] = Vertical(A(white, (byte)(raised ? 0x16 : 0x0B)), A(white, 0));
+        target["Depth.HiLine"] = Solid(A(white, (byte)(raised ? 0x1C : 0x0E)));
+        target["Depth.Inset"] = Vertical(A(black, (byte)(raised ? 0x66 : 0x40)), A(black, 0), 0.4);
+        target["Depth.ShadowDown"] = Vertical(A(black, (byte)(raised ? 0x8C : 0x55)), A(black, 0));
+        target["Depth.ShadowRight"] = Horizontal(A(black, (byte)(raised ? 0x70 : 0x40)), A(black, 0));
+        target["Depth.Header"] = Vertical(Mix(c["Header"], white, raised ? 0.06 : 0.035), c["Header"]);
+        target["Depth.Card"] = Vertical(Mix(c["Panel"], white, raised ? 0.055 : 0.03), c["Panel"], 0.55);
+        target["Depth.CardBorder"] = Vertical(Mix(c["Border"], white, raised ? 0.14 : 0.08), Mix(c["Border"], black, raised ? 0.5 : 0.35));
+        target["Depth.CardBorderThickness"] = raised ? new Thickness(1, 1, 1, 2) : new Thickness(1);
+        target["Depth.ButtonBorder"] = Vertical(Mix(c["ButtonBorder"], white, raised ? 0.1 : 0.06), Mix(c["ButtonBorder"], black, raised ? 0.45 : 0.3));
     }
 
     /// <summary>A colour of the applied theme, for code that draws its own (charts, the title bar).</summary>

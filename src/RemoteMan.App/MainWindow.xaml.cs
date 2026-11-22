@@ -184,13 +184,15 @@ public partial class MainWindow : Window
         menu.IsOpen = true;
     }
 
-    /// <summary>More > Theme: pick a colour theme; it applies after a restart, which can happen right away.</summary>
+    /// <summary>More > Theme: pick a colour theme and shading; it applies after a restart, which can happen right away.</summary>
     private void OnTheme(object sender, RoutedEventArgs e)
     {
-        var w = new Views.ThemeWindow(_vm.Theme) { Owner = this };
-        if (w.ShowDialog() != true || w.Picked == Services.Themes.Current.Id) return;
+        var w = new Views.ThemeWindow(_vm.Theme, _vm.Shading) { Owner = this };
+        if (w.ShowDialog() != true) return;
+        if (w.Picked == Services.Themes.Current.Id && w.PickedShading == Services.Themes.CurrentShading) return;
         _vm.Theme = w.Picked;
-        var name = Services.Themes.Find(w.Picked).Name;
+        _vm.Shading = w.PickedShading;
+        var name = $"{Services.Themes.Find(w.Picked).Name} with {w.PickedShading.ToString().ToLowerInvariant()} shading";
         var choice = Views.ChoiceDialog.Show(this, "Restart to apply the theme",
             $"{name} is used from the next start. Restart RemoteMan now? Open sessions are closed; you can reopen them when it starts.",
             ["Restart now", "Later"], Views.DialogIcon.Question);

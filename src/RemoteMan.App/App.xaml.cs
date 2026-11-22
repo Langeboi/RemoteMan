@@ -11,7 +11,7 @@ public partial class App : Application
         base.OnStartup(e);
         var settings = AppSettings.Load();
         // Before any window exists: every view looks its colours up once, as it's built.
-        Themes.Apply(Resources, settings.Theme);
+        Themes.Apply(Resources, settings.Theme, settings.Shading);
         DarkTitleBar.ApplyToAllWindows();
         // Warm up the shared WebView2 browser process in the background so the first
         // SSH or web tab opens instantly.

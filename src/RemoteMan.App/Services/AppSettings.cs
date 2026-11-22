@@ -49,6 +49,8 @@ public sealed class AppSettings
 
     /// <summary>Colour theme (see <see cref="Themes"/>). Takes effect on the next start.</summary>
     public string Theme { get; set; } = Themes.DefaultId;
+    /// <summary>Light and shadow on the controls (Flat, Subtle, Raised). Takes effect on the next start.</summary>
+    public Shading Shading { get; set; } = Shading.Subtle;
     /// <summary>What was open at the last exit (kept up to date while running, so a crash still leaves it).</summary>
     public List<OpenSessionRecord> LastSessions { get; set; } = new();
 
