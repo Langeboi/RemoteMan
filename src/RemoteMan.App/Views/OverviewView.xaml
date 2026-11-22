@@ -112,7 +112,7 @@
                             </Border>
                         </StackPanel>
                         <Button x:Name="link" Style="{StaticResource LinkValue}" Command="{Binding Follow}" Visibility="Collapsed" Margin="0,1,0,0">
-                            <TextBlock Text="{Binding Value}" FontSize="13.5" Foreground="#7FD3C4" TextTrimming="CharacterEllipsis" ToolTip="{Binding Value}" />
+                            <TextBlock Text="{Binding Value}" FontSize="13.5" Foreground="{StaticResource Link}" TextTrimming="CharacterEllipsis" ToolTip="{Binding Value}" />
                         </Button>
                         <TextBox x:Name="v" Text="{Binding Value, Mode=OneWay}" IsReadOnly="True" BorderThickness="0" Background="Transparent" Padding="0" Margin="-2,1,0,0"
                                  FontSize="13.5" Foreground="{StaticResource TextStrong}" TextWrapping="NoWrap" MinHeight="0" />
@@ -131,7 +131,7 @@
             </Border>
             <DataTemplate.Triggers>
                 <Trigger SourceName="row" Property="IsMouseOver" Value="True">
-                    <Setter TargetName="row" Property="Background" Value="#181C20" />
+                    <Setter TargetName="row" Property="Background" Value="{StaticResource Hover}" />
                     <Setter TargetName="tools" Property="Opacity" Value="1" />
                 </Trigger>
                 <DataTrigger Binding="{Binding Style}" Value="mono">
@@ -182,7 +182,7 @@
                             <Setter Property="BorderBrush" Value="#23344A" />
                             <Style.Triggers>
                                 <DataTrigger Binding="{Binding IsCredential}" Value="True"><Setter Property="Background" Value="#26241A" /><Setter Property="BorderBrush" Value="#3D3820" /></DataTrigger>
-                                <DataTrigger Binding="{Binding IsFolder}" Value="True"><Setter Property="Background" Value="#1C2024" /><Setter Property="BorderBrush" Value="#2A2F35" /></DataTrigger>
+                                <DataTrigger Binding="{Binding IsFolder}" Value="True"><Setter Property="Background" Value="{StaticResource Hover}" /><Setter Property="BorderBrush" Value="{StaticResource Border}" /></DataTrigger>
                             </Style.Triggers>
                         </Style>
                     </Border.Style>
@@ -274,7 +274,7 @@
                                 <TextBlock x:Name="text" Text="{Binding Text}" FontSize="12" VerticalAlignment="Center" MaxWidth="420" TextTrimming="CharacterEllipsis" ToolTip="{Binding Text}" />
                                 <TextBlock Text="{Binding Sub}" Style="{StaticResource Meta}" Margin="6,0,0,0" Visibility="{Binding Sub, Converter={StaticResource EmptyVis}}" />
                                 <TextBlock Margin="8,0,0,0" FontSize="11.5" VerticalAlignment="Center" Visibility="{Binding Action, Converter={StaticResource NullVis}}">
-                                    <Hyperlink Command="{Binding Command}" Foreground="#7FD3C4"><Run Text="{Binding Action, Mode=OneWay}" /></Hyperlink>
+                                    <Hyperlink Command="{Binding Command}" Foreground="{StaticResource Link}"><Run Text="{Binding Action, Mode=OneWay}" /></Hyperlink>
                                 </TextBlock>
                             </StackPanel>
                         </Border>
@@ -303,7 +303,7 @@
                     <Border Style="{StaticResource CardHeader}">
                         <DockPanel>
                             <TextBlock DockPanel.Dock="Right" FontSize="11.5" VerticalAlignment="Center">
-                                <Hyperlink Command="{Binding Main.OpenInZabbixCommand}" Foreground="#7FD3C4">Open in Zabbix</Hyperlink>
+                                <Hyperlink Command="{Binding Main.OpenInZabbixCommand}" Foreground="{StaticResource Link}">Open in Zabbix</Hyperlink>
                             </TextBlock>
                             <TextBlock Text="Problems" Style="{StaticResource CardTitle}" />
                         </DockPanel>
@@ -311,7 +311,7 @@
                     <ItemsControl ItemsSource="{Binding Main.SelectedProblems}" Focusable="False" Margin="8,6,8,8">
                         <ItemsControl.ItemTemplate>
                             <DataTemplate DataType="{x:Type vm:ZabbixProblemRow}">
-                                <Border Background="#1A1E22" CornerRadius="{StaticResource Radius}" Padding="8,6" Margin="0,2">
+                                <Border Background="{StaticResource Inset}" CornerRadius="{StaticResource Radius}" Padding="8,6" Margin="0,2">
                                     <DockPanel>
                                         <Path Style="{StaticResource HealthGlyph}" Tag="{Binding Tag}" VerticalAlignment="Top" Margin="0,0,8,0" />
                                         <StackPanel>

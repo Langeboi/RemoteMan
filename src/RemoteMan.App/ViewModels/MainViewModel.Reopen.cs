@@ -25,6 +25,13 @@ public sealed partial class MainViewModel
         set { _settings.ReopenSessions = value; TrySaveSettings(); OnPropertyChanged(); }
     }
 
+    /// <summary>The colour theme to use from the next start.</summary>
+    public string Theme
+    {
+        get => _settings.Theme;
+        set { _settings.Theme = value; TrySaveSettings(); OnPropertyChanged(); }
+    }
+
     private void StartTrackingOpenSessions()
     {
         if (_trackingStarted) return;

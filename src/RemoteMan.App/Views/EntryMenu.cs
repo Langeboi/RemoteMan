@@ -189,15 +189,15 @@ public static class EntryMenu
         menu.Items.Add(del);
     }
 
-    /// <summary>Everything that can be created, in menu order: group, name, one line on what it's for, icon tag, icon colour.</summary>
+    /// <summary>Everything that can be created, in menu order: group, name, one line on what it's for, icon tag, icon colour ("accent" = the theme's accent).</summary>
     public static readonly IReadOnlyList<(string Group, EntryKind Kind, string Name, string Description, string Tag, string Color)> EntryTypes =
     [
         ("Remote desktop", EntryKind.Rdp, "RDP", "Windows desktops and servers", "RDP", "#5B9BEA"),
         ("Remote desktop", EntryKind.Vnc, "VNC", "Linux desktops, appliances", "VNC", "#5B9BEA"),
         ("Remote desktop", EntryKind.Proxmox, "Proxmox console", "A VM or container console", "PVE", "#5B9BEA"),
-        ("Terminal", EntryKind.Ssh, "SSH", "Linux, switches, firewalls", "SSH", "#3FB8A4"),
-        ("Terminal", EntryKind.Telnet, "Telnet", "Older switches and devices", "TEL", "#3FB8A4"),
-        ("Terminal", EntryKind.Serial, "Serial console", "COM port / USB console cable", "SER", "#3FB8A4"),
+        ("Terminal", EntryKind.Ssh, "SSH", "Linux, switches, firewalls", "SSH", "accent"),
+        ("Terminal", EntryKind.Telnet, "Telnet", "Older switches and devices", "TEL", "accent"),
+        ("Terminal", EntryKind.Serial, "Serial console", "COM port / USB console cable", "SER", "accent"),
         ("Files", EntryKind.Sftp, "SFTP / SCP", "Browse and copy files over SSH", "SFTP", "#D6A85E"),
         ("Files", EntryKind.Ftp, "FTP / FTPS", "Old-style file servers", "FTP", "#D6A85E"),
         ("Web", EntryKind.Web, "Web page", "Admin pages, dashboards", "WEB", "#8C9BF0"),
@@ -227,7 +227,8 @@ public static class EntryMenu
                 group = t.Group;
             }
             var kind = t.Kind.ToString();
-            var color = (Color)ColorConverter.ConvertFromString(t.Color);
+            // "accent" follows the colour theme.
+            var color = t.Color == "accent" ? Services.Themes.GetColor("Accent") : (Color)ColorConverter.ConvertFromString(t.Color);
             var icon = new System.Windows.Shapes.Path
             {
                 Width = 16, Height = 16, Stretch = Stretch.None, StrokeThickness = 1.3, Stroke = new SolidColorBrush(color),

@@ -228,7 +228,7 @@
 
                 <StackPanel Orientation="Horizontal" Margin="10,0,0,0" VerticalAlignment="Center">
                     <Border Width="20" Height="20" CornerRadius="{StaticResource Radius}" Background="{StaticResource Accent}">
-                        <TextBlock Text="R" FontWeight="Bold" Foreground="{StaticResource Bg}" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        <TextBlock Text="R" FontWeight="Bold" Foreground="{StaticResource OnAccent}" HorizontalAlignment="Center" VerticalAlignment="Center" />
                     </Border>
                     <TextBlock Text="RemoteMan" FontWeight="SemiBold" Margin="8,0,10,0" VerticalAlignment="Center" />
                     <Border Width="1" Height="20" Background="{StaticResource Border}" />
@@ -369,7 +369,7 @@
                     </ToggleButton>
                     <Popup AllowsTransparency="True" IsOpen="{Binding IsChecked, ElementName=ZButton}" StaysOpen="False" Placement="Top" PlacementTarget="{Binding ElementName=ZButton}"
                            HorizontalOffset="-240" VerticalOffset="-4" Closed="OnZPopupClosed">
-                        <Border Width="300" Background="#1D2125" BorderBrush="#353B42" BorderThickness="1" CornerRadius="{StaticResource Radius}" Padding="12">
+                        <Border Width="300" Background="{StaticResource ButtonBg}" BorderBrush="{StaticResource ButtonBorder}" BorderThickness="1" CornerRadius="{StaticResource Radius}" Padding="12">
                             <StackPanel>
                                 <TextBlock Text="Zabbix" FontWeight="SemiBold" Margin="0,0,0,6" />
                                 <DockPanel>
@@ -405,7 +405,7 @@
                     </ToggleButton>
                     <Popup AllowsTransparency="True" IsOpen="{Binding IsChecked, ElementName=QButton}" StaysOpen="False" Placement="Top" PlacementTarget="{Binding ElementName=QButton}"
                            HorizontalOffset="-240" VerticalOffset="-4" Closed="OnQPopupClosed">
-                        <Border Width="300" Background="#1D2125" BorderBrush="#353B42" BorderThickness="1" CornerRadius="{StaticResource Radius}" Padding="12">
+                        <Border Width="300" Background="{StaticResource ButtonBg}" BorderBrush="{StaticResource ButtonBorder}" BorderThickness="1" CornerRadius="{StaticResource Radius}" Padding="12">
                             <StackPanel>
                                 <TextBlock Text="Shared database" FontWeight="SemiBold" Margin="0,0,0,6" />
                                 <TextBlock Text="{Binding DataSourceText}" TextWrapping="Wrap" />

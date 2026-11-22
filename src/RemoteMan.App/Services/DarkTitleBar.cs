@@ -30,10 +30,13 @@ public static class DarkTitleBar
         var on = 1;
         if (DwmSetWindowAttribute(hwnd, DwmwaUseImmersiveDarkMode, ref on, sizeof(int)) != 0)
             DwmSetWindowAttribute(hwnd, DwmwaUseImmersiveDarkModeOld, ref on, sizeof(int));
-        // COLORREF is 0x00BBGGRR. Header #16191C, border #2A2F35, text #E3E6EA. Ignored before Windows 11.
-        var caption = 0x001C1916; var border = 0x00352F2A; var text = 0x00EAE6E3;
+        // The theme's header, border and text colours. Ignored before Windows 11.
+        var caption = ColorRef(Themes.GetColor("Header")); var border = ColorRef(Themes.GetColor("Border")); var text = ColorRef(Themes.GetColor("Text"));
         DwmSetWindowAttribute(hwnd, DwmwaCaptionColor, ref caption, sizeof(int));
         DwmSetWindowAttribute(hwnd, DwmwaBorderColor, ref border, sizeof(int));
         DwmSetWindowAttribute(hwnd, DwmwaTextColor, ref text, sizeof(int));
     }
+
+    /// <summary>COLORREF is 0x00BBGGRR.</summary>
+    private static int ColorRef(System.Windows.Media.Color c) => c.R | (c.G << 8) | (c.B << 16);
 }
