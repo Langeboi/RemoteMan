@@ -76,7 +76,12 @@ public partial class MainWindow : Window
         LocationChanged += (_, _) => _aiWindow?.Reposition();
         SizeChanged += (_, _) => _aiWindow?.Reposition();
         StateChanged += (_, _) => { if (WindowState == WindowState.Minimized) _aiWindow?.HideBox(); else _aiWindow?.Reposition(); };
-        Loaded += async (_, _) => await _vm.InitializeAsync();
+        Loaded += async (_, _) =>
+        {
+            await _vm.InitializeAsync();
+            // The first-run setup picked an import source: open the import window on it once the entries are loaded.
+            if (ImportAfterLoad is { } source) { ImportAfterLoad = null; new ImportWindow(_vm, source) { Owner = this }.ShowDialog(); }
+        };
         Closing += async (_, _) => { _vm.FreezeOpenSessions(); await _vm.DisposeAsync(); };
         _vm.AskReopen = AskReopen;
         PreviewKeyDown += OnWindowKeyDown;
@@ -219,6 +224,7 @@ public partial class MainWindow : Window
         }
         menu.Items.Add(startup);
         menu.Items.Add(Click("Theme…", OnTheme));
+        menu.Items.Add(Click("Run setup again…", OnRunSetup));
         if (_vm.Chat.IsAvailable)
         {
             var keep = new MenuItem { Header = "Keep chat messages" };
@@ -259,6 +265,22 @@ public partial class MainWindow : Window
         var name = $"{Services.Themes.Find(w.Picked).Name} with {w.PickedShading.ToString().ToLowerInvariant()} shading";
         var choice = Views.ChoiceDialog.Show(this, "Restart to apply the theme",
             $"{name} is used from the next start. Restart RemoteMan now? Open sessions are closed; you can reopen them when it starts.",
+            ["Restart now", "Later"], Views.DialogIcon.Question);
+        if (choice == 0) RestartApp();
+    }
+
+    /// <summary>Import source ("rdm", "rdp" or "putty") the first-run setup asked for, opened once the entries have loaded.</summary>
+    public string? ImportAfterLoad { get; set; }
+
+    /// <summary>More > Run setup again: the first-run steps, starting from the current settings.</summary>
+    private void OnRunSetup(object sender, RoutedEventArgs e)
+    {
+        var w = new Views.SetupWindow(_settings, rerun: true) { Owner = this };
+        w.ShowDialog();
+        if (w.ImportAfter is { } source) new ImportWindow(_vm, source) { Owner = this }.ShowDialog();
+        if (!w.NeedsRestart) return;
+        var choice = Views.ChoiceDialog.Show(this, "Restart to apply setup",
+            "Some of the changes are used from the next start. Restart RemoteMan now? Open sessions are closed; you can reopen them when it starts.",
             ["Restart now", "Later"], Views.DialogIcon.Question);
         if (choice == 0) RestartApp();
     }
