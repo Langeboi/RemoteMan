@@ -54,6 +54,11 @@ public sealed class AppSettings
     /// <summary>What was open at the last exit (kept up to date while running, so a crash still leaves it).</summary>
     public List<OpenSessionRecord> LastSessions { get; set; } = new();
 
+    /// <summary>Delete chat messages older than this many days (0 keeps them). Any PC with a shorter setting deletes for everyone.</summary>
+    public int ChatRetentionDays { get; set; } = 365;
+    /// <summary>Whether the chat drawer was open at the last exit.</summary>
+    public bool ChatOpen { get; set; }
+
     public ZabbixConfig Zabbix { get; set; } = new();
     public OxidizedConfig Oxidized { get; set; } = new();
 

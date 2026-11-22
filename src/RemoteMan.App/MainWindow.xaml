@@ -287,7 +287,7 @@
                     <ItemsControl.ItemTemplate>
                         <DataTemplate>
                             <Border Width="24" Height="24" CornerRadius="12" Background="{Binding Color}" BorderBrush="{StaticResource Header}" BorderThickness="2"
-                                    Margin="-5,0,0,0" ToolTip="{Binding ToolTip}" WindowChrome.IsHitTestVisibleInChrome="True">
+                                    Margin="-5,0,0,0" ToolTip="{Binding ToolTip}" WindowChrome.IsHitTestVisibleInChrome="True" Cursor="Hand" MouseLeftButtonUp="OnAvatarClick">
                                 <TextBlock Text="{Binding Initials}" FontSize="9" FontWeight="SemiBold" Foreground="{StaticResource Bg}" HorizontalAlignment="Center" VerticalAlignment="Center" />
                             </Border>
                         </DataTemplate>
@@ -295,6 +295,20 @@
                 </ItemsControl>
 
                 <StackPanel Grid.Column="4" Orientation="Horizontal">
+                    <!-- Team chat (shared data sources only): just the glyph, with the unread count on its corner -->
+                    <ToggleButton x:Name="ChatButton" Style="{StaticResource BarToggle}" Margin="0,0,8,0" IsChecked="{Binding Chat.IsOpen}"
+                                  Visibility="{Binding Chat.IsAvailable, Converter={StaticResource BoolVis}}"
+                                  ToolTip="Chat (Ctrl+Shift+M)" AutomationProperties.Name="Chat">
+                        <Grid Width="22" Height="20">
+                            <Path Data="M1.5,2.5 H14.5 V10.5 H6 L3,13.5 V10.5 H1.5 Z" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ToggleButton}}"
+                                  StrokeThickness="1.4" StrokeLineJoin="Round" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                            <Border HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,-3,-5,0" MinWidth="15" Height="15" Padding="3,0" CornerRadius="7.5"
+                                    Background="{StaticResource Accent}" BorderBrush="{StaticResource Header}" BorderThickness="1.5"
+                                    Visibility="{Binding Chat.HasUnread, Converter={StaticResource BoolVis}}">
+                                <TextBlock Text="{Binding Chat.UnreadText}" FontSize="9" FontWeight="Bold" Foreground="{StaticResource OnAccent}" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                            </Border>
+                        </Grid>
+                    </ToggleButton>
                     <!-- AI assistant: provider name + green dot once signed in (on standby); opens the chat box -->
                     <Button x:Name="AiButton" Height="24" Margin="0,0,10,0" Padding="8,0" Background="Transparent" VerticalAlignment="Center"
                             BorderBrush="{StaticResource InputBorder}" Click="OnAiButton" WindowChrome.IsHitTestVisibleInChrome="True"
@@ -427,6 +441,7 @@
                 <ColumnDefinition Width="264" MinWidth="180" MaxWidth="520" />
                 <ColumnDefinition Width="1" />
                 <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
 
             <!-- Navigation panel: tree (data source as the top node), entry card, then the data source picker and panel tabs -->
@@ -508,7 +523,7 @@
             <GridSplitter Grid.Column="1" Width="1" HorizontalAlignment="Stretch" />
 
             <!-- Shading: soft shadows under the title bar and along the tree's edge (transparent when Flat). Sessions draw over them. -->
-            <Border Grid.ColumnSpan="3" Height="6" VerticalAlignment="Top" Background="{StaticResource Depth.ShadowDown}" IsHitTestVisible="False" Panel.ZIndex="100" />
+            <Border Grid.ColumnSpan="4" Height="6" VerticalAlignment="Top" Background="{StaticResource Depth.ShadowDown}" IsHitTestVisible="False" Panel.ZIndex="100" />
             <Border Grid.Column="2" Width="6" HorizontalAlignment="Left" Background="{StaticResource Depth.ShadowRight}" IsHitTestVisible="False" Panel.ZIndex="100" />
 
             <!-- Working area: one or two panes, each with its own tabs -->
@@ -588,8 +603,44 @@
                 </Grid>
             </Grid>
 
+            <!-- Team chat: a column of its own right of the sessions, so it never covers an RDP tab -->
+            <Border Grid.Column="3" Width="330" BorderBrush="{StaticResource Border}" BorderThickness="1,0,0,0"
+                    Visibility="{Binding Chat.IsOpen, Converter={StaticResource BoolVis}}">
+                <views:ChatPanel x:Name="ChatPanel" DataContext="{Binding Chat}" />
+            </Border>
+
             <!-- Connection notices: bottom-right, above the status bar. A popup, so it also shows over RDP tabs. -->
             <Popup x:Name="NoticePopup" AllowsTransparency="True" Placement="Custom" StaysOpen="True" Focusable="False">
+                <StackPanel Width="340">
+                <!-- Chat messages for you while the chat is closed (or showing another conversation) -->
+                <ItemsControl ItemsSource="{Binding Chat.Toasts}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Border Margin="0,8,0,0" Background="{StaticResource Panel}" BorderBrush="{StaticResource ButtonBorder}" BorderThickness="1" CornerRadius="{StaticResource Radius}"
+                                    Cursor="Hand" MouseLeftButtonUp="OnChatToastClick">
+                                <Border.Effect><DropShadowEffect BlurRadius="14" ShadowDepth="3" Opacity="0.45" Color="Black" /></Border.Effect>
+                                <DockPanel>
+                                    <Border DockPanel.Dock="Left" Width="3" Background="{StaticResource Accent}" CornerRadius="3,0,0,3" />
+                                    <Border DockPanel.Dock="Left" Width="28" Height="28" CornerRadius="14" Background="{Binding Color}" VerticalAlignment="Top" Margin="10,9,0,0">
+                                        <TextBlock Text="{Binding Initials}" FontSize="10" FontWeight="SemiBold" Foreground="{StaticResource Bg}" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                    </Border>
+                                    <StackPanel Margin="10,8,8,8">
+                                        <DockPanel>
+                                            <Button DockPanel.Dock="Right" Style="{StaticResource FlatButton}" Content="✕" FontSize="10" Padding="4,0" MinHeight="18"
+                                                    ToolTip="Dismiss" AutomationProperties.Name="Dismiss message"
+                                                    Command="{Binding DataContext.Chat.DismissToastCommand, ElementName=Root}" CommandParameter="{Binding}" />
+                                            <TextBlock Text="{Binding Sender}" FontWeight="SemiBold" Foreground="{StaticResource TextStrong}" VerticalAlignment="Center" />
+                                            <TextBlock Text="{Binding Where}" Style="{StaticResource MutedText}" FontSize="11" Margin="6,0,0,0" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                                        </DockPanel>
+                                        <TextBlock Text="{Binding Text}" TextWrapping="Wrap" MaxHeight="54" TextTrimming="CharacterEllipsis" Margin="0,3,0,4" />
+                                        <Button Content="Reply" Style="{StaticResource FlatButton}" Foreground="{StaticResource Accent}" Padding="0" HorizontalAlignment="Left"
+                                                Command="{Binding DataContext.Chat.OpenToastCommand, ElementName=Root}" CommandParameter="{Binding}" />
+                                    </StackPanel>
+                                </DockPanel>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
                 <ItemsControl ItemsSource="{Binding Notices}" Width="340" Margin="0,0,0,0">
                     <ItemsControl.ItemTemplate>
                         <DataTemplate>
@@ -636,6 +687,7 @@
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
+                </StackPanel>
             </Popup>
         </Grid>
     </DockPanel>

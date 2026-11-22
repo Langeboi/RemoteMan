@@ -17,7 +17,7 @@ namespace RemoteMan.Data;
 /// row, which costs well under a millisecond.</item>
 /// </list>
 /// </summary>
-public abstract class SqlDataSource : IDataSource
+public abstract partial class SqlDataSource : IDataSource
 {
     protected readonly string ConnectionString;
     private readonly int _pollMs;
@@ -25,6 +25,7 @@ public abstract class SqlDataSource : IDataSource
     private Task? _feedTask;
     private long _seenRevision = -1;
     private long _seenPresenceStamp = -1;
+    private long _seenChatSeq = -1;
     private long _seenSharesStamp = -1;
 
     protected SqlDataSource(string connectionString, int pollMs)
@@ -50,8 +51,9 @@ public abstract class SqlDataSource : IDataSource
 
     protected abstract DbConnection CreateConnection();
     protected abstract IEnumerable<string> SchemaStatements { get; }
-    /// <summary>Statement that increments the counter row and returns the new value.</summary>
-    protected abstract string NextRevisionSql { get; }
+    /// <summary>Statement that increments a counter row of remoteman_meta (1 = entry revisions, 2 = chat messages) and returns the new value.</summary>
+    protected abstract string NextCounterSql(int id);
+    protected string NextRevisionSql => NextCounterSql(1);
     protected virtual string? AfterEntryWriteSql => null;
     protected virtual string? AfterPresenceWriteSql => null;
     /// <summary>Statement run after an invite changes (PostgreSQL: NOTIFY so the invitee sees it at once).</summary>
@@ -400,6 +402,19 @@ public abstract class SqlDataSource : IDataSource
                     {
                         var rev = Convert.ToInt64(await cmd.ExecuteScalarAsync(ct));
                         if (rev != Interlocked.Exchange(ref _seenRevision, rev)) RaiseChanged(new ChangeSignal(ChangeSignalKind.Entries, rev));
+                    }
+                    if (SupportsChat)
+                    {
+                        try
+                        {
+                            await using var cmd = Cmd(c, "SELECT rev FROM remoteman_meta WHERE id = 2");
+                            if (await cmd.ExecuteScalarAsync(ct) is { } v and not DBNull)
+                            {
+                                var seq = Convert.ToInt64(v);
+                                if (seq != Interlocked.Exchange(ref _seenChatSeq, seq)) RaiseChanged(new ChangeSignal(ChangeSignalKind.Chat, seq));
+                            }
+                        }
+                        catch (DbException) { /* a database without chat tables yet: entries still sync */ }
                     }
                     await using (var cmd = Cmd(c, "SELECT COALESCE(MAX(last_seen), 0) + COUNT(*) FROM remoteman_presence"))
                     {

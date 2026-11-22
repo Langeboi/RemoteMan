@@ -311,6 +311,7 @@ public sealed class EntryStore : IAsyncDisposable
 
     private async void OnSourceChanged(object? sender, ChangeSignal signal)
     {
+        if (signal.Kind == ChangeSignalKind.Chat) return;   // the chat hub handles these
         if (!IsOnline) { _ = ProbeAsync(); return; }
         try
         {

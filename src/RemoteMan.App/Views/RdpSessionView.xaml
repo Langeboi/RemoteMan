@@ -11,6 +11,28 @@
         <TextBlock x:Name="State" Foreground="{StaticResource Muted}" HorizontalAlignment="Center" VerticalAlignment="Center" />
         <wfi:WindowsFormsHost x:Name="Host" />
 
+        <!-- Shown while the session connects. The RDP control is hidden meanwhile (WPF can't draw over it),
+             then revealed once the remote desktop is ready to show. -->
+        <!-- Shown while the session connects: a spinning ring and the address.
+             The RDP control is hidden meanwhile (WPF can't draw over it), then revealed once the desktop is ready. -->
+        <Grid x:Name="Connecting" Background="{StaticResource Work}" Visibility="Collapsed">
+            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" MaxWidth="420" Margin="24">
+                <!-- Windows 11 style ring: a faint track and an arc that grows and shrinks as it turns (drawn in code). -->
+                <Grid Width="40" Height="40" HorizontalAlignment="Center" Margin="0,0,0,26">
+                    <Ellipse Width="39" Height="39" Stroke="{StaticResource Border}" StrokeThickness="3" />
+                    <Path x:Name="Arc" Stroke="{StaticResource Accent}" StrokeThickness="3" StrokeStartLineCap="Round" StrokeEndLineCap="Round" />
+                </Grid>
+                <TextBlock x:Name="ConnHost" Foreground="{StaticResource TextStrong}" FontFamily="{StaticResource MonoFont}" FontSize="15"
+                           HorizontalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                <TextBlock x:Name="ConnStage" Foreground="{StaticResource Faint}" FontSize="12" HorizontalAlignment="Center" Margin="0,6,0,0"
+                           TextWrapping="Wrap" TextAlignment="Center" />
+                <TextBlock x:Name="ConnFallback" Visibility="Collapsed" Foreground="{StaticResource Warn}" FontSize="11" HorizontalAlignment="Center"
+                           Margin="0,8,0,0" TextWrapping="Wrap" TextAlignment="Center" />
+                <Button Style="{StaticResource FlatButton}" Content="Cancel" HorizontalAlignment="Center" Margin="0,22,0,0" Padding="12,3"
+                        FontSize="11" Click="OnCancelConnect" AutomationProperties.Name="Cancel connecting" />
+            </StackPanel>
+        </Grid>
+
         <!-- Side strip: drop files here (or click) to send them to the remote session -->
         <Border x:Name="Strip" Grid.Column="1" Background="{StaticResource Panel}" BorderBrush="{StaticResource Border}" BorderThickness="1,0,0,0"
                 AllowDrop="True" Drop="OnDrop" DragOver="OnDragOver" DragLeave="OnDragLeave">

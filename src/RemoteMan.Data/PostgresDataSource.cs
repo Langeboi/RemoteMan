@@ -38,6 +38,23 @@ public sealed class PostgresDataSource : SqlDataSource
         """,
         "CREATE TABLE IF NOT EXISTS remoteman_meta (id INT PRIMARY KEY, rev BIGINT NOT NULL)",
         "INSERT INTO remoteman_meta (id, rev) VALUES (1, 0) ON CONFLICT (id) DO NOTHING",
+        // Chat: row 2 of the meta table numbers the messages.
+        "INSERT INTO remoteman_meta (id, rev) VALUES (2, 0) ON CONFLICT (id) DO NOTHING",
+        """
+        CREATE TABLE IF NOT EXISTS remoteman_chat_rooms (
+            id VARCHAR(36) PRIMARY KEY, kind INT NOT NULL, name VARCHAR(200) NULL, members TEXT NULL,
+            created_by VARCHAR(200) NULL, updated_at BIGINT NOT NULL, deleted INT NOT NULL DEFAULT 0)
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS remoteman_chat_messages (
+            seq BIGINT PRIMARY KEY, id VARCHAR(36) NOT NULL UNIQUE, room_id VARCHAR(36) NOT NULL,
+            sender VARCHAR(200) NOT NULL, sent_at BIGINT NOT NULL, body TEXT NOT NULL)
+        """,
+        "CREATE INDEX IF NOT EXISTS ix_remoteman_chat_messages_sent ON remoteman_chat_messages (sent_at)",
+        """
+        CREATE TABLE IF NOT EXISTS remoteman_chat_reads (
+            user_name VARCHAR(200) NOT NULL, room_id VARCHAR(36) NOT NULL, last_read BIGINT NOT NULL, PRIMARY KEY (user_name, room_id))
+        """,
     ];
 
     protected override IEnumerable<(string, bool)> MigrationStatements =>
@@ -49,9 +66,10 @@ public sealed class PostgresDataSource : SqlDataSource
     protected override string? CurrentUserSql => "SELECT session_user";
     protected override bool IsPermissionDenied(DbException ex) => ex is PostgresException { SqlState: PostgresErrorCodes.InsufficientPrivilege };
 
-    protected override string NextRevisionSql => "UPDATE remoteman_meta SET rev = rev + 1 WHERE id = 1 RETURNING rev";
+    protected override string NextCounterSql(int id) => $"UPDATE remoteman_meta SET rev = rev + 1 WHERE id = {id} RETURNING rev";
     protected override string? AfterEntryWriteSql => $"SELECT pg_notify('{Channel}', 'e:' || @rev::text)";
     protected override string? AfterPresenceWriteSql => $"SELECT pg_notify('{Channel}', 'p')";
+    protected override string? AfterChatWriteSql => $"SELECT pg_notify('{Channel}', 'c:' || @rev::text)";
     protected override string? AfterShareWriteSql => $"SELECT pg_notify('{Channel}', 's')";
     protected override string? ShareTableSql => """
         CREATE TABLE IF NOT EXISTS remoteman_shares (
@@ -82,6 +100,8 @@ public sealed class PostgresDataSource : SqlDataSource
                         RaiseChanged(new ChangeSignal(ChangeSignalKind.Entries, rev));
                     else if (e.Payload == "p")
                         RaiseChanged(new ChangeSignal(ChangeSignalKind.Presence));
+                    else if (e.Payload.StartsWith("c:") && long.TryParse(e.Payload.AsSpan(2), out var seq))
+                        RaiseChanged(new ChangeSignal(ChangeSignalKind.Chat, seq));
                     else if (e.Payload == "s")
                         RaiseChanged(new ChangeSignal(ChangeSignalKind.Shares));
                 };
@@ -89,6 +109,7 @@ public sealed class PostgresDataSource : SqlDataSource
                 // Catch up on anything that happened while we were not listening.
                 SetConnected(true);
                 RaiseChanged(new ChangeSignal(ChangeSignalKind.Entries));
+                RaiseChanged(new ChangeSignal(ChangeSignalKind.Chat));
                 while (!ct.IsCancellationRequested) await conn.WaitAsync(ct);
             }
             catch (OperationCanceledException) { return; }

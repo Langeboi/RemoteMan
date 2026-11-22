@@ -233,6 +233,6 @@ public sealed partial class MainViewModel
         var me = new Presence(_store.User, Environment.MachineName, Guid.Empty, PresenceState.Viewing, now);
         OnlineUsers.Add(new PresenceChip(me.Initials, $"{_store.User} (you)", PresenceChip.ColorFor(_store.User)));
         foreach (var p in _store.Presence.Where(p => p.IsAlive(now) && p.User != _store.User).GroupBy(p => p.User).Select(g => g.First()).Take(6))
-            OnlineUsers.Add(new PresenceChip(p.Initials, p.User, PresenceChip.ColorFor(p.User)));
+            OnlineUsers.Add(new PresenceChip(p.Initials, $"{p.User}: click to send a message", PresenceChip.ColorFor(p.User), p.User));
     }
 }
