@@ -4,7 +4,7 @@
 
 | Choice | Why |
 | --- | --- |
-| **C# / .NET 8, WPF** | Native Windows UI, starts fast with ReadyToRun, and is the only stack that can host the Windows RDP ActiveX control and WebView2 directly. No Electron, so memory stays low. |
+| **C# / .NET 10, WPF** | Native Windows UI, starts fast with ReadyToRun, and is the only stack that can host the Windows RDP ActiveX control and WebView2 directly. No Electron, so memory stays low. |
 | **mstscax (MsRdpClient9)** | The same RDP engine as mstsc: every RDP feature, NLA/CredSSP, gateway, dynamic resolution. Bound late via IDispatch, so no generated interop DLLs. |
 | **SSH.NET 2026** | Pure managed SSH with the widest algorithm range in .NET: post-quantum mlkem768x25519 down to DH group1-sha1, ed25519 to ssh-rsa, AES-GCM/ChaCha20 to 3DES-CBC. |
 | **xterm.js in WebView2** | The terminal used by VS Code: fast GPU rendering, full VT support, copy on select. |

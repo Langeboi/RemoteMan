@@ -20,8 +20,9 @@ $vpkArgs = @(
     '--packDir', $PublishDir,
     '--mainExe', 'RemoteMan.exe',
     '--outputDir', $OutputDir,
-    # Installs the .NET 8 desktop runtime first if the PC doesn't have it.
-    '--framework', 'net8.0-x64-desktop',
+    # Installs the .NET 10 desktop runtime first if the PC doesn't have it. Also checked when an existing
+    # install updates: Update.exe offers to install a missing runtime before it applies the new version.
+    '--framework', 'net10.0-x64-desktop',
     '--icon', (Join-Path $assets 'remoteman.ico'),
     '--splashImage', (Join-Path $assets 'setup-splash.png'),
     '--shortcuts', 'Desktop,StartMenuRoot'

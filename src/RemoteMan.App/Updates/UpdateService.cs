@@ -229,7 +229,10 @@ public sealed partial class UpdateService : ObservableObject
         {
             // Velopack waits for this process to exit, swaps the files, then starts the new version.
             // Shutting down normally lets open sessions and the data source close cleanly first.
-            mgr.WaitExitThenApplyUpdates(_pending.TargetFullRelease, silent: true, restart: true);
+            // Not silent: when the new version needs a .NET runtime this PC doesn't have yet (the move
+            // to .NET 10, say), Update.exe asks to install it first. In silent mode it cancels instead
+            // and the update never lands.
+            mgr.WaitExitThenApplyUpdates(_pending.TargetFullRelease, silent: false, restart: true);
             Application.Current.Shutdown();
         }
         catch (Exception ex)
