@@ -51,10 +51,13 @@ public sealed partial class PostgresLogins(string connectionString)
     public static string ConnectionStringFor(string baseConnectionString, string login, string password)
     {
         var b = new NpgsqlConnectionStringBuilder(baseConnectionString) { Username = login, Password = password };
-        b.Remove("Integrated Security");
-        b.Remove("Kerberos Service Name");
-        b.Remove("Include Realm");
-        b.Remove("Passfile");
+        // Settings that would make the teammate sign in some other way than with this password.
+        foreach (var key in new[] { "Integrated Security", "Kerberos Service Name", "Include Realm", "Passfile" })
+        {
+            try { b.Remove(key); }
+            catch (KeyNotFoundException) { } // keyword this Npgsql version doesn't know
+            catch (ArgumentException) { }
+        }
         return b.ConnectionString;
     }
 
