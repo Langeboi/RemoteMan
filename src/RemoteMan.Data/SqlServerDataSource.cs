@@ -74,6 +74,13 @@ public sealed class SqlServerDataSource : SqlDataSource
         ("IF COL_LENGTH('dbo.remoteman_entries', 'created_at') IS NULL ALTER TABLE dbo.remoteman_entries ADD created_at BIGINT NULL, created_by NVARCHAR(200) NULL", false),
     ];
 
+    protected override string? ShareTableSql => """
+        IF OBJECT_ID(N'dbo.remoteman_shares', N'U') IS NULL
+        CREATE TABLE dbo.remoteman_shares (
+            id VARCHAR(36) NOT NULL PRIMARY KEY, invitee NVARCHAR(200) NOT NULL, host_user NVARCHAR(200) NOT NULL, state INT NOT NULL,
+            updated_at BIGINT NOT NULL, expires_at BIGINT NOT NULL, payload NVARCHAR(MAX) NULL)
+        """;
+
     /// <summary>DOMAIN\user with Windows authentication, the SQL login name otherwise.</summary>
     protected override string? CurrentUserSql => "SELECT SUSER_SNAME()";
 

@@ -70,6 +70,12 @@ public sealed class PostgresDataSource : SqlDataSource
     protected override string? AfterEntryWriteSql => $"SELECT pg_notify('{Channel}', 'e:' || @rev::text)";
     protected override string? AfterPresenceWriteSql => $"SELECT pg_notify('{Channel}', 'p')";
     protected override string? AfterChatWriteSql => $"SELECT pg_notify('{Channel}', 'c:' || @rev::text)";
+    protected override string? AfterShareWriteSql => $"SELECT pg_notify('{Channel}', 's')";
+    protected override string? ShareTableSql => """
+        CREATE TABLE IF NOT EXISTS remoteman_shares (
+            id VARCHAR(36) PRIMARY KEY, invitee VARCHAR(200) NOT NULL, host_user VARCHAR(200) NOT NULL, state INT NOT NULL,
+            updated_at BIGINT NOT NULL, expires_at BIGINT NOT NULL, payload TEXT NULL)
+        """;
 
     public override async Task StartChangeFeedAsync(CancellationToken ct = default)
     {
@@ -96,6 +102,8 @@ public sealed class PostgresDataSource : SqlDataSource
                         RaiseChanged(new ChangeSignal(ChangeSignalKind.Presence));
                     else if (e.Payload.StartsWith("c:") && long.TryParse(e.Payload.AsSpan(2), out var seq))
                         RaiseChanged(new ChangeSignal(ChangeSignalKind.Chat, seq));
+                    else if (e.Payload == "s")
+                        RaiseChanged(new ChangeSignal(ChangeSignalKind.Shares));
                 };
                 await using (var cmd = new NpgsqlCommand($"LISTEN {Channel}", conn)) await cmd.ExecuteNonQueryAsync(ct);
                 // Catch up on anything that happened while we were not listening.

@@ -72,6 +72,9 @@
   const search = new SearchAddon.SearchAddon();
   term.loadAddon(search);
   term.open(document.getElementById('t'));
+  // Shared session (guest): the size follows the host's terminal instead of the window.
+  let fixed = false;
+  function refit() { if (!fixed) fit.fit(); }
   fit.fit();
 
   function applyLook(p) {
@@ -81,7 +84,7 @@
     if (p.fontFamily) term.options.fontFamily = `'${p.fontFamily}', Consolas, monospace`;
     if (p.fontSize) term.options.fontSize = p.fontSize;
     if (p.scrollback) term.options.scrollback = p.scrollback;
-    fit.fit();
+    refit();
   }
 
   // Ctrl+wheel: font size, saved for every terminal.
@@ -92,7 +95,7 @@
     const size = Math.min(28, Math.max(8, term.options.fontSize + (e.deltaY < 0 ? 1 : -1)));
     if (size === term.options.fontSize) return;
     term.options.fontSize = size;
-    fit.fit();
+    refit();
     const z = document.getElementById('zoom');
     z.textContent = size + ' pt'; z.style.display = 'block';
     clearTimeout(zoomTimer);
@@ -135,7 +138,7 @@
 
   term.onData(d => host.postMessage({ t: 'data', d: backspaceCtrlH ? d.replace(/\x7f/g, '\b') : d }));
   term.onResize(({ cols, rows }) => host.postMessage({ t: 'resize', cols, rows }));
-  new ResizeObserver(() => fit.fit()).observe(document.body);
+  new ResizeObserver(() => refit()).observe(document.body);
 
   host.addEventListener('message', e => {
     const m = e.data;
@@ -146,6 +149,8 @@
     else if (m.t === 'look') applyLook(m.d);
     else if (m.t === 'find') openFind();
     else if (m.t === 'clear') term.clear();
+    else if (m.t === 'fixed') { fixed = true; term.resize(Math.max(2, m.cols), Math.max(2, m.rows)); }
+    else if (m.t === 'stdin') { term.options.disableStdin = !m.on; term.options.cursorBlink = !!m.on; }
   });
 
   host.postMessage({ t: 'ready', cols: term.cols, rows: term.rows });

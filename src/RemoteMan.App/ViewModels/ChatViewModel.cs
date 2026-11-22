@@ -302,6 +302,12 @@ public sealed partial class ChatViewModel : ObservableObject
         {
             var parts = ChatLink.Parse(lines[i]);
             var only = parts.Where(p => p.Link is not null || p.Text.Trim().Length > 0).ToList();
+            if (only.Count == 1 && only[0].Link is { Kind: ChatLink.Invite } inv)
+            {
+                FlushText();
+                blocks.Add(new ChatInviteBlock(new ChatLinkItem(inv, null, this)));
+                continue;
+            }
             if (only.Count == 1 && only[0].Link is { Kind: ChatLink.Entry } solo && Resolve(solo) is { Entry: not null } card)
             {
                 FlushText();
@@ -325,6 +331,11 @@ public sealed partial class ChatViewModel : ObservableObject
 
     internal void OpenLink(ChatLinkItem l)
     {
+        if (l.Link.Kind == ChatLink.Invite)
+        {
+            if (Guid.TryParse(l.Link.Target, out var inviteId)) _ = _main.JoinShareAsync(inviteId);
+            return;
+        }
         if (l.Entry is null) { _main.Message = l.Link.Kind is ChatLink.Entry or ChatLink.Backups ? $"{l.Label} isn't in your tree (deleted, or you can't see it)" : $"{l.Label} needs a newer RemoteMan"; return; }
         switch (l.Link.Kind)
         {
@@ -350,6 +361,16 @@ public sealed partial class ChatViewModel : ObservableObject
         if (l.Entry is not { IsConnectable: true } e) return;
         _main.RevealEntry(e.Id);
         if (_main.FindNode(e.Id) is { } node) _main.ConnectCommand.Execute(node);
+    }
+
+    /// <summary>Posts a shared-session invite to the invitee as a direct message (a card with Join).</summary>
+    public async Task PostShareInviteAsync(string user, RemoteMan.Core.Sharing.ShareInvite invite)
+    {
+        if (_hub is null) return;
+        var what = invite.Kind == RemoteMan.Core.Sharing.ShareKind.Rdp ? "RDP session" : "terminal";
+        var link = new ChatLink(ChatLink.Invite, invite.Id.ToString(), $"Join my shared {what}: {invite.EntryName}");
+        try { await _hub.SendAsync(_hub.DirectWith(user), link.ToToken()); }
+        catch (Exception) { /* the pop-up still reaches them */ }
     }
 
     /// <summary>"Send in chat" on an entry, or an entry dropped on the message box.</summary>
@@ -581,6 +602,8 @@ public sealed record ChatTextBlock(IReadOnlyList<ChatInlinePart> Parts);
 public sealed record ChatInlinePart(string Text, ChatLinkItem? Link);
 /// <summary>A link on a line of its own: a card with the entry's details and buttons.</summary>
 public sealed record ChatCardBlock(ChatLinkItem Link);
+/// <summary>A shared-session invite on a line of its own: a card with Join.</summary>
+public sealed record ChatInviteBlock(ChatLinkItem Link);
 
 public sealed class ChatLinkItem
 {

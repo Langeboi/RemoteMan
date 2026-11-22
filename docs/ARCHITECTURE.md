@@ -150,6 +150,28 @@ folder), keep the newest N, and remember their password under DPAPI.
 - Account sign-in uses a separate WebView2 profile (`%LOCALAPPDATA%\RemoteMan\AiWeb`); signing out
   deletes that provider's cookies.
 
+## Shared sessions
+
+Right-click an RDP or terminal entry > **Shared session…** (or a tab's menu > Share this session…).
+
+- **Invites** are rows in `remoteman_shares` (shared databases only): who, which entry, the host's
+  addresses, the relay, a one-time ticket and the SHA-256 of the host's throwaway TLS certificate.
+  PostgreSQL notifies (`s`), the others poll. Invitees get a pop-up and a chat card; invites expire after 10 minutes.
+- **The link** (`Core/Sharing`): the guest connects to the host directly (all addresses raced) or through
+  the relay, then TLS pinned to that certificate. The host is the hub and keeps the control rules
+  (`ShareControl`): one controller at a time, the host starts with it, host or controller can hand it
+  on, the host can always take it back, read-only logins only watch.
+- **Terminals**: the host fans out the shell output (plus the recent screen for late joiners) and only
+  takes keystrokes from the controller; guests' xterm.js runs at the host's size. The host's own typing is
+  held while someone else has control.
+- **RDP**: Windows Desktop Sharing (rdpencomapi, the Remote Assistance engine). Only RemoteMan's windows and
+  only the RDP tab's rectangle are shared; it pauses while the tab is hidden. Guests' viewers reach it
+  through a tunnel inside the share link, so direct and relay work the same. The controller's viewer gets
+  interactive control; since it is the same Windows desktop, the host's own mouse still works too.
+- **Relay** (`deploy/relay/remoteman-relay.py`, installed with `remoteman-db relay install`): both sides
+  connect out to it on TCP 47120 and it splices bytes; it can't read the TLS inside. RemoteMan looks for it
+  on the database servers by itself (`ShareRelay` in settings overrides).
+
 ## Known gaps / next steps
 
 - Build and run on Windows to shake out XAML issues (this cut was compile-checked on Linux only).

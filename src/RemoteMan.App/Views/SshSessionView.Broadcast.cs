@@ -94,6 +94,8 @@ public partial class SshSessionView
     /// </summary>
     private void SendInput(string data)
     {
+        // Shared session where a teammate has control: your keys wait until you have it back.
+        if (_vm is { InputLocked: true }) return;
         if (_bmain is null || _vm is null || !_bmain.BroadcastOn || !_bmain.InBroadcast(_vm))
         {
             _chan?.Send(data);

@@ -56,6 +56,8 @@ public sealed class AppSettings
 
     /// <summary>Delete chat messages older than this many days (0 keeps them). Any PC with a shorter setting deletes for everyone.</summary>
     public int ChatRetentionDays { get; set; } = 365;
+    /// <summary>Shared sessions: relay "host:port" for teammates on other networks. Empty = the database server on port 47120.</summary>
+    public string? ShareRelay { get; set; }
     /// <summary>Whether the chat drawer was open at the last exit.</summary>
     public bool ChatOpen { get; set; }
 

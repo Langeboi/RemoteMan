@@ -152,6 +152,22 @@
                 </Grid>
             </Border>
         </DataTemplate>
+        <!-- Shared-session invite: Join opens the session in a tab (checked for expiry on click) -->
+        <DataTemplate DataType="{x:Type vm:ChatInviteBlock}">
+            <Border Margin="0,4,0,2" Background="{StaticResource Depth.Card}" BorderBrush="{StaticResource Warn}" BorderThickness="1"
+                    CornerRadius="4" DataContext="{Binding Link}">
+                <DockPanel Margin="10,8">
+                    <Button DockPanel.Dock="Right" Content="Join" Style="{StaticResource PrimaryButton}" MinHeight="22" Margin="8,0,0,0"
+                            Command="{Binding OpenCommand}" ToolTip="Watch the session live in a tab" />
+                    <Path DockPanel.Dock="Left" Data="M5,8 A2.2,2.2 0 1 1 5,7.99 M11.5,4 A2,2 0 1 1 11.5,3.99 M11.5,12 A2,2 0 1 1 11.5,11.99 M7,7 L9.6,5.2 M7,9 L9.6,10.8"
+                          Stroke="{StaticResource Warn}" StrokeThickness="1.4" Margin="0,0,9,0" VerticalAlignment="Center" />
+                    <StackPanel VerticalAlignment="Center">
+                        <TextBlock Text="{Binding Link.Label}" FontWeight="SemiBold" Foreground="{StaticResource TextStrong}" TextWrapping="Wrap" />
+                        <TextBlock Text="Shared session · invites last 10 minutes" Foreground="{StaticResource Muted}" FontSize="11" Margin="0,1,0,0" />
+                    </StackPanel>
+                </DockPanel>
+            </Border>
+        </DataTemplate>
     </UserControl.Resources>
 
     <Grid>

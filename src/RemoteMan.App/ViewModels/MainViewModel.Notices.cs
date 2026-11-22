@@ -29,11 +29,24 @@ public sealed partial class Notice : ObservableObject
     public bool IsWarning => Problem.IsWarning;
     public bool HasHint => !string.IsNullOrEmpty(Problem.Hint);
     public bool HasDetails => !string.IsNullOrEmpty(Problem.Details);
-    public bool CanRetry => Entry is { IsConnectable: true } && !Problem.IsWarning;
+    public bool CanRetry => Entry is { IsConnectable: true } && !Problem.IsWarning && Actions.Count == 0;
     public bool CanEdit => Entry is not null;
+    /// <summary>Buttons of its own (Join / Not now on a shared-session invite). Pressing one closes the notice.</summary>
+    public IReadOnlyList<NoticeAction> Actions { get; init; } = [];
+    public bool HasActions => Actions.Count > 0;
+    /// <summary>How long it stays before fading (default ten seconds).</summary>
+    public TimeSpan? Life { get; init; }
     [ObservableProperty] private bool _isHovered;
     [ObservableProperty] private bool _isFaded;
     [ObservableProperty] private string _age = "just now";
+}
+
+/// <summary>A button on a notice.</summary>
+public sealed record NoticeAction(string Label, Action Run, bool Primary = false)
+{
+    internal Action? Done { get; set; }
+    public RelayCommand Command => _command ??= new RelayCommand(() => { Done?.Invoke(); Run(); });
+    private RelayCommand? _command;
 }
 
 public partial class MainViewModel
@@ -58,6 +71,22 @@ public partial class MainViewModel
         });
     }
 
+    /// <summary>A notice with buttons of its own, staying for <paramref name="life"/>. Returns it so it can be withdrawn.</summary>
+    public Notice NotifyWithActions(ConnectionProblem problem, Entry? entry, IReadOnlyList<NoticeAction> actions, TimeSpan? life = null)
+    {
+        var n = new Notice(problem, entry) { Actions = actions, Life = life };
+        foreach (var a in actions) a.Done = () => DismissNotice(n);
+        OnUi(() =>
+        {
+            Notices.Add(n);
+            while (Notices.Count > 4) Notices.RemoveAt(0);
+            HasNotices = true;
+            _noticeTimer ??= new DispatcherTimer(TimeSpan.FromSeconds(1), DispatcherPriority.Background, (_, _) => AgeNotices(), System.Windows.Application.Current.Dispatcher);
+            _noticeTimer.Start();
+        });
+        return n;
+    }
+
     private void AgeNotices()
     {
         var now = DateTimeOffset.Now;
@@ -68,8 +97,9 @@ public partial class MainViewModel
             if (n.IsHovered) continue;
             var age = now - n.Shown;
             // Fade, then go. Hovering keeps it; it starts over when the mouse leaves.
-            if (age > NoticeLife + TimeSpan.FromSeconds(2)) Notices.Remove(n);
-            else n.IsFaded = age > NoticeLife;
+            var life = n.Life ?? NoticeLife;
+            if (age > life + TimeSpan.FromSeconds(2)) Notices.Remove(n);
+            else n.IsFaded = age > life;
         }
         HasNotices = Notices.Count > 0;
         if (!HasNotices) _noticeTimer?.Stop();
