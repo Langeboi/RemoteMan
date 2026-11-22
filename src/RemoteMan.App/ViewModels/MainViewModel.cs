@@ -88,6 +88,7 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
             await StartOxidizedAsync();
             await SeedSnippetsAsync(cfg.Name);
             _ = BackupLoopAsync();
+            await StartChatAsync(store);
         }
         catch (Exception ex)
         {
@@ -1056,6 +1057,7 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
         foreach (var s in Sessions.ToList()) (s as IDisposable)?.Dispose();
         await StopZabbixAsync();
         StopOxidized();
+        if (_chat is not null) await _chat.StopAsync();
         if (_store is not null) await _store.DisposeAsync();
     }
 }

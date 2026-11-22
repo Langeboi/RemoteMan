@@ -67,6 +67,9 @@ WebView2 runtime ships with Windows 11 and current Windows 10.
   restore into a new folder or merge back in place.
 - Data sources: local SQLite (default), or shared PostgreSQL, SQL Server or MySQL/MariaDB with
   multi-server failover, live updates and presence (who is viewing, editing or connected).
+- **Team chat** on shared databases: a contact list of groups and people, direct messages, and `#` links to
+  entries, folders, credentials (name only), snippets and config backups that open in the reader's tree.
+  Messages are stored encrypted with the team vault key.
 - **AI assistant** (button at the top right, Ctrl+Shift+A): pick Claude, ChatGPT, Gemini, Mistral, a
   local Ollama server or any OpenAI-compatible endpoint. Signed in, it waits on standby; the button opens
   a chat box styled like the chosen provider. With an API key it can read the active SSH session's last

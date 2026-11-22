@@ -1,5 +1,6 @@
 using System.Data.Common;
 using System.Net.Sockets;
+using RemoteMan.Core.Chat;
 using RemoteMan.Core.Model;
 using RemoteMan.Core.Storage;
 
@@ -11,7 +12,7 @@ namespace RemoteMan.Data;
 /// Calls go to the active member; on a connection-level failure the next member becomes
 /// active and subscribers get a full-resync signal. Replication itself is the database's job.
 /// </summary>
-public sealed class RedundantDataSource : IDataSource
+public sealed class RedundantDataSource : IDataSource, IChatSource
 {
     private readonly IReadOnlyList<IDataSource> _members;
     private int _active;
@@ -76,6 +77,7 @@ public sealed class RedundantDataSource : IDataSource
         FailedOver?.Invoke(this, Active);
         ConnectionChanged?.Invoke(this, Active.IsConnected);
         Changed?.Invoke(this, new ChangeSignal(ChangeSignalKind.Entries));
+        Changed?.Invoke(this, new ChangeSignal(ChangeSignalKind.Chat));
     }
 
     public Task InitializeAsync(CancellationToken ct = default) => Run(m => m.InitializeAsync(ct));
@@ -86,6 +88,19 @@ public sealed class RedundantDataSource : IDataSource
     public Task HeartbeatPresenceAsync(Presence p, CancellationToken ct = default) => Run(m => m.HeartbeatPresenceAsync(p, ct));
     public Task ClearPresenceAsync(string user, string machine, CancellationToken ct = default) => Run(m => m.ClearPresenceAsync(user, machine, ct));
     public Task<IReadOnlyList<Presence>> GetPresenceAsync(CancellationToken ct = default) => Run(m => m.GetPresenceAsync(ct));
+
+    // Chat goes to the active member too, with the same failover.
+    private IChatSource ChatOf(IDataSource m) => m as IChatSource ?? throw new NotSupportedException($"{m.DisplayName} has no chat.");
+    public bool SupportsChat => Active is IChatSource { SupportsChat: true };
+    public Task<IReadOnlyList<ChatRoom>> GetChatRoomsAsync(CancellationToken ct = default) => Run(m => ChatOf(m).GetChatRoomsAsync(ct));
+    public Task SaveChatRoomAsync(ChatRoom room, CancellationToken ct = default) => Run(m => ChatOf(m).SaveChatRoomAsync(room, ct));
+    public Task<StoredChatMessage> PostChatMessageAsync(StoredChatMessage message, CancellationToken ct = default) => Run(m => ChatOf(m).PostChatMessageAsync(message, ct));
+    public Task<IReadOnlyList<StoredChatMessage>> GetChatMessagesAsync(long sinceSeq, CancellationToken ct = default) => Run(m => ChatOf(m).GetChatMessagesAsync(sinceSeq, ct));
+    public Task<long> GetChatSeqAsync(CancellationToken ct = default) => Run(m => ChatOf(m).GetChatSeqAsync(ct));
+    public Task<IReadOnlyDictionary<Guid, long>> GetChatReadsAsync(string user, CancellationToken ct = default) => Run(m => ChatOf(m).GetChatReadsAsync(user, ct));
+    public Task SetChatReadAsync(string user, Guid roomId, long seq, CancellationToken ct = default) => Run(m => ChatOf(m).SetChatReadAsync(user, roomId, seq, ct));
+    public Task<IReadOnlyList<string>> GetChatUsersAsync(CancellationToken ct = default) => Run(m => ChatOf(m).GetChatUsersAsync(ct));
+    public Task<int> DeleteChatMessagesAsync(DateTimeOffset before, CancellationToken ct = default) => Run(m => ChatOf(m).DeleteChatMessagesAsync(before, ct));
 
     public Task StartChangeFeedAsync(CancellationToken ct = default)
     {

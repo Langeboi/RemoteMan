@@ -44,6 +44,29 @@ public sealed class SqlServerDataSource : SqlDataSource
         CREATE TABLE dbo.remoteman_meta (id INT NOT NULL PRIMARY KEY, rev BIGINT NOT NULL)
         """,
         "IF NOT EXISTS (SELECT 1 FROM dbo.remoteman_meta WHERE id = 1) INSERT INTO dbo.remoteman_meta (id, rev) VALUES (1, 0)",
+        // Chat: row 2 of the meta table numbers the messages.
+        "IF NOT EXISTS (SELECT 1 FROM dbo.remoteman_meta WHERE id = 2) INSERT INTO dbo.remoteman_meta (id, rev) VALUES (2, 0)",
+        """
+        IF OBJECT_ID(N'dbo.remoteman_chat_rooms', N'U') IS NULL
+        CREATE TABLE dbo.remoteman_chat_rooms (
+            id VARCHAR(36) NOT NULL PRIMARY KEY, kind INT NOT NULL, name NVARCHAR(200) NULL, members NVARCHAR(MAX) NULL,
+            created_by NVARCHAR(200) NULL, updated_at BIGINT NOT NULL, deleted INT NOT NULL DEFAULT 0)
+        """,
+        """
+        IF OBJECT_ID(N'dbo.remoteman_chat_messages', N'U') IS NULL
+        CREATE TABLE dbo.remoteman_chat_messages (
+            seq BIGINT NOT NULL PRIMARY KEY, id VARCHAR(36) NOT NULL UNIQUE, room_id VARCHAR(36) NOT NULL,
+            sender NVARCHAR(200) NOT NULL, sent_at BIGINT NOT NULL, body NVARCHAR(MAX) NOT NULL)
+        """,
+        """
+        IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'ix_remoteman_chat_messages_sent')
+        CREATE INDEX ix_remoteman_chat_messages_sent ON dbo.remoteman_chat_messages (sent_at)
+        """,
+        """
+        IF OBJECT_ID(N'dbo.remoteman_chat_reads', N'U') IS NULL
+        CREATE TABLE dbo.remoteman_chat_reads (
+            user_name NVARCHAR(200) NOT NULL, room_id VARCHAR(36) NOT NULL, last_read BIGINT NOT NULL, PRIMARY KEY (user_name, room_id))
+        """,
     ];
 
     protected override IEnumerable<(string, bool)> MigrationStatements =>
@@ -54,5 +77,5 @@ public sealed class SqlServerDataSource : SqlDataSource
     /// <summary>DOMAIN\user with Windows authentication, the SQL login name otherwise.</summary>
     protected override string? CurrentUserSql => "SELECT SUSER_SNAME()";
 
-    protected override string NextRevisionSql => "UPDATE dbo.remoteman_meta SET rev = rev + 1 OUTPUT inserted.rev WHERE id = 1";
+    protected override string NextCounterSql(int id) => $"UPDATE dbo.remoteman_meta SET rev = rev + 1 OUTPUT inserted.rev WHERE id = {id}";
 }
