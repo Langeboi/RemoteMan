@@ -50,7 +50,7 @@ public interface IDataSource : IAsyncDisposable
 
 public enum DataSourceKind { Sqlite, PostgreSql, SqlServer, MySql }
 
-public enum ChangeSignalKind { Entries, Presence }
+public enum ChangeSignalKind { Entries, Presence, Chat }
 
 public sealed record ChangeSignal(ChangeSignalKind Kind, long? Revision = null);
 
