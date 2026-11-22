@@ -25,6 +25,7 @@ public abstract class SqlDataSource : IDataSource
     private Task? _feedTask;
     private long _seenRevision = -1;
     private long _seenPresenceStamp = -1;
+    private long _seenSharesStamp = -1;
 
     protected SqlDataSource(string connectionString, int pollMs)
     {
@@ -53,6 +54,10 @@ public abstract class SqlDataSource : IDataSource
     protected abstract string NextRevisionSql { get; }
     protected virtual string? AfterEntryWriteSql => null;
     protected virtual string? AfterPresenceWriteSql => null;
+    /// <summary>Statement run after an invite changes (PostgreSQL: NOTIFY so the invitee sees it at once).</summary>
+    protected virtual string? AfterShareWriteSql => null;
+    /// <summary>Creates <c>remoteman_shares</c> (shared-session invites) if it isn't there; null where sharing isn't offered.</summary>
+    protected virtual string? ShareTableSql => null;
 
     protected async Task<DbConnection> OpenAsync(CancellationToken ct)
     {
@@ -109,6 +114,11 @@ public abstract class SqlDataSource : IDataSource
             try { await using var cmd = Cmd(c, sql); await cmd.ExecuteNonQueryAsync(ct); }
             catch (DbException ex) when (ignore || IsPermissionDenied(ex)) { denied |= !ignore; }
         }
+        if (ShareTableSql is { } shares)
+        {
+            try { await using var cmd = Cmd(c, shares); await cmd.ExecuteNonQueryAsync(ct); SharesReady = true; }
+            catch (DbException) { SharesReady = await SharesTableExistsAsync(c, ct); }
+        }
         if (denied)
         {
             await using var probe = Cmd(c, "SELECT COUNT(*) FROM remoteman_meta");
@@ -120,6 +130,81 @@ public abstract class SqlDataSource : IDataSource
             await using var cmd = Cmd(c, who);
             DatabaseUser = (await cmd.ExecuteScalarAsync(ct))?.ToString();
         }
+    }
+
+    // ---------------- shared-session invites ----------------
+
+    /// <summary>The invites table exists (created here, or by someone with more rights).</summary>
+    protected bool SharesReady { get; private set; }
+    public virtual bool SupportsSharing => ShareTableSql is not null && SharesReady;
+
+    private static async Task<bool> SharesTableExistsAsync(DbConnection c, CancellationToken ct)
+    {
+        try { await using var probe = Cmd(c, "SELECT COUNT(*) FROM remoteman_shares WHERE 1 = 0"); await probe.ExecuteScalarAsync(ct); return true; }
+        catch (DbException) { return false; }
+    }
+
+    public async Task PutShareInviteAsync(RemoteMan.Core.Sharing.ShareInvite i, CancellationToken ct = default)
+    {
+        await using var c = await OpenAsync(ct);
+        await using var tx = await c.BeginTransactionAsync(ct);
+        var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        // Old invites are only clutter: anything that expired an hour ago goes.
+        await using (var clean = Cmd(c, "DELETE FROM remoteman_shares WHERE expires_at < @old", tx, ("@old", now - 3_600_000)))
+            await clean.ExecuteNonQueryAsync(ct);
+        var args = new (string, object?)[]
+        {
+            ("@id", i.Id.ToString()), ("@invitee", i.Invitee), ("@host", i.HostUser), ("@state", (int)i.State),
+            ("@at", now), ("@exp", i.ExpiresAt.ToUnixTimeMilliseconds()), ("@payload", i.ToPayload()),
+        };
+        int n;
+        await using (var upd = Cmd(c, "UPDATE remoteman_shares SET invitee=@invitee, host_user=@host, state=@state, updated_at=@at, expires_at=@exp, payload=@payload WHERE id=@id", tx, args))
+            n = await upd.ExecuteNonQueryAsync(ct);
+        if (n == 0)
+        {
+            await using var ins = Cmd(c, "INSERT INTO remoteman_shares (id, invitee, host_user, state, updated_at, expires_at, payload) VALUES (@id, @invitee, @host, @state, @at, @exp, @payload)", tx, args);
+            await ins.ExecuteNonQueryAsync(ct);
+        }
+        await NotifySharesAsync(c, tx, ct);
+        await tx.CommitAsync(ct);
+    }
+
+    public async Task SetShareInviteStateAsync(Guid inviteId, RemoteMan.Core.Sharing.ShareInviteState state, CancellationToken ct = default)
+    {
+        await using var c = await OpenAsync(ct);
+        await using var tx = await c.BeginTransactionAsync(ct);
+        await using (var upd = Cmd(c, "UPDATE remoteman_shares SET state=@state, updated_at=@at WHERE id=@id", tx,
+                         ("@state", (int)state), ("@at", DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()), ("@id", inviteId.ToString())))
+            await upd.ExecuteNonQueryAsync(ct);
+        await NotifySharesAsync(c, tx, ct);
+        await tx.CommitAsync(ct);
+    }
+
+    private async Task NotifySharesAsync(DbConnection c, DbTransaction tx, CancellationToken ct)
+    {
+        if (AfterShareWriteSql is not { } notify) return;
+        await using var nc = Cmd(c, notify, tx);
+        await nc.ExecuteNonQueryAsync(ct);
+    }
+
+    public async Task<IReadOnlyList<RemoteMan.Core.Sharing.ShareInvite>> GetShareInvitesAsync(CancellationToken ct = default)
+    {
+        if (!SupportsSharing) return [];
+        await using var c = await OpenAsync(ct);
+        await using var cmd = Cmd(c, "SELECT id, invitee, host_user, state, expires_at, payload FROM remoteman_shares WHERE expires_at > @now", null,
+            ("@now", DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()));
+        var list = new List<RemoteMan.Core.Sharing.ShareInvite>();
+        await using var r = await cmd.ExecuteReaderAsync(ct);
+        while (await r.ReadAsync(ct))
+        {
+            try
+            {
+                list.Add(RemoteMan.Core.Sharing.ShareInvite.FromRow(Guid.Parse(r.GetString(0)), r.GetString(1), r.GetString(2),
+                    Convert.ToInt32(r.GetValue(3)), Convert.ToInt64(r.GetValue(4)), r.IsDBNull(5) ? null : r.GetString(5)));
+            }
+            catch (System.Text.Json.JsonException) { }
+        }
+        return list;
     }
 
     private const string SelectColumns = "id, parent_id, kind, name, payload, revision, updated_at, updated_by, deleted, created_at, created_by";
@@ -320,6 +405,16 @@ public abstract class SqlDataSource : IDataSource
                     {
                         var stamp = Convert.ToInt64(await cmd.ExecuteScalarAsync(ct));
                         if (stamp != Interlocked.Exchange(ref _seenPresenceStamp, stamp)) RaiseChanged(new ChangeSignal(ChangeSignalKind.Presence));
+                    }
+                    if (SupportsSharing)
+                    {
+                        try
+                        {
+                            await using var cmd = Cmd(c, "SELECT COALESCE(MAX(updated_at), 0) + COUNT(*) FROM remoteman_shares");
+                            var stamp = Convert.ToInt64(await cmd.ExecuteScalarAsync(ct));
+                            if (stamp != Interlocked.Exchange(ref _seenSharesStamp, stamp)) RaiseChanged(new ChangeSignal(ChangeSignalKind.Shares));
+                        }
+                        catch (DbException) { }
                     }
                     SetConnected(true);
                     await Task.Delay(intervalMs, ct);

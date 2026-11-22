@@ -38,6 +38,12 @@ public sealed class MySqlDataSource : SqlDataSource
         ("ALTER TABLE remoteman_entries ADD COLUMN created_by VARCHAR(200) NULL", true),
     ];
 
+    protected override string? ShareTableSql => """
+        CREATE TABLE IF NOT EXISTS remoteman_shares (
+            id VARCHAR(36) NOT NULL PRIMARY KEY, invitee VARCHAR(200) NOT NULL, host_user VARCHAR(200) NOT NULL, state INT NOT NULL,
+            updated_at BIGINT NOT NULL, expires_at BIGINT NOT NULL, payload LONGTEXT NULL) CHARACTER SET utf8mb4
+        """;
+
     // USER() is the name the client logged in with (CURRENT_USER() may be a wildcard account).
     protected override string? CurrentUserSql => "SELECT SUBSTRING_INDEX(USER(), '@', 1)";
 

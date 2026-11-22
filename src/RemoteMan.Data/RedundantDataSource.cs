@@ -86,6 +86,10 @@ public sealed class RedundantDataSource : IDataSource
     public Task HeartbeatPresenceAsync(Presence p, CancellationToken ct = default) => Run(m => m.HeartbeatPresenceAsync(p, ct));
     public Task ClearPresenceAsync(string user, string machine, CancellationToken ct = default) => Run(m => m.ClearPresenceAsync(user, machine, ct));
     public Task<IReadOnlyList<Presence>> GetPresenceAsync(CancellationToken ct = default) => Run(m => m.GetPresenceAsync(ct));
+    public bool SupportsSharing => Active.SupportsSharing;
+    public Task PutShareInviteAsync(RemoteMan.Core.Sharing.ShareInvite i, CancellationToken ct = default) => Run(m => m.PutShareInviteAsync(i, ct));
+    public Task SetShareInviteStateAsync(Guid id, RemoteMan.Core.Sharing.ShareInviteState st, CancellationToken ct = default) => Run(m => m.SetShareInviteStateAsync(id, st, ct));
+    public Task<IReadOnlyList<RemoteMan.Core.Sharing.ShareInvite>> GetShareInvitesAsync(CancellationToken ct = default) => Run(m => m.GetShareInvitesAsync(ct));
 
     public Task StartChangeFeedAsync(CancellationToken ct = default)
     {

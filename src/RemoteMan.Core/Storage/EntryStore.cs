@@ -66,6 +66,8 @@ public sealed class EntryStore : IAsyncDisposable
     /// <summary>Raised (on a background thread) with the entries that changed remotely or locally.</summary>
     public event EventHandler<IReadOnlyList<Entry>>? EntriesChanged;
     public event EventHandler? PresenceChanged;
+    /// <summary>Shared-session invites changed (someone invited, accepted, declined or ended).</summary>
+    public event EventHandler? SharesChanged;
 
     public Entry? Get(Guid id) => _entries.TryGetValue(id, out var e) && !e.Deleted ? e : null;
 
@@ -313,6 +315,7 @@ public sealed class EntryStore : IAsyncDisposable
         try
         {
             if (signal.Kind == ChangeSignalKind.Presence) await RefreshPresenceAsync();
+            else if (signal.Kind == ChangeSignalKind.Shares) SharesChanged?.Invoke(this, EventArgs.Empty);
             else if (signal.Revision is null || signal.Revision > LastRevision) await PullAsync(_cts.Token);
         }
         catch (Exception) when (_cts.IsCancellationRequested) { }

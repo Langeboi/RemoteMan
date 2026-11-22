@@ -46,11 +46,22 @@ public interface IDataSource : IAsyncDisposable
 
     /// <summary>Starts listening/polling for changes from other users.</summary>
     Task StartChangeFeedAsync(CancellationToken ct = default);
+
+    // ---- shared sessions (invites live in the shared database; local files have none) ----
+
+    bool SupportsSharing => false;
+    /// <summary>Adds or replaces an invite.</summary>
+    Task PutShareInviteAsync(RemoteMan.Core.Sharing.ShareInvite invite, CancellationToken ct = default) =>
+        throw new NotSupportedException("Shared sessions need a shared database.");
+    Task SetShareInviteStateAsync(Guid inviteId, RemoteMan.Core.Sharing.ShareInviteState state, CancellationToken ct = default) => Task.CompletedTask;
+    /// <summary>Invites that haven't expired, for everyone (callers pick theirs).</summary>
+    Task<IReadOnlyList<RemoteMan.Core.Sharing.ShareInvite>> GetShareInvitesAsync(CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyList<RemoteMan.Core.Sharing.ShareInvite>>([]);
 }
 
 public enum DataSourceKind { Sqlite, PostgreSql, SqlServer, MySql }
 
-public enum ChangeSignalKind { Entries, Presence }
+public enum ChangeSignalKind { Entries, Presence, Shares }
 
 public sealed record ChangeSignal(ChangeSignalKind Kind, long? Revision = null);
 
