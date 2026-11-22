@@ -109,6 +109,52 @@ public sealed class ThemeWindow : Window
         var c = t.Resolve();
         SolidColorBrush B(string k) { var b = new SolidColorBrush(c[k]); b.Freeze(); return b; }
 
+        var mini = MiniPreview(t);
+        var preview = new Border { BorderBrush = B("Border"), BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(3), Child = mini, ClipToBounds = true };
+
+
+        // Swatches: background, panels, accent, links.
+        var swatches = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 8, 0, 0) };
+        foreach (var k in new[] { "Bg", "Panel", "SelectRow", "Link", "Accent" })
+            swatches.Children.Add(new Border { Width = k == "Accent" ? 28 : 14, Height = 8, Background = B(k) });
+
+        var name = new TextBlock { Text = t.Name, FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 8, 0, 0) };
+        name.SetResourceReference(TextBlock.ForegroundProperty, "TextStrong");
+        var desc = new TextBlock { Text = t.Description, TextWrapping = TextWrapping.Wrap, FontSize = 11, Margin = new Thickness(0, 2, 0, 0) };
+        desc.SetResourceReference(TextBlock.ForegroundProperty, "Muted");
+
+        var body = new StackPanel();
+        body.Children.Add(preview);
+        body.Children.Add(swatches);
+        body.Children.Add(name);
+        body.Children.Add(desc);
+        if (t.Id == Themes.Current?.Id)
+        {
+            var now = new TextBlock { Text = "In use", FontSize = 10.5, Margin = new Thickness(0, 4, 0, 0) };
+            now.SetResourceReference(TextBlock.ForegroundProperty, "Faint");
+            body.Children.Add(now);
+        }
+
+        var card = new Border
+        {
+            Width = 252, Margin = new Thickness(6), Padding = new Thickness(10), CornerRadius = new CornerRadius(4),
+            BorderThickness = new Thickness(1), Child = body, Cursor = Cursors.Hand, Focusable = true, Tag = t.Id,
+        };
+        card.SetResourceReference(Border.BackgroundProperty, "Bg");
+        System.Windows.Automation.AutomationProperties.SetName(card, t.Name);
+        card.MouseLeftButtonUp += (_, _) => Pick(t.Id);
+        card.MouseLeftButtonDown += (_, e) => { if (e.ClickCount == 2) { Pick(t.Id); DialogResult = true; } };
+        card.KeyDown += (_, e) => { if (e.Key is Key.Space) { Pick(t.Id); e.Handled = true; } };
+        _cards[t.Id] = card;
+        return card;
+    }
+
+    /// <summary>A tiny picture of the app in the theme's colours: title strip, tree with one selected row, a tab and two buttons. Also used by the setup window.</summary>
+    public static Grid MiniPreview(ThemeDef t)
+    {
+        var c = t.Resolve();
+        SolidColorBrush B(string k) { var b = new SolidColorBrush(c[k]); b.Freeze(); return b; }
+
         // A tiny window: title strip, tree on the left with one selected row, a tab and a button on the right.
         var mini = new Grid { Height = 96, Background = B("Bg"), ClipToBounds = true };
         mini.RowDefinitions.Add(new RowDefinition { Height = new GridLength(14) });
@@ -163,43 +209,7 @@ public sealed class ThemeWindow : Window
         pane.Children.Add(buttons);
         work.Children.Add(pane);
         mini.Children.Add(work);
-
-        var preview = new Border { BorderBrush = B("Border"), BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(3), Child = mini, ClipToBounds = true };
-
-        // Swatches: background, panels, accent, links.
-        var swatches = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 8, 0, 0) };
-        foreach (var k in new[] { "Bg", "Panel", "SelectRow", "Link", "Accent" })
-            swatches.Children.Add(new Border { Width = k == "Accent" ? 28 : 14, Height = 8, Background = B(k) });
-
-        var name = new TextBlock { Text = t.Name, FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 8, 0, 0) };
-        name.SetResourceReference(TextBlock.ForegroundProperty, "TextStrong");
-        var desc = new TextBlock { Text = t.Description, TextWrapping = TextWrapping.Wrap, FontSize = 11, Margin = new Thickness(0, 2, 0, 0) };
-        desc.SetResourceReference(TextBlock.ForegroundProperty, "Muted");
-
-        var body = new StackPanel();
-        body.Children.Add(preview);
-        body.Children.Add(swatches);
-        body.Children.Add(name);
-        body.Children.Add(desc);
-        if (t.Id == Themes.Current?.Id)
-        {
-            var now = new TextBlock { Text = "In use", FontSize = 10.5, Margin = new Thickness(0, 4, 0, 0) };
-            now.SetResourceReference(TextBlock.ForegroundProperty, "Faint");
-            body.Children.Add(now);
-        }
-
-        var card = new Border
-        {
-            Width = 252, Margin = new Thickness(6), Padding = new Thickness(10), CornerRadius = new CornerRadius(4),
-            BorderThickness = new Thickness(1), Child = body, Cursor = Cursors.Hand, Focusable = true, Tag = t.Id,
-        };
-        card.SetResourceReference(Border.BackgroundProperty, "Bg");
-        System.Windows.Automation.AutomationProperties.SetName(card, t.Name);
-        card.MouseLeftButtonUp += (_, _) => Pick(t.Id);
-        card.MouseLeftButtonDown += (_, e) => { if (e.ClickCount == 2) { Pick(t.Id); DialogResult = true; } };
-        card.KeyDown += (_, e) => { if (e.Key is Key.Space) { Pick(t.Id); e.Handled = true; } };
-        _cards[t.Id] = card;
-        return card;
+        return mini;
     }
 
     private void Pick(string id)

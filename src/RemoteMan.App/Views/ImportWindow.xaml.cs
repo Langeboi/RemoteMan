@@ -46,10 +46,13 @@ public partial class ImportWindow : Window
     private bool _cascading;
     private string[] _rdpFiles = [];
 
-    public ImportWindow(MainViewModel main)
+    /// <param name="source">Which source card to start on: "rdm", "rdp" or "putty" (the first-run setup passes the one picked there).</param>
+    public ImportWindow(MainViewModel main, string? source = null)
     {
         InitializeComponent();
         _main = main;
+        if (source == "rdp") SrcRdp.IsChecked = true;
+        else if (source == "putty") SrcPutty.IsChecked = true;
 
         var folders = new List<FolderChoice> { new(null, "(top level)") };
         if (main.Store is { } store)
