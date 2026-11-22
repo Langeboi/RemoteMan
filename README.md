@@ -83,6 +83,44 @@ WebView2 runtime ships with Windows 11 and current Windows 10.
   encrypted local cache at startup), edits wait, and RemoteMan retries every 15 s. When the database is
   back the Q turns green and everything missed shows up live.
 
+## Shared database server (Docker)
+
+The team database (PostgreSQL with a hot standby, automatic failover, an admin page and the shared-session
+relay) runs as one container per server. Save this as `compose.yaml` on the first server and run
+`docker compose up -d`:
+
+```yaml
+services:
+  remoteman:
+    image: ghcr.io/langeboi/remoteman-server:latest   # test builds: :test
+    container_name: remoteman
+    network_mode: host            # PostgreSQL on 5432, admin page on 8443
+    restart: unless-stopped
+    stop_grace_period: 60s
+    environment:
+      NAME: db1                   # this server's name in the cluster
+      TZ: Europe/Copenhagen       # times in the admin page and the nightly backup
+      # REMOTEMAN_PASSWORD: change-me   # password of the shared "remoteman" login (random and printed in the log if left out)
+      # ADVERTISE: 10.0.0.11            # address others reach this server on (found by itself)
+      # BACKUP_AT: "03:00"              # nightly backup on the primary ("off" to turn off), BACKUP_KEEP: 7
+    volumes:
+      - remoteman-data:/var/lib/remoteman
+
+  relay:                          # shared sessions for teammates on other networks (optional)
+    image: ghcr.io/langeboi/remoteman-server:latest
+    command: relay
+    network_mode: host            # port 47120
+    restart: unless-stopped
+
+volumes:
+  remoteman-data:
+```
+
+Then open `https://<server>:8443`, sign in as `remoteman` (the password is in `docker compose logs remoteman`)
+and add the second server under **Servers > Add server**: it gives you that server's `compose.yaml`,
+join key included. Test builds use the `:test` image tag. More in [deploy/docker](deploy/docker/README.md);
+the script for servers without Docker is still in [deploy/postgres](deploy/postgres/README.md).
+
 ## Install
 
 Download `RemoteMan-win-Setup.exe` from the [latest release](https://github.com/Langeboi/RemoteMan/releases/latest)

@@ -1,5 +1,7 @@
 # Redundant database for RemoteMan (two Debian/Ubuntu servers)
 
+> Prefer Docker? The same setup, plus an admin web page, is in [deploy/docker](../docker/README.md).
+
 Two PostgreSQL servers: the **first** is the primary, the **second** keeps a live copy (streaming
 replication) and takes over if the first one dies. RemoteMan is given both hosts in one connection
 string and always uses whichever is the primary, so a failover needs nothing from the users.

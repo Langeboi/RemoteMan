@@ -20,7 +20,25 @@ public sealed class PostgresDataSource : SqlDataSource
     public override string DisplayName => $"PostgreSQL ({new NpgsqlConnectionStringBuilder(ConnectionString).Host})";
     public override DataSourceKind Kind => DataSourceKind.PostgreSql;
 
-    protected override DbConnection CreateConnection() => new NpgsqlConnection(ConnectionString);
+    protected override DbConnection CreateConnection() => new NpgsqlConnection(_connectionString ??= WithAppName(ConnectionString));
+
+    private string? _connectionString;
+
+    // Names the app in the server's login history (the admin page shows "RemoteMan 0.1.0" instead of nothing).
+    private static string WithAppName(string cs)
+    {
+        try
+        {
+            var b = new NpgsqlConnectionStringBuilder(cs);
+            if (string.IsNullOrEmpty(b.ApplicationName))
+                b.ApplicationName = "RemoteMan " + (System.Reflection.Assembly.GetEntryAssembly()?.GetName().Version?.ToString(3) ?? "");
+            return b.ConnectionString;
+        }
+        catch (ArgumentException)
+        {
+            return cs;
+        }
+    }
 
     protected override IEnumerable<string> SchemaStatements =>
     [
