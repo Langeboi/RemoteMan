@@ -68,6 +68,7 @@ public sealed partial class MainViewModel
         Sessions.Add(s);
         PaneList(s.Pane).Add(s);
         ActiveSession = s;
+        if (s.IsConnection) s.RequestFocus();
     }
 
     partial void OnActiveSessionChanged(SessionViewModel? oldValue, SessionViewModel? newValue)

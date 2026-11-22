@@ -132,6 +132,9 @@ public partial class WebSessionView : UserControl
             };
         }
         vm.Disposed += (_, _) => Web.Dispose();
+        // A tab that was just opened takes the keyboard, so typing goes into the page without a click.
+        if (vm.TakeFocus()) Web.Focus();
+        vm.FocusRequested += () => { if (Web.CoreWebView2 is not null && vm.TakeFocus()) Web.Focus(); };
 
         // A page that doesn't load at all gets a notice saying why (once per tab).
         var reported = false;

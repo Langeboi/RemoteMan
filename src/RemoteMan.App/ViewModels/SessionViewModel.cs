@@ -62,6 +62,19 @@ public abstract partial class SessionViewModel : ObservableObject, IDisposable
     public event Action<RemoteMan.Core.Networking.ConnectionProblem>? Failed;
     public void ReportProblem(RemoteMan.Core.Networking.ConnectionProblem? p) { if (p is not null) Failed?.Invoke(p); }
 
+    /// <summary>The tab was just opened: the view puts the keyboard in the session (terminal, remote desktop, page)
+    /// as soon as it can, so typing goes there without a click. Cleared once taken.</summary>
+    public bool WantsFocus { get; private set; }
+    public event Action? FocusRequested;
+    public void RequestFocus() { WantsFocus = true; FocusRequested?.Invoke(); }
+    /// <summary>True once per request, and only while the tab is the visible one.</summary>
+    public bool TakeFocus()
+    {
+        if (!WantsFocus || !IsActive) return false;
+        WantsFocus = false;
+        return true;
+    }
+
     public event EventHandler? CloseRequested;
     public void RequestClose() => CloseRequested?.Invoke(this, EventArgs.Empty);
 
