@@ -816,12 +816,15 @@ Protocol (one ASCII line, then raw bytes):
   host  -> HOST <share>           relay -> OK; later CONN <id> per guest, PING now and then
   guest -> JOIN <share>           relay -> OK once spliced to the host, or NOHOST
   host  -> ACCEPT <share> <id>    relay -> OK, then this connection is the guest's pipe
+  STATS (from loopback only)      relay -> one JSON line of counters, for the server admin page
 
 Standard library only (Python 3.8+). Usage: remoteman-relay.py [--port 47120] [--bind 0.0.0.0]
 """
 import argparse
 import asyncio
+import json
 import secrets
+import time
 
 MAX_LINE = 200
 MAX_PENDING = 200
@@ -829,6 +832,7 @@ JOIN_WAIT = 10
 
 hosts = {}      # share -> writer of the host's control connection
 pending = {}    # conn id -> (share, future that gets the host's (reader, writer))
+stats = {"bytes": 0, "pipes": 0, "joins": 0, "started": time.time()}
 
 
 async def read_line(reader):
@@ -849,6 +853,7 @@ async def pipe(reader, writer):
             data = await reader.read(65536)
             if not data:
                 break
+            stats["bytes"] += len(data)
             writer.write(data)
             await writer.drain()
     except (ConnectionError, asyncio.CancelledError, OSError):
@@ -900,8 +905,19 @@ async def serve(reader, writer):
                 pending.pop(conn, None)
             await send(writer, "OK")
             keep = True
-            await asyncio.gather(pipe(reader, h_writer), pipe(h_reader, writer))
+            stats["pipes"] += 1
+            stats["joins"] += 1
+            try:
+                await asyncio.gather(pipe(reader, h_writer), pipe(h_reader, writer))
+            finally:
+                stats["pipes"] -= 1
             keep = False
+        elif parts == ["STATS"]:
+            # Counters for the admin page next door; only on loopback, and nothing that names a share.
+            peer = writer.get_extra_info("peername") or ("",)
+            if peer[0] in ("127.0.0.1", "::1"):
+                await send(writer, json.dumps({"hosts": len(hosts), "guests": stats["pipes"], "bytes": stats["bytes"],
+                                               "joins": stats["joins"], "up_since": stats["started"]}))
         elif len(parts) == 3 and parts[0] == "ACCEPT":
             share, conn = parts[1], parts[2]
             item = pending.get(conn)

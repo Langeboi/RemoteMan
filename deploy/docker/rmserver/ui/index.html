@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RemoteMan Server Admin</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%233FB8A4'/%3E%3Ctext x='16' y='22' font-family='Segoe UI,Arial' font-size='17' font-weight='700' text-anchor='middle' fill='%230F1113'%3ER%3C/text%3E%3C/svg%3E">
+<link rel="stylesheet" href="/app.css">
+</head>
+<body>
+
+<div class="login" id="login" hidden>
+  <form id="loginForm">
+    <div class="brand"><div class="logo">R</div><div>RemoteMan<small id="loginServer">Server admin</small></div></div>
+    <div class="field"><label for="lgUser">Login</label><input id="lgUser" autocomplete="username" required></div>
+    <div class="field"><label for="lgPass">Password</label><input id="lgPass" type="password" autocomplete="current-password" required></div>
+    <p class="err" id="lgErr" hidden></p>
+    <button class="btn primary" type="submit" id="lgBtn">Sign in</button>
+    <p class="hint">Use your RemoteMan login. Only admins can sign in here.</p>
+  </form>
+</div>
+
+<div class="app" id="app" hidden>
+  <nav aria-label="Admin">
+    <div class="brand"><div class="logo">R</div><div>RemoteMan<small id="navServer">Server admin</small></div></div>
+    <a href="/overview" data-page="overview"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2" width="5" height="5" rx="1"/><rect x="9" y="2" width="5" height="5" rx="1"/><rect x="2" y="9" width="5" height="5" rx="1"/><rect x="9" y="9" width="5" height="5" rx="1"/></svg>Overview</a>
+    <a href="/servers" data-page="servers"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2.5" width="12" height="4.5" rx="1"/><rect x="2" y="9" width="12" height="4.5" rx="1"/><circle cx="4.8" cy="4.75" r=".6" fill="currentColor"/><circle cx="4.8" cy="11.25" r=".6" fill="currentColor"/></svg>Servers<span class="count" id="cntServers"></span></a>
+    <a href="/users" data-page="users"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="6" cy="5.5" r="2.5"/><path d="M1.5 13.5c.6-2.4 2.3-3.5 4.5-3.5s3.9 1.1 4.5 3.5"/><path d="M10.5 3.2a2.4 2.4 0 0 1 0 4.6M12 10.2c1.3.5 2.1 1.6 2.5 3.3"/></svg>Users<span class="count" id="cntUsers"></span></a>
+    <a href="/logins" data-page="logins"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="6"/><path d="M8 4.5V8l2.5 1.5"/></svg>Login history</a>
+    <div class="me"><div class="av" id="meAv" style="background:#B49CF0"></div><div><span id="meName"></span><br><span class="faint" style="font-size:11px">admin</span></div><button class="btn sm" id="logout" title="Sign out">Sign out</button></div>
+  </nav>
+  <main id="main">
+    <section data-page="overview">
+      <div class="top"><h2>Overview</h2><span class="live" id="liveBadge"><span class="pulse"></span><span>Live</span></span><span class="sub" id="updated"></span>
+        <div class="right"><select class="f" id="range" aria-label="Chart period"><option value="2m">Last 2 minutes</option><option value="1h">Last hour</option><option value="24h">Last 24 hours</option></select><button class="btn" data-act="add-server">Add server</button></div></div>
+      <div class="content">
+        <div class="banner" id="banner"></div>
+        <div class="tiles" id="tiles"></div>
+        <div class="srvgrid" id="srvCards"></div>
+        <div class="grid2">
+          <div class="card"><div class="cardhead"><h3>Latency and replication delay</h3><span class="right" id="latNote"></span></div>
+            <svg class="chart" id="chLat" viewBox="0 0 560 170" role="img" aria-label="Latency of each server and how far behind each standby is"></svg>
+            <div class="legend" id="lgLat"></div></div>
+          <div class="card"><div class="cardhead"><h3>Database activity</h3><span class="right" id="actNote">on the primary</span></div>
+            <svg class="chart" id="chAct" viewBox="0 0 560 170" role="img" aria-label="Rows read and written per second, and lock waits"></svg>
+            <div class="legend"><span><i style="background:var(--accent)"></i>Rows read/s</span><span><i style="background:var(--admin)"></i>Rows written/s (right axis)</span><span><i style="background:var(--bad)"></i>Lock waits</span></div></div>
+        </div>
+        <div class="grid3">
+          <div class="card"><div class="cardhead"><h3>Connected now</h3><span class="right" id="peopleNote"></span></div><div id="people"></div></div>
+          <div class="card"><div class="cardhead"><h3>Live activity</h3><span class="right">Newest first</span></div><div class="feed" id="feed"></div></div>
+        </div>
+        <div class="grid4">
+          <div class="card"><div class="cardhead"><h3>Sign-ins, last 24 hours</h3><span class="right" id="signNote"></span></div>
+            <svg class="chart sm" id="chSign" viewBox="0 0 360 120" role="img" aria-label="Sign-ins per hour over the last 24 hours"></svg></div>
+          <div class="card"><div class="cardhead"><h3>Database size</h3><span class="right" id="sizeNote"></span></div>
+            <svg class="chart sm" id="chSize" viewBox="0 0 360 120" role="img" aria-label="Database size by day"></svg>
+            <div class="tbls" id="tbls"></div></div>
+          <div class="card"><div class="cardhead"><h3>Shared-session relay</h3><span class="right" id="relayNote"></span></div>
+            <div class="kv" style="grid-template-columns:repeat(3,1fr)">
+              <div><span>Shares</span><b class="num" id="rlHosts">0</b></div>
+              <div><span>Guests</span><b class="num" id="rlGuests">0</b></div>
+              <div><span>Traffic</span><b class="num" id="rlBw">0 B/s</b></div>
+            </div>
+            <svg class="chart xs" id="chRelay" viewBox="0 0 360 60" role="img" aria-label="Relay traffic"></svg>
+            <div id="shares"></div></div>
+        </div>
+        <div class="card"><div class="cardhead"><h3>Health checks</h3><span class="right">Every few seconds</span></div><div class="checks" id="checks"></div></div>
+      </div>
+    </section>
+
+    <section data-page="servers" hidden>
+      <div class="top"><h2>Servers</h2><span class="sub">RemoteMan always uses whichever server is primary</span><div class="right"><button class="btn primary" data-act="add-server">Add server</button></div></div>
+      <div class="content">
+        <div class="card tablecard"><div class="tscroll"><table>
+          <thead><tr><th>Server</th><th>Role</th><th>State</th><th>CPU</th><th>Memory</th><th>Disk</th><th>Latency</th><th>Behind by</th><th>PostgreSQL</th><th>Image</th><th></th></tr></thead>
+          <tbody id="srvRows"></tbody></table></div></div>
+        <div class="grid2">
+          <div class="card"><h3>Failover</h3><div id="failover"></div></div>
+          <div class="card"><h3>Connection string for RemoteMan</h3>
+            <p class="faint" style="font-size:12px">Paste into RemoteMan: Data sources, Add, PostgreSQL. Put in a person's own login and password.</p>
+            <pre class="code wrap" id="connStr"></pre><div><button class="btn sm" data-copy="connStr">Copy</button></div>
+            <h3 style="margin-top:6px">Backups</h3><div id="backups"></div>
+            <h3 style="margin-top:6px">Shared-session relay</h3><div id="relays"></div></div>
+        </div>
+      </div>
+    </section>
+
+    <section data-page="users" hidden>
+      <div class="top"><h2>Users</h2><span class="sub">Logins for RemoteMan. Changes reach every server by themselves.</span><div class="right"><button class="btn primary" data-act="add-user">Add user</button></div></div>
+      <div class="content">
+        <div class="card tablecard">
+          <div class="filters"><input class="f" id="uSearch" placeholder="Find a user" style="width:200px" aria-label="Find a user"><select class="f" id="uAccess" aria-label="Access"><option value="">All access</option><option value="admin">Admin</option><option value="edit">Edit</option><option value="read-only">Read-only</option><option value="shared">Shared</option></select></div>
+          <div class="tscroll"><table><thead><tr><th>User</th><th>Access</th><th>Now</th><th>Last sign-in</th><th>Last change</th><th></th></tr></thead><tbody id="userRows"></tbody></table></div>
+        </div>
+      </div>
+    </section>
+
+    <section data-page="logins" hidden>
+      <div class="top"><h2>Login history</h2><span class="sub" id="histSub">Every sign-in to any server</span><div class="right"><a class="btn" id="csv" href="/api/logins?format=csv&amp;days=7">Export CSV</a></div></div>
+      <div class="content">
+        <div class="card tablecard">
+          <div class="filters">
+            <input class="f" id="hSearch" placeholder="User or address" style="width:200px" aria-label="User or address">
+            <div class="seg" id="hResult" role="group" aria-label="Result"><button data-v="all" aria-pressed="true">All</button><button data-v="ok" aria-pressed="false">Signed in</button><button data-v="failed" aria-pressed="false">Failed</button></div>
+            <select class="f" id="hServer" aria-label="Server"><option value="">All servers</option></select>
+            <select class="f" id="hDays" aria-label="Period"><option value="1">Last 24 hours</option><option value="7" selected>Last 7 days</option><option value="30">Last 30 days</option><option value="90">Last 90 days</option></select>
+            <span class="faint" id="hCount"></span>
+          </div>
+          <div class="tscroll"><table><thead><tr><th>When</th><th>User</th><th>Result</th><th>Server</th><th>From</th><th>App</th><th>Length</th></tr></thead><tbody id="histRows"></tbody></table></div>
+        </div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<div id="dialogs"></div>
+<div class="toasts" id="toasts" aria-live="polite"></div>
+<script src="/app.js"></script>
+</body>
+</html>

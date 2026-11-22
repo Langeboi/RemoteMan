@@ -1,0 +1,27 @@
+# RemoteMan server: the first server (it becomes the primary).
+# Save as compose.yaml on the server and run:  docker compose up -d
+# Then open https://<this server>:8443 and add the next server under Servers > Add server.
+services:
+  remoteman:
+    image: ghcr.io/langeboi/remoteman-server:latest   # test builds: :test
+    container_name: remoteman
+    network_mode: host            # PostgreSQL on 5432, admin page on 8443
+    restart: unless-stopped
+    stop_grace_period: 60s
+    environment:
+      NAME: db1                   # this server's name in the cluster
+      TZ: Europe/Copenhagen       # times in the admin page and the nightly backup
+      # REMOTEMAN_PASSWORD: change-me   # password of the shared "remoteman" login (random and printed in the log if left out)
+      # ADVERTISE: 10.0.0.11            # address others reach this server on (found by itself)
+      # BACKUP_AT: "03:00"              # nightly backup on the primary ("off" to turn off), BACKUP_KEEP: 7
+    volumes:
+      - remoteman-data:/var/lib/remoteman
+
+  relay:                          # shared sessions for teammates on other networks (optional)
+    image: ghcr.io/langeboi/remoteman-server:latest
+    command: relay
+    network_mode: host            # port 47120
+    restart: unless-stopped
+
+volumes:
+  remoteman-data:
