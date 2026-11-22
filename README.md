@@ -5,7 +5,7 @@ with a shared team database as an option. Built for labs, homelabs and schoolwor
 
 ## Build
 
-Requires Windows 10/11 and the .NET 8 SDK (`winget install Microsoft.DotNet.SDK.8`).
+Requires Windows 10/11 and the .NET 10 SDK (`winget install Microsoft.DotNet.SDK.10`).
 
 ```powershell
 dotnet build RemoteMan.sln -c Release
@@ -88,7 +88,7 @@ WebView2 runtime ships with Windows 11 and current Windows 10.
 Download `RemoteMan-win-Setup.exe` from the [latest release](https://github.com/Langeboi/RemoteMan/releases/latest)
 and run it. It installs for your Windows user (no admin prompt) into `%LocalAppData%\RemoteMan`, adds
 Start menu and desktop shortcuts, registers RemoteMan in **Settings > Apps > Installed apps** for uninstalling,
-and installs the .NET 8 desktop runtime first if the PC doesn't have it. Your entries and settings in
+and installs the .NET 10 desktop runtime first if the PC doesn't have it. Your entries and settings in
 `%AppData%\RemoteMan` are kept across updates.
 
 To try a build before it's released, open a run of the

@@ -224,6 +224,8 @@ public partial class RdpSessionView : UserControl
 
         // Same clipboard content Explorer puts there on Ctrl+C: the file list plus "this is a copy".
         // The RDP client offers it to the remote side, where Explorer's Paste pulls the files across.
+        // Both formats are native clipboard types (CF_HDROP and an HGLOBAL stream), so nothing here goes
+        // through the serializer that .NET 9+ removed: only plain string, string[] and stream data on the clipboard.
         var data = new DataObject();
         data.SetFileDropList(list);
         data.SetData("Preferred DropEffect", new System.IO.MemoryStream(BitConverter.GetBytes(1))); // DROPEFFECT_COPY
