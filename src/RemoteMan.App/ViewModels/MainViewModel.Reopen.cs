@@ -32,6 +32,13 @@ public sealed partial class MainViewModel
         set { _settings.Theme = value; TrySaveSettings(); OnPropertyChanged(); }
     }
 
+    /// <summary>Light and shadow on the controls, from the next start.</summary>
+    public Shading Shading
+    {
+        get => _settings.Shading;
+        set { _settings.Shading = value; TrySaveSettings(); OnPropertyChanged(); }
+    }
+
     private void StartTrackingOpenSessions()
     {
         if (_trackingStarted) return;

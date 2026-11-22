@@ -21,9 +21,9 @@
 
         <!-- Card: panel with a small caps title row -->
         <Style TargetType="Border" x:Key="Card">
-            <Setter Property="Background" Value="{StaticResource Panel}" />
-            <Setter Property="BorderBrush" Value="{StaticResource Border}" />
-            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Background" Value="{StaticResource Depth.Card}" />
+            <Setter Property="BorderBrush" Value="{StaticResource Depth.CardBorder}" />
+            <Setter Property="BorderThickness" Value="{StaticResource Depth.CardBorderThickness}" />
             <Setter Property="CornerRadius" Value="{StaticResource Radius}" />
         </Style>
         <Style TargetType="Border" x:Key="CardHeader">

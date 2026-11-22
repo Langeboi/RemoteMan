@@ -7,7 +7,7 @@ using RemoteMan.App.Services;
 namespace RemoteMan.App.Views;
 
 /// <summary>
-/// More > Theme: a card per colour theme, each with a small picture of the app drawn in that theme's colours
+/// More > Theme: the shading level, then a card per colour theme, each with a small picture of the app drawn in that theme's colours
 /// (tree with a selected row, a tab, a button). Picking one and pressing Apply returns its id.
 /// </summary>
 public sealed class ThemeWindow : Window
@@ -15,12 +15,19 @@ public sealed class ThemeWindow : Window
     private readonly Dictionary<string, Border> _cards = new();
     private string _picked;
 
+    private Shading _shading;
+    private readonly Dictionary<Shading, Button> _shadingButtons = new();
+
     /// <summary>The theme picked when Apply was pressed.</summary>
     public string Picked => _picked;
 
-    public ThemeWindow(string currentId)
+    /// <summary>The shading picked when Apply was pressed.</summary>
+    public Shading PickedShading => _shading;
+
+    public ThemeWindow(string currentId, Shading currentShading)
     {
         _picked = Themes.Find(currentId).Id;
+        _shading = currentShading;
         Title = "Theme";
         Width = 860; Height = 640; MinWidth = 520; MinHeight = 420;
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
@@ -34,7 +41,7 @@ public sealed class ThemeWindow : Window
         footer.SetResourceReference(Border.BorderBrushProperty, "Border");
         DockPanel.SetDock(footer, Dock.Bottom);
         var bar = new DockPanel { LastChildFill = false };
-        var note = new TextBlock { Text = "RemoteMan restarts to apply a new theme. Your open tabs can be reopened.", VerticalAlignment = VerticalAlignment.Center, FontSize = 11 };
+        var note = new TextBlock { Text = "RemoteMan restarts to apply a new theme or shading. Your open tabs can be reopened.", VerticalAlignment = VerticalAlignment.Center, FontSize = 11 };
         note.SetResourceReference(TextBlock.ForegroundProperty, "Faint");
         bar.Children.Add(note);
         var cancel = new Button { Content = "Cancel", MinWidth = 76, IsCancel = true, Margin = new Thickness(6, 0, 0, 0) };
@@ -46,14 +53,55 @@ public sealed class ThemeWindow : Window
         footer.Child = bar;
         root.Children.Add(footer);
 
+        // Shading: Flat / Subtle / Raised, above the theme cards.
+        var shadingRow = new DockPanel { Margin = new Thickness(16, 14, 16, 2) };
+        var label = new TextBlock { Text = "Shading", FontWeight = FontWeights.SemiBold, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 12, 0) };
+        label.SetResourceReference(TextBlock.ForegroundProperty, "TextStrong");
+        shadingRow.Children.Add(label);
+        var choices = new StackPanel { Orientation = Orientation.Horizontal };
+        foreach (var (level, text, tip) in new[]
+                 {
+                     (Shading.Flat, "Flat", "Solid fills and thin borders, no shadows"),
+                     (Shading.Subtle, "Subtle", "A faint light on buttons and cards, soft shadows along the panels"),
+                     (Shading.Raised, "Raised", "Stronger light and shadow; controls clearly stand off the background"),
+                 })
+        {
+            var b = new Button { Content = text, MinWidth = 76, Height = 26, Margin = new Thickness(0, 0, 6, 0), ToolTip = tip };
+            b.Click += (_, _) => { _shading = level; HighlightShading(); };
+            _shadingButtons[level] = b;
+            choices.Children.Add(b);
+        }
+        shadingRow.Children.Add(choices);
+        var hint = new TextBlock { Text = "Light and shadow on buttons, fields, cards and panels. Works with every theme.", FontSize = 11,
+                                   VerticalAlignment = VerticalAlignment.Center, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(6, 0, 0, 0) };
+        hint.SetResourceReference(TextBlock.ForegroundProperty, "Faint");
+        shadingRow.Children.Add(hint);
+
         var cards = new WrapPanel { Margin = new Thickness(10) };
         foreach (var t in Themes.All) cards.Children.Add(Card(t));
-        var scroll = new ScrollViewer { VerticalScrollBarVisibility = ScrollBarVisibility.Auto, Content = cards };
+        var themeLabel = new TextBlock { Text = "Theme", FontWeight = FontWeights.SemiBold, Margin = new Thickness(16, 12, 16, 0) };
+        themeLabel.SetResourceReference(TextBlock.ForegroundProperty, "TextStrong");
+        var stack = new StackPanel();
+        stack.Children.Add(shadingRow);
+        stack.Children.Add(themeLabel);
+        stack.Children.Add(cards);
+        var scroll = new ScrollViewer { VerticalScrollBarVisibility = ScrollBarVisibility.Auto, Content = stack };
         scroll.SetResourceReference(BackgroundProperty, "Panel");
         root.Children.Add(scroll);
 
         Content = root;
         Highlight();
+        HighlightShading();
+    }
+
+    private void HighlightShading()
+    {
+        var primary = TryFindResource("PrimaryButton") as Style;
+        foreach (var (level, b) in _shadingButtons)
+        {
+            if (level == _shading && primary is not null) b.Style = primary;
+            else b.ClearValue(StyleProperty);
+        }
     }
 
     private Border Card(ThemeDef t)
