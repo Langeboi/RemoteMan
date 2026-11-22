@@ -5,3 +5,4 @@ publish/
 .vs/
 src/RemoteMan.App/Assets/terminal/vendor/
 __pycache__/
+releases/

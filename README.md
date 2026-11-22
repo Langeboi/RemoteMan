@@ -134,6 +134,49 @@ To try a build before it's released, open a run of the
 `RemoteMan-Setup-…` artifact (sign in to GitHub first). Test builds are numbered below the next release
 (`0.1.0-ci.42`), so an installed test build updates to the real release when it comes out.
 
+### Build the installer yourself
+
+Useful when SmartScreen stops the downloaded installer (it is unsigned for now): a file you build on your own
+PC isn't marked as downloaded from the internet, so SmartScreen doesn't flag it. Company rules such as
+AppLocker, WDAC or Intune can still block it; that's your IT department's call, and code signing is the
+lasting fix.
+
+You need Windows 10/11 with:
+
+- Git: `winget install Git.Git`
+- .NET 10 SDK: `winget install Microsoft.DotNet.SDK.10` (it asks for admin; without admin rights, Microsoft's
+  [dotnet-install script](https://learn.microsoft.com/dotnet/core/tools/dotnet-install-script) installs it
+  for your user only)
+- Internet access to NuGet and jsDelivr (the first build downloads packages and xterm.js)
+
+Then, in a new PowerShell window:
+
+```powershell
+git clone -b test/all-features https://github.com/Langeboi/RemoteMan.git
+cd RemoteMan
+.\build\build-installer.ps1 -Install
+```
+
+The script does what the CI build does: runs the tests, publishes the app, installs the Velopack CLI (`vpk`)
+for your user if needed, and builds `releases\RemoteMan-test-Setup.exe` with `build\pack.ps1`. `-Install` runs
+the installer when it's done. Other options: `-SkipTests`, `-Channel ''` (follow normal releases instead of
+test builds) and `-Version 0.1.0-local.1`. The default version, `<version>-local.<date>.<time>`, sits above
+the test builds of the same version, so an installed local build updates itself to the next release or the
+next test build after a version bump. To build again later: `git pull`, then run the script again.
+
+If PowerShell says running scripts is disabled, allow it for this window only with
+`Set-ExecutionPolicy -Scope Process RemoteSigned` and run the script again. If that is refused because your
+company sets the policy, ask IT rather than working around it.
+
+The same steps by hand:
+
+```powershell
+dotnet test tests/RemoteMan.Tests -c Release
+dotnet publish src/RemoteMan.App -c Release -r win-x64 --self-contained false -p:Version=0.1.0-local.1 -o publish
+dotnet tool install -g vpk --version 1.2.161
+.\build\pack.ps1 -Version 0.1.0-local.1 -Channel test
+```
+
 ## Updates
 
 The installed app checks GitHub Releases 15 seconds after start and every 4 hours after that. When a new
