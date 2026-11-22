@@ -101,20 +101,20 @@ public partial class RdpSessionView : UserControl
     /// <summary>Hides the RDP control behind the animation until the desktop is ready to show.</summary>
     private void StartConnecting(RdpSessionViewModel vm)
     {
-        ConnName.Text = vm.Entry.Name;
-        ConnHost.Text = vm.Via ?? vm.Endpoint.ToString();
+        // IP and port the session goes to (a tunnelled session shows its target and bastion).
+        ConnHost.Text = vm.Via ?? $"{vm.Endpoint.Host}:{(vm.Endpoint.Port > 0 ? vm.Endpoint.Port : 3389)}";
         ConnStage.Text = vm.Settings.UseRdGateway && !string.IsNullOrEmpty(vm.Settings.GatewayHost)
             ? $"Connecting through gateway {vm.Settings.GatewayHost}…"
             : "Connecting…";
         if (vm.UsedFallback && vm.Entry.Endpoints.Count > 0)
         {
-            ConnFallbackText.Text = $"{vm.Entry.Endpoints[0]} didn't answer, using fallback {vm.Endpoint}";
+            ConnFallback.Text = $"{vm.Entry.Endpoints[0]} didn't answer, using fallback";
             ConnFallback.Visibility = Visibility.Visible;
         }
         // Hidden, not collapsed: the control keeps its size, so the session opens at the right resolution.
         Host.Visibility = Visibility.Hidden;
         Connecting.Visibility = Visibility.Visible;
-        _pulse = (System.Windows.Media.Animation.Storyboard)Connecting.Resources["Pulse"];
+        _pulse = (System.Windows.Media.Animation.Storyboard)Connecting.Resources["Spin"];
         _pulse.Begin(Connecting, isControllable: true);
     }
 
