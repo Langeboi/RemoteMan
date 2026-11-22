@@ -50,12 +50,39 @@ Both servers get a `remoteman-db` command:
 
 Setup creates one shared login, `remoteman`. Give each person their own instead, so RemoteMan shows
 their name on what they change and on who's connected, and so you can shut one person out without
-changing everyone's password. Run these on the **primary** (logins reach the standby by themselves):
+changing everyone's password.
+
+### From RemoteMan (Data sources > Users)
+
+Sign in with the shared `remoteman` login (or any login with Admin access), open Data sources, pick the
+PostgreSQL data source and switch to the **Users** tab. There you can:
+
+- **Add login**: name, password (generated, or your own) and access: *Read only*, *Can edit* or *Admin*.
+  RemoteMan then shows that person's connection string once, with copy buttons.
+- **Reset password**, **Change access**, **Disable / Enable** and **Remove** a login.
+- See who is connected now, everyone's last change, and whether the standby is in sync.
+
+Admins are the only ones who see the list. Everyone else gets *Change my password* on that tab, and
+RemoteMan saves the new password in their data source for them.
+
+A good start: sign in as `remoteman`, add yourself as Admin, switch your data source to your own login,
+add the rest of the team, then disable `remoteman` on the same tab.
+
+The tab needs a one-time update of the servers (RemoteMan tells you if it's missing): copy the new
+`remoteman-db.sh` to both servers and run `sudo bash remoteman-db.sh update` on each. That installs a few
+functions in the database that can only create, change or remove RemoteMan logins (never `postgres`, the
+replication login or anything else), and only admins may call them, so nobody needs to be a database
+superuser. Logins live in the database, so the standby gets every change by replication.
+
+### From the command line
+
+Run these on the **primary** (logins reach the standby by themselves):
 
 | Command | What it does |
 | --- | --- |
 | `sudo remoteman-db user add anna` | New login that can edit. Prints a password and Anna's connection string |
 | `sudo remoteman-db user add bo --read-only` | New login that can see everything but change nothing |
+| `sudo remoteman-db user add lange --admin` | New login that can edit and manage the other logins in RemoteMan |
 | `sudo remoteman-db user list` | Everyone, their access, whether they're connected now, and their last change |
 | `sudo remoteman-db user passwd anna` | New password (prints a new connection string) |
 | `sudo remoteman-db user remove anna` | Removes the login and closes their open connections. Their name stays on past changes |
