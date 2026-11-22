@@ -108,6 +108,7 @@ public partial class SshSessionView : UserControl
                 if (_vm?.TakeFocus() == true) FocusTerminal();
                 Post(new { t = "config", copyOnSelect = _vm?.Settings.CopyOnSelect ?? true, backspaceCtrlH = _vm?.Settings.BackspaceCtrlH ?? false });
                 _cols = (uint)m.GetProperty("cols").GetInt32(); _rows = (uint)m.GetProperty("rows").GetInt32();
+                _vm?.SetSize((int)_cols, (int)_rows);
                 PostLook();
                 TerminalPrefs.Changed += OnPrefsChanged;
                 await StartAsync((uint)m.GetProperty("cols").GetInt32(), (uint)m.GetProperty("rows").GetInt32());
@@ -118,6 +119,7 @@ public partial class SshSessionView : UserControl
             case "resize":
                 _cols = (uint)m.GetProperty("cols").GetInt32(); _rows = (uint)m.GetProperty("rows").GetInt32();
                 _chan?.Resize(_cols, _rows);
+                _vm?.SetSize((int)_cols, (int)_rows);
                 break;
             case "prefs":
                 TerminalPrefs.Save(m.GetProperty("d").GetRawText());
@@ -748,6 +750,7 @@ public partial class SshSessionView : UserControl
 
     private void OnOutput(string s)
     {
+        _vm?.TapOutput(s);
         _script?.Feed(s);
         var log = _log;
         if (log is null) return;

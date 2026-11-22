@@ -122,3 +122,19 @@ logins through.
 - Two servers can't tell "the other one is dead" from "the link between us is down" with certainty.
   The gateway check covers the common case. For a third opinion, pass `--witness <IP>` of another
   always-on machine on server 2.
+
+## Shared sessions across networks (relay)
+
+RemoteMan's shared sessions (right-click an RDP or SSH entry > Shared session…) connect teammates
+straight to the host when they're on the same LAN or VPN. For teammates on other networks, install
+the relay on the database servers:
+
+```bash
+sudo remoteman-db relay install     # on both servers
+remoteman-db relay status
+```
+
+It listens on TCP 47120 and only pipes bytes between the two RemoteMans; the session itself is
+encrypted end to end and pinned to the host's certificate, so the relay can't read it. RemoteMan
+looks for it on the database servers by itself, so there's nothing to set in the app. Make sure
+teammates can reach port 47120 (firewall, port forward). It needs only `python3`.

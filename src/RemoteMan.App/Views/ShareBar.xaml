@@ -1,0 +1,97 @@
+<!-- The amber bar above a shared session (host and guests): who's in it, who has control, and the buttons that fit.
+     Docked above the session, never over it, so it also works above an RDP control (airspace). -->
+<UserControl x:Class="RemoteMan.App.Views.ShareBar"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:local="clr-namespace:RemoteMan.App"
+             Visibility="Collapsed">
+    <UserControl.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolVis" />
+        <local:NullToCollapsedConverter x:Key="NullVisBar" />
+        <SolidColorBrush x:Key="BarBg" Color="#1C1A14" />
+        <SolidColorBrush x:Key="BarLine" Color="#4A3D22" />
+        <SolidColorBrush x:Key="ChipCtl" Color="#2A2416" />
+    </UserControl.Resources>
+    <Border Background="{StaticResource BarBg}" BorderBrush="{StaticResource BarLine}" BorderThickness="0,0,0,1" Padding="10,5">
+        <DockPanel LastChildFill="False">
+            <!-- live dot + label -->
+            <StackPanel DockPanel.Dock="Left" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,12,0">
+                <Ellipse Width="8" Height="8" Fill="{StaticResource Warn}" Margin="0,0,7,0" VerticalAlignment="Center" />
+                <TextBlock Text="{Binding LiveText}" Foreground="{StaticResource Warn}" FontWeight="SemiBold" VerticalAlignment="Center" />
+            </StackPanel>
+
+            <!-- people: click a name to give control -->
+            <ItemsControl DockPanel.Dock="Left" ItemsSource="{Binding People}" VerticalAlignment="Center" Focusable="False">
+                <ItemsControl.ItemsPanel><ItemsPanelTemplate><StackPanel Orientation="Horizontal" /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <Button x:Name="chip" Margin="0,0,6,0" Padding="2,1,9,1" MinHeight="22" ToolTip="{Binding ToolTip}" Cursor="Arrow"
+                                Command="{Binding DataContext.GiveCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}" CommandParameter="{Binding}"
+                                AutomationProperties.Name="{Binding ToolTip}">
+                            <Button.Template>
+                                <ControlTemplate TargetType="Button">
+                                    <Border x:Name="bd" CornerRadius="11" BorderThickness="1" BorderBrush="{StaticResource ButtonBorder}" Background="{StaticResource Panel}" Padding="{TemplateBinding Padding}">
+                                        <ContentPresenter VerticalAlignment="Center" />
+                                    </Border>
+                                    <ControlTemplate.Triggers>
+                                        <DataTrigger Binding="{Binding HasControl}" Value="True">
+                                            <Setter TargetName="bd" Property="BorderBrush" Value="{StaticResource Warn}" />
+                                            <Setter TargetName="bd" Property="Background" Value="{StaticResource ChipCtl}" />
+                                        </DataTrigger>
+                                        <MultiDataTrigger>
+                                            <MultiDataTrigger.Conditions>
+                                                <Condition Binding="{Binding CanGive}" Value="True" />
+                                                <Condition Binding="{Binding IsMouseOver, RelativeSource={RelativeSource Self}}" Value="True" />
+                                            </MultiDataTrigger.Conditions>
+                                            <Setter TargetName="bd" Property="BorderBrush" Value="{StaticResource Accent}" />
+                                        </MultiDataTrigger>
+                                    </ControlTemplate.Triggers>
+                                </ControlTemplate>
+                            </Button.Template>
+                            <StackPanel Orientation="Horizontal">
+                                <Border Width="18" Height="18" CornerRadius="9" Background="{Binding Color}" Margin="0,0,6,0">
+                                    <TextBlock Text="{Binding Initials}" FontSize="8" FontWeight="Bold" Foreground="#0F1113" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                </Border>
+                                <TextBlock Text="{Binding Name}" Foreground="{StaticResource Text}" VerticalAlignment="Center" />
+                                <TextBlock x:Name="role" Text="{Binding Role}" Foreground="{StaticResource Faint}" FontSize="11" Margin="6,0,0,0" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </Button>
+                        <DataTemplate.Triggers>
+                            <DataTrigger Binding="{Binding HasControl}" Value="True"><Setter TargetName="role" Property="Foreground" Value="{StaticResource Warn}" /></DataTrigger>
+                            <DataTrigger Binding="{Binding CanGive}" Value="True"><Setter TargetName="chip" Property="Cursor" Value="Hand" /></DataTrigger>
+                        </DataTemplate.Triggers>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+
+            <!-- right side: actions -->
+            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
+                <Button Content="Take back control" MinHeight="22" Padding="10,0" Margin="6,0,0,0" Foreground="{StaticResource Warn}"
+                        Command="{Binding TakeBackCommand}" Visibility="{Binding CanTakeBack, Converter={StaticResource BoolVis}}" />
+                <Button Content="Give control back" MinHeight="22" Padding="10,0" Margin="6,0,0,0"
+                        Command="{Binding GiveBackCommand}" Visibility="{Binding CanGiveBack, Converter={StaticResource BoolVis}}" />
+                <Button Content="Ask for control" Style="{StaticResource PrimaryButton}" MinHeight="22" Padding="10,0" Margin="6,0,0,0"
+                        Command="{Binding AskCommand}" Visibility="{Binding CanAsk, Converter={StaticResource BoolVis}}" />
+                <Button Content="Invite…" MinHeight="22" Padding="10,0" Margin="6,0,0,0" ToolTip="Invite more teammates"
+                        Command="{Binding InviteCommand}" Visibility="{Binding IsHost, Converter={StaticResource BoolVis}}" />
+                <Button Content="{Binding EndText}" MinHeight="22" Padding="10,0" Margin="6,0,0,0" Foreground="{StaticResource Bad}"
+                        Command="{Binding EndCommand}" />
+            </StackPanel>
+
+            <!-- someone asks for control (host, or whoever has it) -->
+            <Border DockPanel.Dock="Right" Visibility="{Binding Request, Converter={StaticResource NullVisBar}}" Margin="12,0,0,0"
+                    BorderBrush="{StaticResource Warn}" BorderThickness="1" CornerRadius="3" Padding="8,1,2,1" Background="{StaticResource ChipCtl}">
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock VerticalAlignment="Center" Foreground="{StaticResource TextStrong}">
+                        <Run Text="{Binding Request.Name, Mode=OneWay}" /><Run Text=" asks for control" />
+                    </TextBlock>
+                    <Button Content="Give" Style="{StaticResource PrimaryButton}" MinHeight="20" Padding="8,0" Margin="8,0,0,0" Command="{Binding GiveRequestedCommand}" />
+                    <Button Content="Not now" Style="{StaticResource FlatButton}" MinHeight="20" Padding="8,0" Margin="2,0,0,0" Command="{Binding DismissRequestCommand}" />
+                </StackPanel>
+            </Border>
+
+            <TextBlock DockPanel.Dock="Right" Text="{Binding Hint}" Foreground="{StaticResource Muted}" FontSize="11.5" VerticalAlignment="Center"
+                       Margin="12,0,0,0" TextTrimming="CharacterEllipsis" />
+        </DockPanel>
+    </Border>
+</UserControl>

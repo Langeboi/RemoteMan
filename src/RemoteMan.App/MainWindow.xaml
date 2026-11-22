@@ -18,8 +18,9 @@
         <local:NullToCollapsedConverter x:Key="NullVis" />
 
         <!-- Session views, chosen by type and kept alive while hidden -->
-        <DataTemplate DataType="{x:Type vm:SshSessionViewModel}"><views:SshSessionView /></DataTemplate>
-        <DataTemplate DataType="{x:Type vm:RdpSessionViewModel}"><views:RdpSessionView /></DataTemplate>
+        <DataTemplate DataType="{x:Type vm:SshSessionViewModel}"><DockPanel><views:ShareBar DockPanel.Dock="Top" DataContext="{Binding Share}" /><views:SshSessionView /></DockPanel></DataTemplate>
+        <DataTemplate DataType="{x:Type vm:RdpSessionViewModel}"><DockPanel><views:ShareBar DockPanel.Dock="Top" DataContext="{Binding Share}" /><views:RdpSessionView /></DockPanel></DataTemplate>
+        <DataTemplate DataType="{x:Type vm:SharedSessionViewModel}"><DockPanel><views:ShareBar DockPanel.Dock="Top" DataContext="{Binding Share}" /><views:SharedSessionView /></DockPanel></DataTemplate>
         <DataTemplate DataType="{x:Type vm:WebSessionViewModel}"><views:WebSessionView /></DataTemplate>
         <DataTemplate DataType="{x:Type vm:FilesSessionViewModel}"><views:FilesSessionView /></DataTemplate>
         <DataTemplate DataType="{x:Type vm:DashboardViewModel}"><views:DashboardView /></DataTemplate>
@@ -119,6 +120,8 @@
                 <StackPanel.ContextMenu>
                     <ContextMenu>
                         <MenuItem Header="Move to other pane" Click="OnMoveTab" />
+                        <MenuItem Header="Share this session…" Click="OnShareTab" Visibility="{Binding CanShare, Converter={StaticResource BoolVis}}" />
+                        <MenuItem Header="Stop sharing" Click="OnStopShareTab" Visibility="{Binding Share.IsHost, Converter={StaticResource BoolVis}, FallbackValue=Collapsed}" />
                         <Separator />
                         <MenuItem Header="Close" InputGestureText="Ctrl+W" Click="OnCloseTab" />
                     </ContextMenu>
@@ -672,6 +675,18 @@
                                                     Visibility="{Binding HasDetails, Converter={StaticResource BoolVis}}"
                                                     Command="{Binding DataContext.NoticeDetailsCommand, ElementName=Root}" CommandParameter="{Binding}" />
                                         </StackPanel>
+                                        <!-- A notice's own buttons (Join / Not now on a shared-session invite) -->
+                                        <ItemsControl ItemsSource="{Binding Actions}" Margin="21,4,0,0" Visibility="{Binding HasActions, Converter={StaticResource BoolVis}}">
+                                            <ItemsControl.ItemsPanel><ItemsPanelTemplate><StackPanel Orientation="Horizontal" /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate>
+                                                    <Button x:Name="b" Content="{Binding Label}" Command="{Binding Command}" MinHeight="22" Padding="10,0" Margin="0,0,6,0" />
+                                                    <DataTemplate.Triggers>
+                                                        <DataTrigger Binding="{Binding Primary}" Value="True"><Setter TargetName="b" Property="Style" Value="{StaticResource PrimaryButton}" /></DataTrigger>
+                                                    </DataTemplate.Triggers>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
                                     </StackPanel>
                                 </DockPanel>
                             </Border>

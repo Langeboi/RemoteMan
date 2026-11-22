@@ -14,6 +14,7 @@
 #   remoteman-db rejoin      turn this server back into a standby of the other one
 #   remoteman-db conn        the connection string to paste into RemoteMan
 #   remoteman-db user ...    personal logins: add, list, passwd, remove (or RemoteMan: Data sources > Users)
+#   remoteman-db relay ...   shared-session relay for teammates on other networks: install, status, remove
 #
 # RemoteMan gets one connection string with both hosts and "Target Session Attributes=primary",
 # so it always talks to whichever server is the primary at the moment.
@@ -794,7 +795,201 @@ cmd_update() {
     say "Updated $(hostname -s)."
 }
 
-usage() { sed -n '2,21p' "$0" | sed 's/^# \{0,1\}//'; }
+# ---------------------------------------------------------------- shared-session relay
+# Lets teammates join each other's shared RDP/SSH sessions from different networks. Both sides connect
+# out to it; it only pipes bytes (the session is TLS end to end). RemoteMan looks for it on the database
+# servers at port 47120 by itself, so nothing needs setting up in the app. Install it on both servers.
+RELAY_PORT="${RELAY_PORT:-47120}"
+RELAY_FILE=/usr/local/lib/remoteman/remoteman-relay.py
+
+write_relay() {
+    mkdir -p "$(dirname "$RELAY_FILE")"
+    cat > "$RELAY_FILE" <<'PYEOF'
+#!/usr/bin/env python3
+"""RemoteMan shared-session relay.
+
+Lets a teammate join a shared session when they can't reach the host directly (different networks,
+no VPN). Both sides connect *out* to this relay, which only splices bytes: TLS runs end to end between
+guest and host, pinned to the host's certificate, so the relay can't read or change anything.
+
+Protocol (one ASCII line, then raw bytes):
+  host  -> HOST <share>           relay -> OK; later CONN <id> per guest, PING now and then
+  guest -> JOIN <share>           relay -> OK once spliced to the host, or NOHOST
+  host  -> ACCEPT <share> <id>    relay -> OK, then this connection is the guest's pipe
+
+Standard library only (Python 3.8+). Usage: remoteman-relay.py [--port 47120] [--bind 0.0.0.0]
+"""
+import argparse
+import asyncio
+import secrets
+
+MAX_LINE = 200
+MAX_PENDING = 200
+JOIN_WAIT = 10
+
+hosts = {}      # share -> writer of the host's control connection
+pending = {}    # conn id -> (share, future that gets the host's (reader, writer))
+
+
+async def read_line(reader):
+    line = await asyncio.wait_for(reader.readuntil(b"\n"), 15)
+    if len(line) > MAX_LINE:
+        raise ValueError("line too long")
+    return line.decode("ascii", "replace").strip()
+
+
+async def send(writer, text):
+    writer.write((text + "\n").encode("ascii"))
+    await writer.drain()
+
+
+async def pipe(reader, writer):
+    try:
+        while True:
+            data = await reader.read(65536)
+            if not data:
+                break
+            writer.write(data)
+            await writer.drain()
+    except (ConnectionError, asyncio.CancelledError, OSError):
+        pass
+    finally:
+        try:
+            writer.close()
+        except Exception:
+            pass
+
+
+async def serve(reader, writer):
+    keep = False
+    try:
+        parts = (await read_line(reader)).split()
+        if len(parts) == 2 and parts[0] == "HOST":
+            share = parts[1]
+            old = hosts.get(share)
+            if old is not None and old is not writer:
+                old.close()
+            hosts[share] = writer
+            await send(writer, "OK")
+            keep = True
+            try:
+                while True:
+                    try:
+                        data = await asyncio.wait_for(reader.read(256), 30)
+                        if not data:
+                            break
+                    except asyncio.TimeoutError:
+                        await send(writer, "PING")
+            finally:
+                if hosts.get(share) is writer:
+                    del hosts[share]
+                keep = False
+        elif len(parts) == 2 and parts[0] == "JOIN":
+            share = parts[1]
+            host = hosts.get(share)
+            if host is None or len(pending) >= MAX_PENDING:
+                await send(writer, "NOHOST")
+                return
+            conn = secrets.token_hex(6)
+            fut = asyncio.get_running_loop().create_future()
+            pending[conn] = (share, fut)
+            try:
+                await send(host, "CONN " + conn)
+                h_reader, h_writer = await asyncio.wait_for(fut, JOIN_WAIT)
+            finally:
+                pending.pop(conn, None)
+            await send(writer, "OK")
+            keep = True
+            await asyncio.gather(pipe(reader, h_writer), pipe(h_reader, writer))
+            keep = False
+        elif len(parts) == 3 and parts[0] == "ACCEPT":
+            share, conn = parts[1], parts[2]
+            item = pending.get(conn)
+            if item is None or item[0] != share or item[1].done():
+                await send(writer, "NOCONN")
+                return
+            await send(writer, "OK")
+            keep = True
+            item[1].set_result((reader, writer))
+    except Exception:
+        keep = False
+    finally:
+        if not keep:
+            try:
+                writer.close()
+            except Exception:
+                pass
+
+
+async def main():
+    ap = argparse.ArgumentParser(description="RemoteMan shared-session relay")
+    ap.add_argument("--port", type=int, default=47120)
+    ap.add_argument("--bind", default="0.0.0.0")
+    args = ap.parse_args()
+    server = await asyncio.start_server(serve, args.bind, args.port)
+    print(f"RemoteMan relay listening on {args.bind}:{args.port}", flush=True)
+    async with server:
+        await server.serve_forever()
+
+
+if __name__ == "__main__":
+    asyncio.run(main())
+PYEOF
+    chmod 755 "$RELAY_FILE"
+}
+
+cmd_relay() {
+    case "${1:-}" in
+        install)
+            need_root "relay install"
+            command -v python3 >/dev/null || { say "Installing python3"; apt-get install -y -qq python3 >/dev/null; }
+            id remoteman-relay >/dev/null 2>&1 || useradd --system --no-create-home --shell /usr/sbin/nologin remoteman-relay
+            write_relay
+            cat > /etc/systemd/system/remoteman-relay.service <<EOF
+[Unit]
+Description=RemoteMan shared-session relay
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=remoteman-relay
+ExecStart=/usr/bin/python3 $RELAY_FILE --port $RELAY_PORT
+Restart=always
+RestartSec=2
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
+EOF
+            systemctl daemon-reload
+            systemctl enable --now remoteman-relay.service >/dev/null 2>&1
+            systemctl restart remoteman-relay.service
+            if command -v ufw >/dev/null && ufw status 2>/dev/null | grep -q "Status: active"; then
+                say "Opening port $RELAY_PORT in ufw"; ufw allow "$RELAY_PORT"/tcp >/dev/null
+            fi
+            sleep 1
+            systemctl is-active --quiet remoteman-relay.service || die "The relay didn't start: journalctl -u remoteman-relay"
+            say "Relay running on port $RELAY_PORT. RemoteMan finds it on its own; teammates on other networks can now join shared sessions."
+            say "Teammates must be able to reach this server on TCP $RELAY_PORT (open it on any firewall or port forward in front of it)."
+            ;;
+        status)
+            systemctl --no-pager status remoteman-relay.service 2>/dev/null | head -5 || say "The relay isn't installed."
+            ;;
+        remove)
+            need_root "relay remove"
+            systemctl disable --now remoteman-relay.service >/dev/null 2>&1 || true
+            rm -f /etc/systemd/system/remoteman-relay.service "$RELAY_FILE"
+            systemctl daemon-reload
+            say "Relay removed."
+            ;;
+        *) die "Use: remoteman-db relay install|status|remove" ;;
+    esac
+}
+
+usage() { sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//'; }
 
 case "${1:-}" in
     first) shift; cmd_first "$@" ;;
@@ -807,5 +1002,6 @@ case "${1:-}" in
     conn) cmd_conn ;;
     user) shift; cmd_user "$@" ;;
     update) cmd_update ;;
+    relay) shift; cmd_relay "$@" ;;
     *) usage ;;
 esac
