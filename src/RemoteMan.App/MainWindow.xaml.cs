@@ -166,6 +166,7 @@ public partial class MainWindow : Window
             startup.Items.Add(item);
         }
         menu.Items.Add(startup);
+        menu.Items.Add(Click("Theme…", OnTheme));
         menu.Items.Add(new Separator());
         var updates = RemoteMan.App.Updates.UpdateService.Instance;
         menu.Items.Add(new MenuItem { Header = "Check for updates", Command = updates.CheckNowCommand });
@@ -181,6 +182,32 @@ public partial class MainWindow : Window
         menu.Items.Add(new Separator());
         menu.Items.Add(Click("Exit", OnExit));
         menu.IsOpen = true;
+    }
+
+    /// <summary>More > Theme: pick a colour theme; it applies after a restart, which can happen right away.</summary>
+    private void OnTheme(object sender, RoutedEventArgs e)
+    {
+        var w = new Views.ThemeWindow(_vm.Theme) { Owner = this };
+        if (w.ShowDialog() != true || w.Picked == Services.Themes.Current.Id) return;
+        _vm.Theme = w.Picked;
+        var name = Services.Themes.Find(w.Picked).Name;
+        var choice = Views.ChoiceDialog.Show(this, "Restart to apply the theme",
+            $"{name} is used from the next start. Restart RemoteMan now? Open sessions are closed; you can reopen them when it starts.",
+            ["Restart now", "Later"], Views.DialogIcon.Question);
+        if (choice == 0) RestartApp();
+    }
+
+    /// <summary>Closes this window (which saves the open tabs for reopening) and starts RemoteMan again.</summary>
+    private void RestartApp()
+    {
+        var exe = Environment.ProcessPath;
+        if (string.IsNullOrEmpty(exe)) { Close(); return; }
+        Closed += (_, _) =>
+        {
+            try { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(exe) { UseShellExecute = false }); }
+            catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"Restart failed: {ex.Message}"); }
+        };
+        Close();
     }
 
     // ---------------- icon rail ----------------

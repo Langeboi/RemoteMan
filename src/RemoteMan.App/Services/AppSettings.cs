@@ -46,6 +46,9 @@ public sealed class AppSettings
 
     /// <summary>Whether to reopen the tabs and windows that were open when RemoteMan last closed.</summary>
     public ReopenMode ReopenSessions { get; set; } = ReopenMode.Ask;
+
+    /// <summary>Colour theme (see <see cref="Themes"/>). Takes effect on the next start.</summary>
+    public string Theme { get; set; } = Themes.DefaultId;
     /// <summary>What was open at the last exit (kept up to date while running, so a crash still leaves it).</summary>
     public List<OpenSessionRecord> LastSessions { get; set; } = new();
 

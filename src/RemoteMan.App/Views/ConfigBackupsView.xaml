@@ -133,7 +133,7 @@
                                         <TextBlock Text="{Binding DateText}" />
                                         <Border Background="{StaticResource Accent}" CornerRadius="2" Padding="4,0" Margin="6,0,0,0" VerticalAlignment="Center"
                                                 Visibility="{Binding IsLatest, Converter={StaticResource BoolVisC}}">
-                                            <TextBlock Text="latest" FontSize="9.5" Foreground="{StaticResource Bg}" />
+                                            <TextBlock Text="latest" FontSize="9.5" Foreground="{StaticResource OnAccent}" />
                                         </Border>
                                     </StackPanel>
                                     <TextBlock Text="{Binding AgeText}" Style="{StaticResource MutedText}" FontSize="11" ToolTip="{Binding Tip}" />

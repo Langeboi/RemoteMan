@@ -17,15 +17,15 @@ public sealed record ChartColumn(double Value, string? Label, string Hover, bool
 /// <summary>Shared drawing for the dashboard's small charts: theme colors, text and the hover label.</summary>
 public abstract class DashChart : FrameworkElement
 {
-    internal static readonly Brush Grid = Frozen("#22272C");
-    internal static readonly Brush Axis = Frozen("#2A2F35");
-    internal static readonly Brush Faint = Frozen("#7D8690");
-    internal static readonly Brush Muted = Frozen("#9AA3AD");
-    internal static readonly Brush Strong = Frozen("#F4F6F8");
-    internal static readonly Brush TipBg = Frozen("#1D2125");
-    internal static readonly Brush TipBorder = Frozen("#353B42");
-    internal static readonly Brush Panel = Frozen("#16191C");
-    internal static readonly Brush Cross = Frozen("#4A525B");
+    internal static readonly Brush Grid = Services.Themes.GetBrush("BorderSoft");
+    internal static readonly Brush Axis = Services.Themes.GetBrush("Border");
+    internal static readonly Brush Faint = Services.Themes.GetBrush("Faint");
+    internal static readonly Brush Muted = Services.Themes.GetBrush("Muted");
+    internal static readonly Brush Strong = Services.Themes.GetBrush("TextStrong");
+    internal static readonly Brush TipBg = Services.Themes.GetBrush("Button");
+    internal static readonly Brush TipBorder = Services.Themes.GetBrush("ButtonBorder");
+    internal static readonly Brush Panel = Services.Themes.GetBrush("Panel");
+    internal static readonly Brush Cross = Services.Themes.GetBrush("TabLine");
 
     /// <summary>Categorical hues for series and slices, in fixed order (validated for the dark surface).</summary>
     public static readonly Brush[] Series = new[] { "#3987e5", "#d95926", "#199e70", "#c98500", "#d55181" }.Select(Frozen).ToArray();
@@ -187,7 +187,8 @@ public sealed class ColumnChart : DashChart
     public IReadOnlyList<ChartColumn>? Columns { get => (IReadOnlyList<ChartColumn>?)GetValue(ColumnsProperty); set => SetValue(ColumnsProperty, value); }
 
     private const double Pl = 24, Pr = 4, Pt = 8, Pb = 18;
-    private static readonly Brush Highlight = Frozen("#3FB8A4");
+    // The theme's accent, or its lighter link colour when the accent is too close to the columns' own blue to stand out.
+    private static readonly Brush Highlight = Services.Themes.GetBrush(Services.Themes.IsNear(Services.Themes.GetColor("Accent"), Color.FromRgb(0x39, 0x87, 0xE5)) ? "Link" : "Accent");
 
     protected override void OnRender(DrawingContext dc)
     {
