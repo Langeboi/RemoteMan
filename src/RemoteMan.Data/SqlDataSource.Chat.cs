@@ -68,6 +68,15 @@ public abstract partial class SqlDataSource : IChatSource
 
     public async Task<StoredChatMessage> PostChatMessageAsync(StoredChatMessage m, CancellationToken ct = default)
     {
+        try { return await PostCoreAsync(m, ct); }
+        catch (DbException ex) when (IsPermissionDenied(ex))
+        {
+            throw new UnauthorizedAccessException($"Your database login{(DatabaseUser is { } u ? $" ({u})" : "")} can only read, so it can't send chat messages.");
+        }
+    }
+
+    private async Task<StoredChatMessage> PostCoreAsync(StoredChatMessage m, CancellationToken ct)
+    {
         await using var c = await OpenAsync(ct);
         await using var tx = await c.BeginTransactionAsync(IsolationLevel.ReadCommitted, ct);
         // The number is taken first: that locks the counter row, so two retries of one message can't both insert.

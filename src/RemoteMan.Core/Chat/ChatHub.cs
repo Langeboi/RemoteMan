@@ -74,14 +74,18 @@ public sealed class ChatHub : IAsyncDisposable
         var reads = await _chat.GetChatReadsAsync(Me, ct);
         lock (_gate) foreach (var (k, v) in reads) _reads[k] = v;
         // Being in Everyone's read table is what puts you in everyone's contact list.
-        if (!reads.ContainsKey(ChatRoom.EveryoneId)) await _chat.SetChatReadAsync(Me, ChatRoom.EveryoneId, 0, ct);
+        if (!reads.ContainsKey(ChatRoom.EveryoneId))
+        {
+            try { await _chat.SetChatReadAsync(Me, ChatRoom.EveryoneId, 0, ct); }
+            catch (Exception) when (!ct.IsCancellationRequested) { /* a read-only login: you can still read along */ }
+        }
 
         var top = await _chat.GetChatSeqAsync(ct);
         _lastSeq = Math.Max(0, top - HistoryWindow);
         await PullAsync(notify: false, ct);
         _started = true;
         _retry = new Timer(_ => { if (HasPending) _ = FlushAsync(); }, null, TimeSpan.FromSeconds(15), TimeSpan.FromSeconds(15));
-        await FlushAsync();
+        try { await FlushAsync(ct); } catch (UnauthorizedAccessException) { }
     }
 
     // ---------------- reading ----------------
@@ -225,6 +229,13 @@ public sealed class ChatHub : IAsyncDisposable
                 Changed?.Invoke(this, EventArgs.Empty);
             }
             catch (Exception) when (ct.IsCancellationRequested || _cts.IsCancellationRequested) { return; }
+            catch (UnauthorizedAccessException)
+            {
+                // The login may not write: retrying won't help, so the message is dropped and the sender told.
+                lock (_gate) { _pending.RemoveAll(p => p.Id == next.Id); SaveOutbox(); }
+                Changed?.Invoke(this, EventArgs.Empty);
+                throw;
+            }
             catch (Exception) { return; /* offline: the retry timer tries again */ }
         }
     }

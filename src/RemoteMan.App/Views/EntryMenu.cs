@@ -45,6 +45,7 @@ public static class EntryMenu
         ["vnc"] = G("M1.5,8.5 V1.5 H9.5 V4 M4,4 H12.5 V11 H4 Z M6.5,12.5 H10"),
         ["key"] = G("M6,7 A2.5,2.5 0 1 1 1,7 A2.5,2.5 0 1 1 6,7 Z M6,7 H12.5 M10.5,7 V9.5 M12.5,7 V9"),
         ["folder"] = G("M1,4 H5 L6,5 H13 V12 H1 Z"),
+        ["chat"] = G("M1.5,2.5 H12.5 V9.5 H5.5 L3,12 V9.5 H1.5 Z"),
     };
 
     private static Geometry G(string data) { var g = Geometry.Parse(data); g.Freeze(); return g; }
@@ -118,6 +119,7 @@ public static class EntryMenu
         }
         menu.Items.Add(move);
         if (!isFolder) menu.Items.Add(Item(vm.IsFavorite(e) ? "Remove from favorites" : "Add to favorites", "star", () => vm.ToggleFavoriteCommand.Execute(null)));
+        if (vm.Chat.IsAvailable) menu.Items.Add(Item("Send in chat", "chat", () => vm.Chat.ShareEntry(e)));
 
         // --- copy login details ---
         if (e.IsConnectable || isCred)

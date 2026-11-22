@@ -75,6 +75,7 @@ public partial class MainWindow : Window
         Closing += async (_, _) => { _vm.FreezeOpenSessions(); await _vm.DisposeAsync(); };
         _vm.AskReopen = AskReopen;
         PreviewKeyDown += OnWindowKeyDown;
+        SetUpChat();
         StateChanged += (_, _) => MaxGlyph.Data = Geometry.Parse(WindowState == WindowState.Maximized
             ? "M2.5,0.5 H9.5 V7.5 M0.5,2.5 H7.5 V9.5 H0.5 Z" : "M0.5,0.5 H9.5 V9.5 H0.5 Z");
     }
@@ -111,11 +112,57 @@ public partial class MainWindow : Window
         StateChanged += (_, _) => Nudge();
         _vm.Notices.CollectionChanged += (_, _) => Dispatcher.BeginInvoke(Nudge, System.Windows.Threading.DispatcherPriority.Loaded);
         // A popup floats above other apps; show it only while RemoteMan is the active window.
-        void Update() => NoticePopup.IsOpen = _vm.HasNotices && IsActive && WindowState != WindowState.Minimized;
+        void Update() => NoticePopup.IsOpen = (_vm.HasNotices || _vm.Chat.Toasts.Count > 0) && IsActive && WindowState != WindowState.Minimized;
+        _vm.Chat.Toasts.CollectionChanged += (_, _) => { Update(); Dispatcher.BeginInvoke(Nudge, System.Windows.Threading.DispatcherPriority.Loaded); };
         _vm.PropertyChanged += (_, a) => { if (a.PropertyName == nameof(MainViewModel.HasNotices)) Update(); };
         Deactivated += (_, _) => Update();
         Activated += (_, _) => Update();
         StateChanged += (_, _) => Update();
+    }
+
+    // ---------------- team chat ----------------
+
+    private void SetUpChat()
+    {
+        var chat = _vm.Chat;
+        chat.NewGroupDialog = users =>
+        {
+            var w = new NewChatGroupWindow(this, users);
+            return w.ShowDialog() == true ? (w.GroupName, w.Members) : null;
+        };
+        ChatPanel.ResolveEntry = id => _vm.Store?.Get(id);
+        Activated += (_, _) => { _vm.IsWindowActive = true; chat.WindowActivated(); };
+        Deactivated += (_, _) => { _vm.IsWindowActive = false; chat.IsPickerOpen = false; };
+        _vm.ChatAttention += (_, _) => FlashTaskbar();
+    }
+
+    /// <summary>Clicking someone in "who's online" opens a direct conversation with them.</summary>
+    private void OnAvatarClick(object sender, MouseButtonEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.DataContext is not PresenceChip chip || !_vm.Chat.IsAvailable) return;
+        if (chip.User is { } user) _vm.Chat.OpenDirect(user); else _vm.Chat.IsOpen = true;
+        e.Handled = true;
+    }
+
+    private void OnChatToastClick(object sender, MouseButtonEventArgs e)
+    {
+        if (e.OriginalSource is DependencyObject d && FindAncestor<Button>(d) is not null) return;   // the buttons do their own thing
+        if ((sender as FrameworkElement)?.DataContext is ChatToast t) _vm.Chat.OpenToastCommand.Execute(t);
+    }
+
+    [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+    private struct FlashInfo { public uint Size; public IntPtr Hwnd; public uint Flags; public uint Count; public uint Timeout; }
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern bool FlashWindowEx(ref FlashInfo info);
+
+    /// <summary>A chat message for you while RemoteMan is in the background: flash the taskbar button until it's opened.</summary>
+    private void FlashTaskbar()
+    {
+        var hwnd = new System.Windows.Interop.WindowInteropHelper(this).Handle;
+        if (hwnd == IntPtr.Zero) return;
+        var info = new FlashInfo { Hwnd = hwnd, Flags = 0x2 | 0xC /* tray, until foreground */, Count = 3 };
+        info.Size = (uint)System.Runtime.InteropServices.Marshal.SizeOf(info);
+        FlashWindowEx(ref info);
     }
 
     private void OnNoticeEnter(object sender, MouseEventArgs e)
@@ -167,6 +214,18 @@ public partial class MainWindow : Window
         }
         menu.Items.Add(startup);
         menu.Items.Add(Click("Theme…", OnTheme));
+        if (_vm.Chat.IsAvailable)
+        {
+            var keep = new MenuItem { Header = "Keep chat messages" };
+            foreach (var (days, label) in new[] { (0, "Forever"), (365, "1 year"), (90, "90 days") })
+            {
+                var item = new MenuItem { Header = label, IsCheckable = true, IsChecked = _vm.ChatRetentionDays == days,
+                    ToolTip = "Older messages are deleted for everyone when RemoteMan starts. The shortest setting on any PC wins." };
+                item.Click += (_, _) => _vm.ChatRetentionDays = days;
+                keep.Items.Add(item);
+            }
+            menu.Items.Add(keep);
+        }
         menu.Items.Add(new Separator());
         var updates = RemoteMan.App.Updates.UpdateService.Instance;
         menu.Items.Add(new MenuItem { Header = "Check for updates", Command = updates.CheckNowCommand });
@@ -376,6 +435,11 @@ public partial class MainWindow : Window
         if (e.Key == Key.A && Keyboard.Modifiers == (ModifierKeys.Control | ModifierKeys.Shift))
         {
             ToggleAi();
+            e.Handled = true;
+        }
+        else if (e.Key == Key.M && Keyboard.Modifiers == (ModifierKeys.Control | ModifierKeys.Shift) && _vm.Chat.IsAvailable)
+        {
+            _vm.Chat.IsOpen = !_vm.Chat.IsOpen;
             e.Handled = true;
         }
         else if (e.Key == Key.K && Keyboard.Modifiers == ModifierKeys.Control)

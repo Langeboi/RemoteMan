@@ -6,7 +6,7 @@ using RemoteMan.Core.Model;
 namespace RemoteMan.App.ViewModels;
 
 /// <summary>A colored initials circle: who is on an entry, or who is online.</summary>
-public sealed record PresenceChip(string Initials, string ToolTip, string Color = "#5B9BEA")
+public sealed record PresenceChip(string Initials, string ToolTip, string Color = "#5B9BEA", string? User = null)
 {
     private static readonly string[] Palette = ["#D98C5F", "#B48AE6", "#5B9BEA", "#54C08A", "#E0A84A", "#3FB8A4", "#E57A9A"];
 
