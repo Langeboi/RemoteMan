@@ -13,7 +13,7 @@
 #   remoteman-db promote     make this standby the primary (manual failover)
 #   remoteman-db rejoin      turn this server back into a standby of the other one
 #   remoteman-db conn        the connection string to paste into RemoteMan
-#   remoteman-db user ...    personal logins: add, list, passwd, remove (run on the primary)
+#   remoteman-db user ...    personal logins: add, list, passwd, remove (or RemoteMan: Data sources > Users)
 #   remoteman-db relay ...   shared-session relay for teammates on other networks: install, status, remove
 #
 # RemoteMan gets one connection string with both hosts and "Target Session Attributes=primary",
@@ -398,7 +398,10 @@ cmd_watch() {
                         gone=0
                     fi
                 else gone=0; fi
-            elif [[ "$(peer_role)" == primary ]]; then
+            else
+                sync_role_settings 2>/dev/null || true
+            fi
+            if ! in_recovery && [[ "$(peer_role)" == primary ]]; then
                 local mine theirs
                 mine="$(timeline_local)"; theirs="$(timeline_peer 2>/dev/null || echo 0)"
                 if [[ -n "$theirs" && "$theirs" -gt "$mine" ]]; then
@@ -435,10 +438,12 @@ need_primary() {
     return 0
 }
 
-# The read-only group and what it may touch. Safe to run again any time.
+# The read-only and admin groups, what they may touch, and the login functions RemoteMan's Users tab
+# calls. Safe to run again any time.
 ensure_groups() {
-    local ro="${APP_USER}_readonly"
+    local ro="${APP_USER}_readonly" adm="${APP_USER}_admins"
     role_exists "$ro" || local_sql "CREATE ROLE $ro NOLOGIN" >/dev/null
+    role_exists "$adm" || local_sql "CREATE ROLE $adm NOLOGIN" >/dev/null
     db_sql "GRANT CONNECT ON DATABASE $DB_NAME TO $ro;
         GRANT USAGE ON SCHEMA public TO $ro;
         GRANT SELECT ON ALL TABLES IN SCHEMA public TO $ro;
@@ -447,6 +452,235 @@ ensure_groups() {
     if [[ "$(db_sql "SELECT to_regclass('public.remoteman_presence') IS NOT NULL")" == t ]]; then
         db_sql "GRANT SELECT, INSERT, UPDATE, DELETE ON remoteman_presence TO $ro" >/dev/null
     fi
+    install_login_functions
+    sync_role_settings
+}
+
+# Logins in the shared login's group act as it once connected ("SET role" for this database); logins that
+# aren't (read-only, or moved there in RemoteMan's Users tab) don't. The Users tab can't set this itself,
+# so the watcher calls this every few seconds on the primary. Only touches roles whose state is wrong.
+sync_role_settings() {
+    db_sql "SELECT format('ALTER ROLE %I IN DATABASE %I SET role = %L', r.rolname, '$DB_NAME', '$APP_USER')
+              FROM pg_auth_members m JOIN pg_roles r ON r.oid = m.member
+              WHERE m.roleid = '$APP_USER'::regrole AND NOT r.rolsuper
+                AND NOT EXISTS (SELECT FROM pg_db_role_setting s WHERE s.setrole = r.oid
+                                AND s.setdatabase = (SELECT oid FROM pg_database WHERE datname = '$DB_NAME')
+                                AND 'role=$APP_USER' = ANY (s.setconfig))
+            UNION ALL
+            SELECT format('ALTER ROLE %I IN DATABASE %I RESET role', r.rolname, '$DB_NAME')
+              FROM pg_db_role_setting s JOIN pg_roles r ON r.oid = s.setrole
+              WHERE s.setdatabase = (SELECT oid FROM pg_database WHERE datname = '$DB_NAME')
+                AND 'role=$APP_USER' = ANY (s.setconfig) AND NOT pg_has_role(r.oid, '$APP_USER', 'MEMBER')" \
+        | while IFS= read -r stmt; do [[ -n "$stmt" ]] && db_sql "$stmt" >/dev/null; done
+}
+
+# Functions behind RemoteMan's Users tab (Data sources > Users). They run as postgres (SECURITY DEFINER),
+# so admins can manage RemoteMan logins without being superusers or having CREATEROLE, and they only
+# ever touch RemoteMan logins: never postgres, the replication login or any other role on the server.
+# Admin = the shared login, or a login in ${APP_USER}_admins. Everyone may change their own password.
+# They live in their own schema, owned by postgres, so nobody else can replace or shadow them.
+install_login_functions() {
+    sed -e "s/__APP__/$APP_USER/g" -e "s/__RO__/${APP_USER}_readonly/g" -e "s/__ADM__/${APP_USER}_admins/g" \
+        -e "s/__REPL__/$REPL_USER/g" -e "s/__DB__/$DB_NAME/g" <<'SQL' | pg psql -X -q -At -v ON_ERROR_STOP=1 -p "$PORT" -d "$DB_NAME" -f - >/dev/null
+SET client_min_messages = warning;
+CREATE SCHEMA IF NOT EXISTS remoteman_admin AUTHORIZATION postgres;
+REVOKE ALL ON SCHEMA remoteman_admin FROM PUBLIC;
+GRANT USAGE ON SCHEMA remoteman_admin TO __APP__, __RO__;
+
+-- 'shared', 'admin', 'edit', 'read-only', or NULL for a role that isn't a RemoteMan login.
+CREATE OR REPLACE FUNCTION remoteman_admin.access_of(p_name text) RETURNS text
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path = pg_catalog, pg_temp AS $f$
+    SELECT CASE
+        WHEN r.rolname = '__APP__' THEN 'shared'
+        WHEN r.rolsuper OR r.rolname IN ('__RO__', '__ADM__', '__REPL__') THEN NULL
+        WHEN pg_has_role(r.oid, '__ADM__', 'MEMBER') THEN 'admin'
+        WHEN pg_has_role(r.oid, '__APP__', 'MEMBER') THEN 'edit'
+        WHEN pg_has_role(r.oid, '__RO__', 'MEMBER') THEN 'read-only'
+    END
+    FROM pg_roles r WHERE r.rolname = p_name
+$f$;
+
+CREATE OR REPLACE FUNCTION remoteman_admin.is_admin() RETURNS boolean
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path = pg_catalog, pg_temp AS $f$
+    SELECT COALESCE(remoteman_admin.access_of(session_user) IN ('shared', 'admin'), false)
+        OR (SELECT rolsuper FROM pg_roles WHERE rolname = session_user)
+$f$;
+
+-- Who am I, and does this server have the functions (version) RemoteMan expects.
+CREATE OR REPLACE FUNCTION remoteman_admin.me(OUT login text, OUT access text, OUT is_admin boolean, OUT version int)
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path = pg_catalog, pg_temp AS $f$
+    SELECT session_user::text, remoteman_admin.access_of(session_user), remoteman_admin.is_admin(), 1
+$f$;
+
+CREATE OR REPLACE FUNCTION remoteman_admin.require_admin() RETURNS void
+LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = pg_catalog, pg_temp AS $f$
+BEGIN
+    IF NOT remoteman_admin.is_admin() THEN
+        RAISE EXCEPTION 'Only RemoteMan admins can manage logins.' USING ERRCODE = 'insufficient_privilege';
+    END IF;
+END $f$;
+
+-- A RemoteMan login someone may change: exists, and is one of ours (not postgres, the groups or replication).
+CREATE OR REPLACE FUNCTION remoteman_admin.require_login(p_name text) RETURNS text
+LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = pg_catalog, pg_temp AS $f$
+DECLARE a text;
+BEGIN
+    IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = p_name) THEN
+        RAISE EXCEPTION 'There''s no login called %.', p_name USING ERRCODE = 'undefined_object';
+    END IF;
+    a := remoteman_admin.access_of(p_name);
+    IF a IS NULL THEN
+        RAISE EXCEPTION '% isn''t a RemoteMan login.', p_name USING ERRCODE = 'insufficient_privilege';
+    END IF;
+    RETURN a;
+END $f$;
+
+CREATE OR REPLACE FUNCTION remoteman_admin.check_password(p_password text) RETURNS void
+LANGUAGE plpgsql IMMUTABLE SET search_path = pg_catalog, pg_temp AS $f$
+BEGIN
+    IF p_password IS NULL OR length(p_password) < 8 THEN
+        RAISE EXCEPTION 'The password must be at least 8 characters.' USING ERRCODE = 'invalid_parameter_value';
+    END IF;
+END $f$;
+
+CREATE OR REPLACE FUNCTION remoteman_admin.apply_access(p_name text, p_access text) RETURNS void
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, pg_temp AS $f$
+DECLARE g text;
+BEGIN
+    IF p_access NOT IN ('read-only', 'edit', 'admin') THEN
+        RAISE EXCEPTION 'Access must be read-only, edit or admin.' USING ERRCODE = 'invalid_parameter_value';
+    END IF;
+    -- Direct grants only, so a role that is in a group through another role isn't touched by mistake.
+    FOREACH g IN ARRAY ARRAY['__RO__', '__APP__', '__ADM__'] LOOP
+        IF EXISTS (SELECT FROM pg_auth_members m WHERE m.roleid = g::regrole AND m.member = p_name::regrole) THEN
+            EXECUTE format('REVOKE %I FROM %I', g, p_name);
+        END IF;
+    END LOOP;
+    -- Editors also get "SET role = __APP__" for this database (so tables RemoteMan creates stay owned by the
+    -- shared login). PostgreSQL refuses that inside a SECURITY DEFINER function, so the watcher service
+    -- applies it within a few seconds (sync_role_settings in remoteman-db).
+    IF p_access = 'read-only' THEN
+        EXECUTE format('GRANT %I TO %I', '__RO__', p_name);
+    ELSE
+        EXECUTE format('GRANT %I TO %I', '__APP__', p_name);
+        IF p_access = 'admin' THEN EXECUTE format('GRANT %I TO %I', '__ADM__', p_name); END IF;
+    END IF;
+END $f$;
+
+CREATE OR REPLACE FUNCTION remoteman_admin.list()
+RETURNS TABLE (login text, access text, can_login boolean, connections int)
+LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = pg_catalog, pg_temp AS $f$
+BEGIN
+    PERFORM remoteman_admin.require_admin();
+    RETURN QUERY
+        SELECT r.rolname::text, remoteman_admin.access_of(r.rolname), r.rolcanlogin,
+               (SELECT count(*)::int FROM pg_stat_activity a WHERE a.usename = r.rolname AND a.datname = current_database())
+        FROM pg_roles r
+        WHERE remoteman_admin.access_of(r.rolname) IS NOT NULL
+        ORDER BY r.rolname <> '__APP__', r.rolname;
+END $f$;
+
+-- This server and the standbys streaming from it, for the status dots.
+CREATE OR REPLACE FUNCTION remoteman_admin.servers()
+RETURNS TABLE (address text, role text, state text, lag_bytes bigint)
+LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = pg_catalog, pg_temp AS $f$
+BEGIN
+    PERFORM remoteman_admin.require_admin();
+    RETURN QUERY
+        SELECT COALESCE(host(inet_server_addr()), 'local'), CASE WHEN pg_is_in_recovery() THEN 'standby' ELSE 'primary' END, 'up', 0::bigint
+        UNION ALL
+        SELECT COALESCE(host(s.client_addr), 'local'), 'standby', s.state::text,
+               COALESCE(pg_wal_lsn_diff(pg_current_wal_lsn(), s.replay_lsn), 0)::bigint
+        FROM pg_stat_replication s;
+END $f$;
+
+CREATE OR REPLACE FUNCTION remoteman_admin.add(p_name text, p_password text, p_access text) RETURNS void
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, pg_temp AS $f$
+BEGIN
+    PERFORM remoteman_admin.require_admin();
+    IF p_name IS NULL OR p_name !~ '^[a-z_][a-z0-9_]{0,62}$' THEN
+        RAISE EXCEPTION 'Login names: lowercase letters, digits and _ only.' USING ERRCODE = 'invalid_name';
+    END IF;
+    IF p_name IN ('postgres', 'public', '__APP__', '__RO__', '__ADM__', '__REPL__') OR p_name LIKE 'pg\_%' THEN
+        RAISE EXCEPTION '% is reserved.', p_name USING ERRCODE = 'reserved_name';
+    END IF;
+    IF EXISTS (SELECT FROM pg_roles WHERE rolname = p_name) THEN
+        RAISE EXCEPTION '% already exists.', p_name USING ERRCODE = 'duplicate_object';
+    END IF;
+    PERFORM remoteman_admin.check_password(p_password);
+    EXECUTE format('CREATE ROLE %I LOGIN PASSWORD %L', p_name, p_password);
+    PERFORM remoteman_admin.apply_access(p_name, p_access);
+END $f$;
+
+CREATE OR REPLACE FUNCTION remoteman_admin.set_access(p_name text, p_access text) RETURNS void
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, pg_temp AS $f$
+BEGIN
+    PERFORM remoteman_admin.require_admin();
+    IF remoteman_admin.require_login(p_name) = 'shared' THEN
+        RAISE EXCEPTION 'The shared login''s access can''t be changed.' USING ERRCODE = 'insufficient_privilege';
+    END IF;
+    IF p_name = session_user THEN
+        RAISE EXCEPTION 'You can''t change your own access. Ask another admin.' USING ERRCODE = 'insufficient_privilege';
+    END IF;
+    PERFORM remoteman_admin.apply_access(p_name, p_access);
+END $f$;
+
+-- Admins may set anyone's password (which also turns a disabled login back on); anyone may set their own.
+CREATE OR REPLACE FUNCTION remoteman_admin.set_password(p_name text, p_password text) RETURNS void
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, pg_temp AS $f$
+BEGIN
+    IF p_name IS DISTINCT FROM session_user THEN PERFORM remoteman_admin.require_admin(); END IF;
+    PERFORM remoteman_admin.require_login(p_name);
+    PERFORM remoteman_admin.check_password(p_password);
+    EXECUTE format('ALTER ROLE %I LOGIN PASSWORD %L', p_name, p_password);
+END $f$;
+
+CREATE OR REPLACE FUNCTION remoteman_admin.set_enabled(p_name text, p_enabled boolean) RETURNS void
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, pg_temp AS $f$
+BEGIN
+    PERFORM remoteman_admin.require_admin();
+    PERFORM remoteman_admin.require_login(p_name);
+    IF p_name = session_user AND NOT p_enabled THEN
+        RAISE EXCEPTION 'You can''t disable the login you''re using.' USING ERRCODE = 'insufficient_privilege';
+    END IF;
+    EXECUTE format('ALTER ROLE %I %s', p_name, CASE WHEN p_enabled THEN 'LOGIN' ELSE 'NOLOGIN' END);
+    IF NOT p_enabled THEN
+        PERFORM pg_terminate_backend(pid) FROM pg_stat_activity WHERE usename = p_name AND pid <> pg_backend_pid();
+    END IF;
+END $f$;
+
+-- Returns true when the login is gone, false when it owns something and was only disabled.
+CREATE OR REPLACE FUNCTION remoteman_admin.remove(p_name text) RETURNS boolean
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, pg_temp AS $f$
+BEGIN
+    PERFORM remoteman_admin.require_admin();
+    IF remoteman_admin.require_login(p_name) = 'shared' THEN
+        RAISE EXCEPTION 'The shared login owns the data and can''t be removed. Disable it instead.' USING ERRCODE = 'insufficient_privilege';
+    END IF;
+    IF p_name = session_user THEN
+        RAISE EXCEPTION 'You can''t remove the login you''re using.' USING ERRCODE = 'insufficient_privilege';
+    END IF;
+    EXECUTE format('ALTER ROLE %I NOLOGIN', p_name);
+    PERFORM pg_terminate_backend(pid) FROM pg_stat_activity WHERE usename = p_name;
+    BEGIN
+        EXECUTE format('DROP ROLE %I', p_name);
+        RETURN true;
+    EXCEPTION WHEN dependent_objects_still_exist THEN
+        RETURN false;
+    END;
+END $f$;
+
+DO $d$
+DECLARE f text;
+BEGIN
+    FOR f IN SELECT p.oid::regprocedure::text FROM pg_proc p WHERE p.pronamespace = 'remoteman_admin'::regnamespace LOOP
+        EXECUTE format('REVOKE ALL ON FUNCTION %s FROM PUBLIC', f);
+    END LOOP;
+END $d$;
+GRANT EXECUTE ON FUNCTION remoteman_admin.me(), remoteman_admin.list(), remoteman_admin.servers(),
+    remoteman_admin.add(text, text, text), remoteman_admin.set_access(text, text), remoteman_admin.set_password(text, text),
+    remoteman_admin.set_enabled(text, boolean), remoteman_admin.remove(text) TO __APP__, __RO__;
+SQL
 }
 
 print_conn() {  # name password
@@ -457,21 +691,23 @@ print_conn() {  # name password
 
 cmd_user() {
     need_root "user $*"; load_conf
-    RO_GROUP="${APP_USER}_readonly"
+    RO_GROUP="${APP_USER}_readonly"; ADM_GROUP="${APP_USER}_admins"
     local sub="${1:-list}"; shift || true
     case "$sub" in
         add)
-            local name="${1:-}" ro=no pw=""; shift || true
+            local name="${1:-}" ro=no admin=no pw=""; shift || true
             while [[ $# -gt 0 ]]; do
                 case "$1" in
                     --read-only) ro=yes; shift ;;
+                    --admin) admin=yes; shift ;;
                     --password) pw="$2"; shift 2 ;;
                     *) die "Unknown option $1" ;;
                 esac
             done
-            [[ -n "$name" ]] || die "Use: remoteman-db user add <name> [--read-only] [--password <pw>]"
+            [[ -n "$name" ]] || die "Use: remoteman-db user add <name> [--read-only|--admin] [--password <pw>]"
             valid_name "$name"; need_primary; ensure_groups
-            [[ "$name" == "$APP_USER" || "$name" == "$REPL_USER" || "$name" == "$RO_GROUP" || "$name" == postgres ]] && die "'$name' is reserved."
+            [[ "$name" == "$APP_USER" || "$name" == "$REPL_USER" || "$name" == "$RO_GROUP" || "$name" == "$ADM_GROUP" || "$name" == postgres ]] && die "'$name' is reserved."
+            [[ "$ro$admin" == yesyes ]] && die "Pick --read-only or --admin, not both."
             role_exists "$name" && die "$name already exists. Use 'remoteman-db user passwd $name' for a new password."
             pw="${pw:-$(rand 20)}"
             local_sql "CREATE ROLE $name LOGIN PASSWORD '$(sql_quote "$pw")'" >/dev/null
@@ -479,8 +715,9 @@ cmd_user() {
                 local_sql "GRANT $RO_GROUP TO $name" >/dev/null
             else
                 local_sql "GRANT $APP_USER TO $name; ALTER ROLE $name IN DATABASE $DB_NAME SET role = '$APP_USER'" >/dev/null
+                [[ "$admin" == yes ]] && local_sql "GRANT $ADM_GROUP TO $name" >/dev/null
             fi
-            say "Added $name ($( [[ $ro == yes ]] && echo read-only || echo can edit ))."
+            say "Added $name ($( [[ $ro == yes ]] && echo read-only || { [[ $admin == yes ]] && echo admin; } || echo can edit ))."
             echo
             echo "  $name's connection string for RemoteMan (the password is shown only now):"
             echo
@@ -496,6 +733,7 @@ cmd_user() {
             db_sql "SELECT r.rolname,
                        CASE WHEN NOT r.rolcanlogin THEN 'disabled'
                             WHEN r.rolname = '$APP_USER' THEN 'shared'
+                            WHEN pg_has_role(r.oid, '$ADM_GROUP', 'MEMBER') THEN 'admin'
                             WHEN pg_has_role(r.oid, '$APP_USER', 'MEMBER') THEN 'edit'
                             ELSE 'read-only' END,
                        (SELECT count(*) FROM pg_stat_activity a WHERE a.usename = r.rolname AND a.datname = '$DB_NAME'),
@@ -503,7 +741,7 @@ cmd_user() {
                 FROM pg_roles r
                 WHERE NOT r.rolsuper AND (r.rolname = '$APP_USER' OR pg_has_role(r.oid, '$APP_USER', 'MEMBER') OR pg_has_role(r.oid, '$RO_GROUP', 'MEMBER'))
                 ORDER BY r.rolname <> '$APP_USER', r.rolname" \
-                | awk -F'|' '$1 != "'"$RO_GROUP"'" { printf "%-24s %-10s %-10s %s\n", $1, $2, ($3 > 0 ? "yes (" $3 ")" : "no"), $4 }'
+                | awk -F'|' '$1 != "'"$RO_GROUP"'" && $1 != "'"$ADM_GROUP"'" { printf "%-24s %-10s %-10s %s\n", $1, $2, ($3 > 0 ? "yes (" $3 ")" : "no"), $4 }'
             if in_recovery; then echo "(This is the standby: the list is the same as on the primary.)"; fi
             ;;
         passwd)
@@ -512,7 +750,7 @@ cmd_user() {
             [[ -n "$name" ]] || die "Use: remoteman-db user passwd <name> [--password <pw>]"
             valid_name "$name"; need_primary
             role_exists "$name" || die "There's no login called $name."
-            [[ "$name" == "$REPL_USER" || "$name" == "$RO_GROUP" ]] && die "'$name' isn't a person's login."
+            [[ "$name" == "$REPL_USER" || "$name" == "$RO_GROUP" || "$name" == "$ADM_GROUP" ]] && die "'$name' isn't a person's login."
             pw="${pw:-$(rand 20)}"
             local_sql "ALTER ROLE $name LOGIN PASSWORD '$(sql_quote "$pw")'" >/dev/null
             say "New password for $name. Their connection string (shown only now):"
@@ -525,7 +763,7 @@ cmd_user() {
             [[ -n "$name" ]] || die "Use: remoteman-db user remove <name>"
             valid_name "$name"; need_primary
             role_exists "$name" || die "There's no login called $name."
-            [[ "$name" == "$REPL_USER" || "$name" == "$RO_GROUP" || "$name" == postgres ]] && die "'$name' can't be removed."
+            [[ "$name" == "$REPL_USER" || "$name" == "$RO_GROUP" || "$name" == "$ADM_GROUP" || "$name" == postgres ]] && die "'$name' can't be removed."
             if [[ "$name" == "$APP_USER" ]]; then
                 # It owns the data, so it stays; it just can't be logged in with any more.
                 local_sql "ALTER ROLE $APP_USER NOLOGIN" >/dev/null

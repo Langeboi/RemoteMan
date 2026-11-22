@@ -14,7 +14,7 @@ public partial class DataSourceWindow : Window
     private static readonly Dictionary<DataSourceKind, string> Hints = new()
     {
         [DataSourceKind.Sqlite] = "Local file, one path per line. Default and fastest for a single user.",
-        [DataSourceKind.PostgreSql] = "Recommended for teams: changes reach other users instantly (LISTEN/NOTIFY). A primary and standby pair: one line per server, or Host=pg1,pg2 (RemoteMan always uses whichever is primary). deploy/postgres sets up such a pair on Debian.\nHost=pg1;Database=remoteman;Username=remoteman;Password=…",
+        [DataSourceKind.PostgreSql] = "Recommended for teams: changes reach other users instantly (LISTEN/NOTIFY). A primary and standby pair: one line per server, or Host=pg1,pg2 (RemoteMan always uses whichever is primary). deploy/postgres sets up such a pair on Debian; admins then manage the team's logins on the Users tab.\nHost=pg1;Database=remoteman;Username=remoteman;Password=…",
         [DataSourceKind.SqlServer] = "Changes show within about half a second. Use an Always On listener with MultiSubnetFailover=True, or list a second server.\nServer=sql1;Database=RemoteMan;Integrated Security=True;TrustServerCertificate=True",
         [DataSourceKind.MySql] = "MySQL or MariaDB. Changes show within about half a second.\nServer=db1;Database=remoteman;User ID=remoteman;Password=…",
     };
@@ -38,6 +38,7 @@ public partial class DataSourceWindow : Window
         ConnBox.Text = string.Join(Environment.NewLine, _current.ConnectionStrings);
         VaultBox.Password = Secrets.LoadVaultPassphrase(_current.Name) ?? "";
         SsoBox.IsChecked = _current.UseWindowsLogin;
+        if (UsersTab.IsChecked == true) _ = LoadUsersAsync();
     }
 
     private void OnKindChanged(object sender, SelectionChangedEventArgs e)
