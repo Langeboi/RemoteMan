@@ -95,7 +95,8 @@ public partial class RdpSessionView : UserControl
 
     // ---- Connecting animation ----
 
-    private System.Windows.Media.Animation.Storyboard? _pulse;
+    private bool _spinning;
+    private TimeSpan? _spinStart;
     private System.Windows.Threading.DispatcherTimer? _revealTimer;
 
     /// <summary>Hides the RDP control behind the animation until the desktop is ready to show.</summary>
@@ -114,8 +115,8 @@ public partial class RdpSessionView : UserControl
         // Hidden, not collapsed: the control keeps its size, so the session opens at the right resolution.
         Host.Visibility = Visibility.Hidden;
         Connecting.Visibility = Visibility.Visible;
-        _pulse = (System.Windows.Media.Animation.Storyboard)Connecting.Resources["Spin"];
-        _pulse.Begin(Connecting, isControllable: true);
+        _spinStart = null;
+        if (!_spinning) { _spinning = true; System.Windows.Media.CompositionTarget.Rendering += OnSpinFrame; }
     }
 
     /// <summary>
@@ -147,9 +148,37 @@ public partial class RdpSessionView : UserControl
     {
         _revealTimer?.Stop();
         _revealTimer = null;
-        try { _pulse?.Stop(Connecting); } catch (InvalidOperationException) { }
-        _pulse = null;
+        if (_spinning) { _spinning = false; System.Windows.Media.CompositionTarget.Rendering -= OnSpinFrame; }
         Connecting.Visibility = Visibility.Collapsed;
+    }
+
+    // Ring geometry: radius 18 around (20,20). One turn every 2.2 s; the arc grows from a dot to about
+    // 220 degrees and back every 2.6 s, its head running ahead while it shrinks (like the Windows 11 ring).
+    private const double SpinRadius = 18, SpinTurn = 2.2, SpinBreath = 2.6;
+
+    private void OnSpinFrame(object? sender, EventArgs e)
+    {
+        if (!Connecting.IsVisible || e is not System.Windows.Media.RenderingEventArgs r) return;
+        _spinStart ??= r.RenderingTime;
+        var t = (r.RenderingTime - _spinStart.Value).TotalSeconds;
+
+        static double Ease(double x) => x * x * (3 - 2 * x);
+        var p = t % SpinBreath / SpinBreath;
+        double length, offset; // degrees
+        if (p < 0.5) { var u = Ease(p * 2); length = 3 + 220 * u; offset = 64 * u; }
+        else { var u = Ease((p - 0.5) * 2); length = 223 - 220 * u; offset = 64 + 293 * u; }
+        var start = (t % SpinTurn / SpinTurn * 360 + offset - 90) * Math.PI / 180;
+        var end = start + length * Math.PI / 180;
+
+        var g = new System.Windows.Media.StreamGeometry();
+        using (var ctx = g.Open())
+        {
+            ctx.BeginFigure(new Point(20 + SpinRadius * Math.Cos(start), 20 + SpinRadius * Math.Sin(start)), false, false);
+            ctx.ArcTo(new Point(20 + SpinRadius * Math.Cos(end), 20 + SpinRadius * Math.Sin(end)), new Size(SpinRadius, SpinRadius), 0,
+                length > 180, System.Windows.Media.SweepDirection.Clockwise, true, false);
+        }
+        g.Freeze();
+        Arc.Data = g;
     }
 
     private void OnCancelConnect(object sender, RoutedEventArgs e)

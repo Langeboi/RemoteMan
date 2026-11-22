@@ -13,100 +13,14 @@
 
         <!-- Shown while the session connects. The RDP control is hidden meanwhile (WPF can't draw over it),
              then revealed once the remote desktop is ready to show. -->
-        <!-- Shown while the session connects: orbiting dots (a take on the Windows loader) and the address.
+        <!-- Shown while the session connects: a spinning ring and the address.
              The RDP control is hidden meanwhile (WPF can't draw over it), then revealed once the desktop is ready. -->
         <Grid x:Name="Connecting" Background="{StaticResource Work}" Visibility="Collapsed">
-            <Grid.Resources>
-                <Storyboard x:Key="Spin" RepeatBehavior="Forever" Duration="0:0:4.4">
-                    <DoubleAnimationUsingKeyFrames Storyboard.TargetName="R0" Storyboard.TargetProperty="Angle" BeginTime="0:0:0.00">
-                        <DiscreteDoubleKeyFrame KeyTime="0:0:0" Value="0" />
-                        <SplineDoubleKeyFrame KeyTime="0:0:0.80" Value="180" KeySpline="0.45,0.05 0.55,0.95" />
-                        <SplineDoubleKeyFrame KeyTime="0:0:1.60" Value="360" KeySpline="0.45,0.05 0.55,0.95" />
-                        <SplineDoubleKeyFrame KeyTime="0:0:2.40" Value="540" KeySpline="0.45,0.05 0.55,0.95" />
-                        <SplineDoubleKeyFrame KeyTime="0:0:3.20" Value="720" KeySpline="0.45,0.05 0.55,0.95" />
-                    </DoubleAnimationUsingKeyFrames>
-                    <DoubleAnimationUsingKeyFrames Storyboard.TargetName="P0" Storyboard.TargetProperty="Opacity" BeginTime="0:0:0.00">
-                        <DiscreteDoubleKeyFrame KeyTime="0:0:0" Value="1" />
-                        <DiscreteDoubleKeyFrame KeyTime="0:0:3.00" Value="1" />
-                        <LinearDoubleKeyFrame KeyTime="0:0:3.30" Value="0" />
-                    </DoubleAnimationUsingKeyFrames>
-                    <DoubleAnimationUsingKeyFrames Storyboard.TargetName="R1" Storyboard.TargetProperty="Angle" BeginTime="0:0:0.16">
-                        <DiscreteDoubleKeyFrame KeyTime="0:0:0" Value="0" />
-                        <SplineDoubleKeyFrame KeyTime="0:0:0.80" Value="180" KeySpline="0.45,0.05 0.55,0.95" />
-                        <SplineDoubleKeyFrame KeyTime="0:0:1.60" Value="360" KeySpline="0.45,0.05 0.55,0.95" />
-                        <SplineDoubleKeyFrame KeyTime="0:0:2.40" Value="540" KeySpline="0.45,0.05 0.55,0.95" />
-                        <SplineDoubleKeyFrame KeyTime="0:0:3.20" Value="720" KeySpline="0.45,0.05 0.55,0.95" />
-                    </DoubleAnimationUsingKeyFrames>
-                    <DoubleAnimationUsingKeyFrames Storyboard.TargetName="P1" Storyboard.TargetProperty="Opacity" BeginTime="0:0:0.16">
-                        <DiscreteDoubleKeyFrame KeyTime="0:0:0" Value="1" />
-                        <DiscreteDoubleKeyFrame KeyTime="0:0:3.00" Value="1" />
-                        <LinearDoubleKeyFrame KeyTime="0:0:3.30" Value="0" />
-                    </DoubleAnimationUsingKeyFrames>
-                    <DoubleAnimationUsingKeyFrames Storyboard.TargetName="R2" Storyboard.TargetProperty="Angle" BeginTime="0:0:0.32">
-                        <DiscreteDoubleKeyFrame KeyTime="0:0:0" Value="0" />
-                        <SplineDoubleKeyFrame KeyTime="0:0:0.80" Value="180" KeySpline="0.45,0.05 0.55,0.95" />
-                        <SplineDoubleKeyFrame KeyTime="0:0:1.60" Value="360" KeySpline="0.45,0.05 0.55,0.95" />
-                        <SplineDoubleKeyFrame KeyTime="0:0:2.40" Value="540" KeySpline="0.45,0.05 0.55,0.95" />
-                        <SplineDoubleKeyFrame KeyTime="0:0:3.20" Value="720" KeySpline="0.45,0.05 0.55,0.95" />
-                    </DoubleAnimationUsingKeyFrames>
-                    <DoubleAnimationUsingKeyFrames Storyboard.TargetName="P2" Storyboard.TargetProperty="Opacity" BeginTime="0:0:0.32">
-                        <DiscreteDoubleKeyFrame KeyTime="0:0:0" Value="1" />
-                        <DiscreteDoubleKeyFrame KeyTime="0:0:3.00" Value="1" />
-                        <LinearDoubleKeyFrame KeyTime="0:0:3.30" Value="0" />
-                    </DoubleAnimationUsingKeyFrames>
-                    <DoubleAnimationUsingKeyFrames Storyboard.TargetName="R3" Storyboard.TargetProperty="Angle" BeginTime="0:0:0.48">
-                        <DiscreteDoubleKeyFrame KeyTime="0:0:0" Value="0" />
-                        <SplineDoubleKeyFrame KeyTime="0:0:0.80" Value="180" KeySpline="0.45,0.05 0.55,0.95" />
-                        <SplineDoubleKeyFrame KeyTime="0:0:1.60" Value="360" KeySpline="0.45,0.05 0.55,0.95" />
-                        <SplineDoubleKeyFrame KeyTime="0:0:2.40" Value="540" KeySpline="0.45,0.05 0.55,0.95" />
-                        <SplineDoubleKeyFrame KeyTime="0:0:3.20" Value="720" KeySpline="0.45,0.05 0.55,0.95" />
-                    </DoubleAnimationUsingKeyFrames>
-                    <DoubleAnimationUsingKeyFrames Storyboard.TargetName="P3" Storyboard.TargetProperty="Opacity" BeginTime="0:0:0.48">
-                        <DiscreteDoubleKeyFrame KeyTime="0:0:0" Value="1" />
-                        <DiscreteDoubleKeyFrame KeyTime="0:0:3.00" Value="1" />
-                        <LinearDoubleKeyFrame KeyTime="0:0:3.30" Value="0" />
-                    </DoubleAnimationUsingKeyFrames>
-                    <DoubleAnimationUsingKeyFrames Storyboard.TargetName="R4" Storyboard.TargetProperty="Angle" BeginTime="0:0:0.64">
-                        <DiscreteDoubleKeyFrame KeyTime="0:0:0" Value="0" />
-                        <SplineDoubleKeyFrame KeyTime="0:0:0.80" Value="180" KeySpline="0.45,0.05 0.55,0.95" />
-                        <SplineDoubleKeyFrame KeyTime="0:0:1.60" Value="360" KeySpline="0.45,0.05 0.55,0.95" />
-                        <SplineDoubleKeyFrame KeyTime="0:0:2.40" Value="540" KeySpline="0.45,0.05 0.55,0.95" />
-                        <SplineDoubleKeyFrame KeyTime="0:0:3.20" Value="720" KeySpline="0.45,0.05 0.55,0.95" />
-                    </DoubleAnimationUsingKeyFrames>
-                    <DoubleAnimationUsingKeyFrames Storyboard.TargetName="P4" Storyboard.TargetProperty="Opacity" BeginTime="0:0:0.64">
-                        <DiscreteDoubleKeyFrame KeyTime="0:0:0" Value="1" />
-                        <DiscreteDoubleKeyFrame KeyTime="0:0:3.00" Value="1" />
-                        <LinearDoubleKeyFrame KeyTime="0:0:3.30" Value="0" />
-                    </DoubleAnimationUsingKeyFrames>
-                    </Storyboard>
-                <Style TargetType="Ellipse" x:Key="Dot">
-                    <Setter Property="Width" Value="5" /><Setter Property="Height" Value="5" />
-                    <Setter Property="Fill" Value="{StaticResource Accent}" />
-                    <Setter Property="HorizontalAlignment" Value="Center" /><Setter Property="VerticalAlignment" Value="Top" />
-                </Style>
-            </Grid.Resources>
             <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" MaxWidth="420" Margin="24">
+                <!-- Windows 11 style ring: a faint track and an arc that grows and shrinks as it turns (drawn in code). -->
                 <Grid Width="40" Height="40" HorizontalAlignment="Center" Margin="0,0,0,26">
-                    <Grid x:Name="P0" Opacity="0" RenderTransformOrigin="0.5,0.5">
-                        <Grid.RenderTransform><RotateTransform x:Name="R0" /></Grid.RenderTransform>
-                        <Ellipse Style="{StaticResource Dot}" />
-                    </Grid>
-                    <Grid x:Name="P1" Opacity="0" RenderTransformOrigin="0.5,0.5">
-                        <Grid.RenderTransform><RotateTransform x:Name="R1" /></Grid.RenderTransform>
-                        <Ellipse Style="{StaticResource Dot}" />
-                    </Grid>
-                    <Grid x:Name="P2" Opacity="0" RenderTransformOrigin="0.5,0.5">
-                        <Grid.RenderTransform><RotateTransform x:Name="R2" /></Grid.RenderTransform>
-                        <Ellipse Style="{StaticResource Dot}" />
-                    </Grid>
-                    <Grid x:Name="P3" Opacity="0" RenderTransformOrigin="0.5,0.5">
-                        <Grid.RenderTransform><RotateTransform x:Name="R3" /></Grid.RenderTransform>
-                        <Ellipse Style="{StaticResource Dot}" />
-                    </Grid>
-                    <Grid x:Name="P4" Opacity="0" RenderTransformOrigin="0.5,0.5">
-                        <Grid.RenderTransform><RotateTransform x:Name="R4" /></Grid.RenderTransform>
-                        <Ellipse Style="{StaticResource Dot}" />
-                    </Grid>
+                    <Ellipse Width="39" Height="39" Stroke="{StaticResource Border}" StrokeThickness="3" />
+                    <Path x:Name="Arc" Stroke="{StaticResource Accent}" StrokeThickness="3" StrokeStartLineCap="Round" StrokeEndLineCap="Round" />
                 </Grid>
                 <TextBlock x:Name="ConnHost" Foreground="{StaticResource TextStrong}" FontFamily="{StaticResource MonoFont}" FontSize="15"
                            HorizontalAlignment="Center" TextTrimming="CharacterEllipsis" />
