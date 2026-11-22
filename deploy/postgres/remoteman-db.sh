@@ -13,8 +13,7 @@
 #   remoteman-db promote     make this standby the primary (manual failover)
 #   remoteman-db rejoin      turn this server back into a standby of the other one
 #   remoteman-db conn        the connection string to paste into RemoteMan
-#   remoteman-db user ...    personal logins: add, list, passwd, remove (run on the primary)
-#                            (admins can also do this from RemoteMan: Data sources > Users)
+#   remoteman-db user ...    personal logins: add, list, passwd, remove (or RemoteMan: Data sources > Users)
 #
 # RemoteMan gets one connection string with both hosts and "Target Session Attributes=primary",
 # so it always talks to whichever server is the primary at the moment.
