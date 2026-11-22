@@ -11,6 +11,71 @@
         <TextBlock x:Name="State" Foreground="{StaticResource Muted}" HorizontalAlignment="Center" VerticalAlignment="Center" />
         <wfi:WindowsFormsHost x:Name="Host" />
 
+        <!-- Shown while the session connects. The RDP control is hidden meanwhile (WPF can't draw over it),
+             then revealed once the remote desktop is ready to show. -->
+        <Grid x:Name="Connecting" Background="{StaticResource Work}" Visibility="Collapsed">
+            <Grid.Resources>
+                <Storyboard x:Key="Pulse" RepeatBehavior="Forever">
+                    <DoubleAnimationUsingKeyFrames Storyboard.TargetName="D0" Storyboard.TargetProperty="Opacity" BeginTime="0:0:0.00" Duration="0:0:1.4">
+                        <LinearDoubleKeyFrame KeyTime="0:0:0" Value="0.18" /><LinearDoubleKeyFrame KeyTime="0:0:0.25" Value="1" /><LinearDoubleKeyFrame KeyTime="0:0:0.7" Value="0.18" />
+                    </DoubleAnimationUsingKeyFrames>
+                    <DoubleAnimationUsingKeyFrames Storyboard.TargetName="D1" Storyboard.TargetProperty="Opacity" BeginTime="0:0:0.12" Duration="0:0:1.28">
+                        <LinearDoubleKeyFrame KeyTime="0:0:0" Value="0.18" /><LinearDoubleKeyFrame KeyTime="0:0:0.25" Value="1" /><LinearDoubleKeyFrame KeyTime="0:0:0.7" Value="0.18" />
+                    </DoubleAnimationUsingKeyFrames>
+                    <DoubleAnimationUsingKeyFrames Storyboard.TargetName="D2" Storyboard.TargetProperty="Opacity" BeginTime="0:0:0.24" Duration="0:0:1.16">
+                        <LinearDoubleKeyFrame KeyTime="0:0:0" Value="0.18" /><LinearDoubleKeyFrame KeyTime="0:0:0.25" Value="1" /><LinearDoubleKeyFrame KeyTime="0:0:0.7" Value="0.18" />
+                    </DoubleAnimationUsingKeyFrames>
+                    <DoubleAnimationUsingKeyFrames Storyboard.TargetName="D3" Storyboard.TargetProperty="Opacity" BeginTime="0:0:0.36" Duration="0:0:1.04">
+                        <LinearDoubleKeyFrame KeyTime="0:0:0" Value="0.18" /><LinearDoubleKeyFrame KeyTime="0:0:0.25" Value="1" /><LinearDoubleKeyFrame KeyTime="0:0:0.7" Value="0.18" />
+                    </DoubleAnimationUsingKeyFrames>
+                    <DoubleAnimationUsingKeyFrames Storyboard.TargetName="D4" Storyboard.TargetProperty="Opacity" BeginTime="0:0:0.48" Duration="0:0:0.92">
+                        <LinearDoubleKeyFrame KeyTime="0:0:0" Value="0.18" /><LinearDoubleKeyFrame KeyTime="0:0:0.25" Value="1" /><LinearDoubleKeyFrame KeyTime="0:0:0.7" Value="0.18" />
+                    </DoubleAnimationUsingKeyFrames>
+                    <DoubleAnimationUsingKeyFrames Storyboard.TargetName="Remote" Storyboard.TargetProperty="Opacity" BeginTime="0:0:0.6" Duration="0:0:0.8">
+                        <LinearDoubleKeyFrame KeyTime="0:0:0" Value="0.55" /><LinearDoubleKeyFrame KeyTime="0:0:0.2" Value="1" /><LinearDoubleKeyFrame KeyTime="0:0:0.8" Value="0.55" />
+                    </DoubleAnimationUsingKeyFrames>
+                </Storyboard>
+                <Style TargetType="Ellipse" x:Key="Dot">
+                    <Setter Property="Width" Value="6" /><Setter Property="Height" Value="6" />
+                    <Setter Property="Fill" Value="{StaticResource Accent}" /><Setter Property="Opacity" Value="0.18" />
+                    <Setter Property="Margin" Value="5,0" /><Setter Property="VerticalAlignment" Value="Center" />
+                </Style>
+            </Grid.Resources>
+            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" MaxWidth="440" Margin="24">
+                <!-- This computer, five travelling dots, the remote screen -->
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,0,0,22">
+                    <StackPanel VerticalAlignment="Center">
+                        <Border Width="30" Height="20" CornerRadius="3" BorderBrush="{StaticResource Faint}" BorderThickness="1.5" />
+                        <Border Width="38" Height="2" CornerRadius="1" Background="{StaticResource Faint}" Margin="0,2,0,0" />
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" Margin="10,0">
+                        <Ellipse x:Name="D0" Style="{StaticResource Dot}" />
+                        <Ellipse x:Name="D1" Style="{StaticResource Dot}" />
+                        <Ellipse x:Name="D2" Style="{StaticResource Dot}" />
+                        <Ellipse x:Name="D3" Style="{StaticResource Dot}" />
+                        <Ellipse x:Name="D4" Style="{StaticResource Dot}" />
+                    </StackPanel>
+                    <StackPanel x:Name="Remote" VerticalAlignment="Center" Opacity="0.55">
+                        <Border Width="44" Height="30" CornerRadius="3" BorderBrush="{StaticResource Accent}" BorderThickness="1.5" />
+                        <Border Width="2" Height="5" Background="{StaticResource Accent}" />
+                        <Border Width="18" Height="2" CornerRadius="1" Background="{StaticResource Accent}" />
+                    </StackPanel>
+                </StackPanel>
+                <TextBlock x:Name="ConnName" Foreground="{StaticResource TextStrong}" FontSize="16" FontWeight="SemiBold"
+                           HorizontalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                <TextBlock x:Name="ConnHost" Foreground="{StaticResource Faint}" FontFamily="{StaticResource MonoFont}" FontSize="12"
+                           HorizontalAlignment="Center" Margin="0,4,0,0" TextTrimming="CharacterEllipsis" />
+                <TextBlock x:Name="ConnStage" Style="{StaticResource MutedText}" HorizontalAlignment="Center" Margin="0,14,0,0"
+                           TextWrapping="Wrap" TextAlignment="Center" />
+                <Border x:Name="ConnFallback" Visibility="Collapsed" HorizontalAlignment="Center" Margin="0,10,0,0" Padding="8,3"
+                        CornerRadius="{StaticResource Radius}" BorderBrush="{StaticResource Warn}" BorderThickness="1">
+                    <TextBlock x:Name="ConnFallbackText" Foreground="{StaticResource Warn}" FontSize="11" TextWrapping="Wrap" TextAlignment="Center" />
+                </Border>
+                <Button Style="{StaticResource FlatButton}" Content="Cancel" HorizontalAlignment="Center" Margin="0,18,0,0" Padding="14,4"
+                        Click="OnCancelConnect" AutomationProperties.Name="Cancel connecting" />
+            </StackPanel>
+        </Grid>
+
         <!-- Side strip: drop files here (or click) to send them to the remote session -->
         <Border x:Name="Strip" Grid.Column="1" Background="{StaticResource Panel}" BorderBrush="{StaticResource Border}" BorderThickness="1,0,0,0"
                 AllowDrop="True" Drop="OnDrop" DragOver="OnDragOver" DragLeave="OnDragLeave">

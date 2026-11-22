@@ -36,11 +36,16 @@ public partial class RdpSessionView : UserControl
         _rdp.Width = (int)((ActualWidth - 22) * dpi);
         _rdp.Height = (int)(ActualHeight * dpi);
 
-        _rdp.Connected += () => vm.StatusText = $"RDP {vm.Via ?? vm.Endpoint.ToString()}{(vm.UsedFallback ? " (fallback)" : "")}";
-        _rdp.LoginComplete += () => { if (_rdp is { } r) vm.StatusText = $"RDP {vm.Via ?? vm.Endpoint.ToString()}  {r.Width}x{r.Height}"; };
+        _rdp.Connected += () =>
+        {
+            OnTransportUp(vm);
+            vm.StatusText = $"RDP {vm.Via ?? vm.Endpoint.ToString()}{(vm.UsedFallback ? " (fallback)" : "")}";
+        };
+        _rdp.LoginComplete += () => { Reveal(); if (_rdp is { } r) vm.StatusText = $"RDP {vm.Via ?? vm.Endpoint.ToString()}  {r.Width}x{r.Height}"; };
         _rdp.Disconnected += reason =>
         {
             if (_rdp is null) return; // tab is closing
+            StopConnecting();
             vm.ReportProblem(RemoteMan.Core.Networking.ConnectionProblem.FromRdpDisconnect(reason, _rdp.DescribeDisconnect(reason)));
             vm.StatusText = $"RDP disconnected (code {reason})";
             Host.Visibility = Visibility.Collapsed;
@@ -50,6 +55,7 @@ public partial class RdpSessionView : UserControl
         {
             // Closing the tab: each step on its own, so one failing teardown can't take the app down.
             var rdp = _rdp; _rdp = null;
+            StopConnecting();
             try { _copy?.Dispose(); } catch (Exception) { }
             _copy = null;
             try { rdp?.Dispose(); } catch (Exception) { }
@@ -68,6 +74,8 @@ public partial class RdpSessionView : UserControl
             if (!vm.IsActive) Notice.IsOpen = false;
         };
 
+        if (!vm.FullScreen) StartConnecting(vm);
+
         try
         {
             vm.StatusText = $"RDP connecting to {vm.Via ?? vm.Endpoint.ToString()}…";
@@ -78,10 +86,76 @@ public partial class RdpSessionView : UserControl
         }
         catch (Exception ex)
         {
+            StopConnecting();
             Host.Visibility = Visibility.Collapsed;
             State.Text = $"Could not start RDP: {ex.Message}";
             vm.ReportProblem(RemoteMan.Core.Networking.ConnectionProblem.FromException(ex, RemoteMan.Core.Model.EntryKind.Rdp));
         }
+    }
+
+    // ---- Connecting animation ----
+
+    private System.Windows.Media.Animation.Storyboard? _pulse;
+    private System.Windows.Threading.DispatcherTimer? _revealTimer;
+
+    /// <summary>Hides the RDP control behind the animation until the desktop is ready to show.</summary>
+    private void StartConnecting(RdpSessionViewModel vm)
+    {
+        ConnName.Text = vm.Entry.Name;
+        ConnHost.Text = vm.Via ?? vm.Endpoint.ToString();
+        ConnStage.Text = vm.Settings.UseRdGateway && !string.IsNullOrEmpty(vm.Settings.GatewayHost)
+            ? $"Connecting through gateway {vm.Settings.GatewayHost}…"
+            : "Connecting…";
+        if (vm.UsedFallback && vm.Entry.Endpoints.Count > 0)
+        {
+            ConnFallbackText.Text = $"{vm.Entry.Endpoints[0]} didn't answer, using fallback {vm.Endpoint}";
+            ConnFallback.Visibility = Visibility.Visible;
+        }
+        // Hidden, not collapsed: the control keeps its size, so the session opens at the right resolution.
+        Host.Visibility = Visibility.Hidden;
+        Connecting.Visibility = Visibility.Visible;
+        _pulse = (System.Windows.Media.Animation.Storyboard)Connecting.Resources["Pulse"];
+        _pulse.Begin(Connecting, isControllable: true);
+    }
+
+    /// <summary>
+    /// The transport is up and the server is signing in. With a stored password the desktop follows
+    /// (LoginComplete reveals it); without one the remote sign-in screen needs the user, so show it now.
+    /// The timer is a safety net for servers that show a banner or notice before the desktop.
+    /// </summary>
+    private void OnTransportUp(RdpSessionViewModel vm)
+    {
+        if (Connecting.Visibility != Visibility.Visible) return;
+        var c = vm.Credential;
+        if (string.IsNullOrEmpty(c.Password) && !c.UseWindowsLogin) { Reveal(); return; }
+        var who = string.IsNullOrEmpty(c.UserName) ? "" : string.IsNullOrEmpty(c.Domain) ? $" as {c.UserName}" : $" as {c.Domain}\\{c.UserName}";
+        ConnStage.Text = $"Signing in{who}…";
+        _revealTimer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromSeconds(8) };
+        _revealTimer.Tick += (_, _) => Reveal();
+        _revealTimer.Start();
+    }
+
+    private void Reveal()
+    {
+        if (Connecting.Visibility != Visibility.Visible) return;
+        StopConnecting();
+        Host.Visibility = Visibility.Visible;
+        if (_vm?.IsActive == true) _rdp?.Focus();
+    }
+
+    private void StopConnecting()
+    {
+        _revealTimer?.Stop();
+        _revealTimer = null;
+        try { _pulse?.Stop(Connecting); } catch (InvalidOperationException) { }
+        _pulse = null;
+        Connecting.Visibility = Visibility.Collapsed;
+    }
+
+    private void OnCancelConnect(object sender, RoutedEventArgs e)
+    {
+        StopConnecting();
+        _vm?.RequestClose();
     }
 
     private void OnDragOver(object sender, DragEventArgs e)
