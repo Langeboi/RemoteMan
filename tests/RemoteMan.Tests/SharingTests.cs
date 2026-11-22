@@ -191,6 +191,26 @@ public class SharingTests
         Assert.Equal("hello", guest.Welcome.History);
     }
 
+    /// <summary>Same as above against deploy/relay/remoteman-relay.py, when one is running (REMOTEMAN_TEST_RELAY=host:port).</summary>
+    [Fact]
+    public async Task Python_relay_works_like_the_built_in_one()
+    {
+        if (Environment.GetEnvironmentVariable("REMOTEMAN_TEST_RELAY") is not { Length: > 0 } relay) return;
+        await using var host = new ShareHost(ShareKind.Terminal, "pve01", "lange", "PC1");
+        await host.StartAsync([relay], preferredPort: 0);
+        await Until(() => host.RelayConnected);
+        host.Invite("mads");
+        host.SendOutput("via python");
+        var invite = InviteFor(host, "mads", addresses: ["127.0.0.1:1"], relay: host.Relay);
+        await using var guest = await ShareClient.ConnectAsync(invite, "mads", "PC2", false, []);
+        Assert.Equal("relay", guest.Via);
+        Assert.Equal("via python", guest.Welcome.History);
+        var seen = "";
+        guest.Output += s => seen += s;
+        host.SendOutput("!");
+        await Until(() => seen == "!");
+    }
+
     [Fact]
     public async Task Rdp_tunnel_carries_bytes_both_ways()
     {

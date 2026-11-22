@@ -26,6 +26,11 @@ public partial class MainWindow : Window
             Confirm = (title, text, action) => Views.ChoiceDialog.Confirm(this, title, text, action, danger: true),
         };
         _vm.OpenWindow = session => new Views.SessionWindow(session, this).Show();
+        _vm.PickInvitees = (online, entryName, chat) =>
+        {
+            var w = new Views.ShareInviteWindow(this, online, entryName, chat);
+            return w.ShowDialog() == true ? w.Choice : null;
+        };
         _vm.TemplatesDialog = () => new TemplatesWindow(_vm) { Owner = this }.ShowDialog();
         _vm.SaveAsTemplateDialog = entry => new TemplatesWindow(_vm, RemoteMan.Core.Model.EntryTemplates.FromEntry(entry, entry.Name + " template")) { Owner = this }.ShowDialog();
         _vm.EditDialog = (entry, store, protector) =>
@@ -413,6 +418,16 @@ public partial class MainWindow : Window
         if ((sender as FrameworkElement)?.DataContext is SessionViewModel s) _vm.MoveToOtherPaneCommand.Execute(s);
     }
 
+    private void OnShareTab(object sender, RoutedEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.DataContext is SessionViewModel s) _ = _vm.ShareSessionAsync(s);
+    }
+
+    private void OnStopShareTab(object sender, RoutedEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.DataContext is SessionViewModel s) _ = _vm.StopSharingAsync(s);
+    }
+
     private void OnCloseTab(object sender, RoutedEventArgs e)
     {
         if ((sender as FrameworkElement)?.DataContext is SessionViewModel s) _vm.CloseSessionCommand.Execute(s);
@@ -625,6 +640,11 @@ public partial class MainWindow : Window
         else if (e.Key == Key.Enter && _vm.Selected is { } n)
         {
             if (n.Entry.IsConnectable) _vm.ConnectCommand.Execute(n); else n.IsExpanded = !n.IsExpanded;
+            e.Handled = true;
+        }
+        else if (e.Key == Key.S && Keyboard.Modifiers == (ModifierKeys.Control | ModifierKeys.Shift) && _vm.Selected is { } sh && _vm.CanShareSessions)
+        {
+            _ = _vm.ShareEntryAsync(sh);
             e.Handled = true;
         }
         else if (e.Key == Key.C && Keyboard.Modifiers == ModifierKeys.Control && _vm.Selected is { } c && c.Id != MainViewModel.FavoritesId)

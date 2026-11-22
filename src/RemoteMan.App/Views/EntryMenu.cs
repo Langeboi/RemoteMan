@@ -45,6 +45,7 @@ public static class EntryMenu
         ["vnc"] = G("M1.5,8.5 V1.5 H9.5 V4 M4,4 H12.5 V11 H4 Z M6.5,12.5 H10"),
         ["key"] = G("M6,7 A2.5,2.5 0 1 1 1,7 A2.5,2.5 0 1 1 6,7 Z M6,7 H12.5 M10.5,7 V9.5 M12.5,7 V9"),
         ["folder"] = G("M1,4 H5 L6,5 H13 V12 H1 Z"),
+        ["share"] = G("M6,7 A2,2 0 1 1 2,7 A2,2 0 1 1 6,7 Z M12.5,3.5 A1.8,1.8 0 1 1 8.9,3.5 A1.8,1.8 0 1 1 12.5,3.5 Z M12.5,10.5 A1.8,1.8 0 1 1 8.9,10.5 A1.8,1.8 0 1 1 12.5,10.5 Z M5.8,6 L9,4.3 M5.8,8 L9,9.7"),
         ["chat"] = G("M1.5,2.5 H12.5 V9.5 H5.5 L3,12 V9.5 H1.5 Z"),
     };
 
@@ -87,6 +88,8 @@ public static class EntryMenu
                 with.Items.Add(Item("My Windows login", null, () => _ = vm.ConnectWithAsync(node, new(Login: LoginSource.WindowsLogin))));
             with.Items.Add(Item("No stored login (ask)", null, () => _ = vm.ConnectWithAsync(node, new(Login: LoginSource.None))));
             menu.Items.Add(with);
+            if (e.Kind is EntryKind.Rdp or EntryKind.Ssh or EntryKind.Telnet or EntryKind.Serial && vm.CanShareSessions)
+                menu.Items.Add(Item("Shared session…", "share", () => _ = vm.ShareEntryAsync(node), "Ctrl+Shift+S"));
             menu.Items.Add(new Separator());
         }
 

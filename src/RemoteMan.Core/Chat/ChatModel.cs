@@ -55,6 +55,8 @@ public sealed record ChatLink(string Kind, string Target, string Label)
 {
     public const string Entry = "e";
     public const string Backups = "b";
+    /// <summary>A shared-session invite; the target is the invite id.</summary>
+    public const string Invite = "invite";
 
     private static readonly Regex Token = new(@"\[\[([a-z]{1,12}):([^|\]\r\n]{1,200})\|([^\]\r\n]{0,200})\]\]", RegexOptions.Compiled);
 

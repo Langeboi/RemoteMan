@@ -32,6 +32,7 @@ public partial class RdpSessionView : UserControl
 
         _rdp = new RdpControl { Dock = System.Windows.Forms.DockStyle.Fill };
         Host.Child = _rdp;
+        vm.ControlHandle = () => _rdp is { IsHandleCreated: true } r && Host.Visibility == Visibility.Visible ? r.Handle : IntPtr.Zero;
         var dpi = System.Windows.Media.VisualTreeHelper.GetDpi(this).DpiScaleX;
         _rdp.Width = (int)((ActualWidth - 22) * dpi);
         _rdp.Height = (int)(ActualHeight * dpi);

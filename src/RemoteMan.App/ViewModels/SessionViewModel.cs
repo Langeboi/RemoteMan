@@ -57,6 +57,10 @@ public abstract partial class SessionViewModel : ObservableObject, IDisposable
     [ObservableProperty] private bool _isBroadcasting;
     /// <summary>Shown in the status bar while this tab is active.</summary>
     [ObservableProperty] private string _statusText = "";
+    /// <summary>Set while this session is shared with teammates (the amber bar above it).</summary>
+    [ObservableProperty] private ShareBarViewModel? _share;
+    /// <summary>Whether this kind of session can be shared (RDP and terminals).</summary>
+    public virtual bool CanShare => false;
 
     /// <summary>The connection failed or dropped for a reason worth explaining (shown as a notice).</summary>
     public event Action<RemoteMan.Core.Networking.ConnectionProblem>? Failed;
@@ -105,6 +109,22 @@ public sealed class SshSessionViewModel(Entry e, HostEndpoint ep, ResolvedCreden
 
     /// <summary>Types text into the shell (set by the view once connected). Nothing is sent with Enter.</summary>
     public Action<string>? SendToTerminal { get; set; }
+
+    public override bool CanShare => true;
+
+    // ---- shared session hooks (set up by MainViewModel.Sharing, fed by the view) ----
+
+    /// <summary>Everything the shell prints, as it arrives (for teammates watching).</summary>
+    public event Action<string>? OutputTapped;
+    internal void TapOutput(string s) => OutputTapped?.Invoke(s);
+
+    /// <summary>Someone else has control: what you type here goes nowhere.</summary>
+    public bool InputLocked { get; set; }
+
+    /// <summary>The terminal's size in characters; teammates' terminals follow it.</summary>
+    public (int Cols, int Rows) Size { get; private set; } = (80, 24);
+    public event Action<int, int>? SizeChanged;
+    internal void SetSize(int cols, int rows) { Size = (cols, rows); SizeChanged?.Invoke(cols, rows); }
 }
 
 public sealed class RdpSessionViewModel(Entry e, HostEndpoint ep, ResolvedCredential c, bool fb) : SessionViewModel(e, ep, c, fb)
@@ -114,6 +134,11 @@ public sealed class RdpSessionViewModel(Entry e, HostEndpoint ep, ResolvedCreden
     public ResolvedCredential? GatewayCredential { get; init; }
     /// <summary>"via bastion" when the connection goes through an SSH tunnel.</summary>
     public string? Via { get; init; }
+
+    public override bool CanShare => true;
+
+    /// <summary>The RDP control's window handle once the view made it (for sharing its rectangle).</summary>
+    internal Func<IntPtr>? ControlHandle { get; set; }
 }
 
 /// <summary>SFTP and FTP entries: a file browser tab.</summary>

@@ -89,6 +89,7 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
             await SeedSnippetsAsync(cfg.Name);
             _ = BackupLoopAsync();
             await StartChatAsync(store);
+            StartSharingWatch(store);
         }
         catch (Exception ex)
         {
