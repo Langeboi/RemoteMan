@@ -82,10 +82,20 @@ public partial class SshSessionView : UserControl
         core.WebMessageReceived += OnWebMessage;
         core.Navigate("https://remoteman-terminal.local/terminal.html");
         vm.Disposed += (_, _) => Close();
+        vm.FocusRequested += () => { if (_termReady && vm.TakeFocus()) FocusTerminal(); };
         HookBroadcast();
     }
 
     // ---------------- terminal ----------------
+
+    private bool _termReady;
+
+    /// <summary>Keyboard into the terminal: the WebView2 window first, then xterm inside it.</summary>
+    private void FocusTerminal()
+    {
+        Web.Focus();
+        Post(new { t = "focus" });
+    }
 
     private async void OnWebMessage(object? sender, CoreWebView2WebMessageReceivedEventArgs e)
     {
@@ -94,6 +104,8 @@ public partial class SshSessionView : UserControl
         switch (m.GetProperty("t").GetString())
         {
             case "ready":
+                _termReady = true;
+                if (_vm?.TakeFocus() == true) FocusTerminal();
                 Post(new { t = "config", copyOnSelect = _vm?.Settings.CopyOnSelect ?? true, backspaceCtrlH = _vm?.Settings.BackspaceCtrlH ?? false });
                 _cols = (uint)m.GetProperty("cols").GetInt32(); _rows = (uint)m.GetProperty("rows").GetInt32();
                 PostLook();

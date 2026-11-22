@@ -492,6 +492,7 @@ public partial class MainWindow : Window
     private async void OnTreeMouseDown(object sender, MouseButtonEventArgs e)
     {
         _dragStart = e.GetPosition(Tree);
+        _treeClickCount = e.ClickCount;
         _dragNode = FindItem(e.OriginalSource as DependencyObject)?.DataContext as EntryNode;
         if (_dragNode?.IsRoot == true) _dragNode = null;
         if (Keyboard.Modifiers != ModifierKeys.Control) return;
@@ -501,10 +502,14 @@ public partial class MainWindow : Window
         await _vm.TryCtrlClickLinkAsync(clicked);
     }
 
-    /// <summary>A plain click on an entry brings up its Overview tab (folders just open and close).</summary>
+    private int _treeClickCount;
+
+    /// <summary>A plain click on an entry brings up its Overview tab (folders just open and close).
+    /// The release of a double-click is skipped: the first click already showed the Overview, and doing it
+    /// again would pull the Overview in front of the session the double-click just opened.</summary>
     private void OnTreeMouseUp(object sender, MouseButtonEventArgs e)
     {
-        if (Keyboard.Modifiers != ModifierKeys.None) return;
+        if (Keyboard.Modifiers != ModifierKeys.None || _treeClickCount > 1) return;
         if (FindItem(e.OriginalSource as DependencyObject)?.DataContext is not EntryNode n || n != _vm.Selected) return;
         if (e.OriginalSource is DependencyObject d && FindAncestor<System.Windows.Controls.Primitives.ToggleButton>(d) is not null) return;
         _vm.ShowOverview();
