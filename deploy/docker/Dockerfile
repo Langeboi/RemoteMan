@@ -1,5 +1,5 @@
 # RemoteMan database server: PostgreSQL with streaming replication between servers, automatic failover,
-# the admin page (https, port 8443) and the shared-session relay (run with "relay").
+# the admin page (https, port 4433) and the shared-session relay (run with "relay").
 # Build from the repository root:  docker build -f deploy/docker/Dockerfile -t remoteman-server .
 ARG PG_MAJOR=17
 FROM postgres:${PG_MAJOR}-bookworm
@@ -31,7 +31,7 @@ LABEL org.opencontainers.image.title="RemoteMan server" \
 
 USER postgres
 VOLUME /var/lib/remoteman
-EXPOSE 5432 8443 47120
+EXPOSE 5432 4433 47120
 STOPSIGNAL SIGTERM
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15m CMD ["remoteman-server", "health"]
 ENTRYPOINT ["remoteman-server"]

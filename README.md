@@ -94,7 +94,7 @@ services:
   remoteman:
     image: ghcr.io/langeboi/remoteman-server:test     # :latest once there is a release
     container_name: remoteman
-    network_mode: host            # PostgreSQL on 5432, admin page on 8443
+    network_mode: host            # PostgreSQL on 5432, admin page on 4433
     restart: unless-stopped
     stop_grace_period: 60s
     environment:
@@ -116,7 +116,7 @@ volumes:
   remoteman-data:
 ```
 
-Then open `https://<server>:8443`, sign in as `remoteman` (the password is in `docker compose logs remoteman`)
+Then open `https://<server>:4433`, sign in as `remoteman` (the password is in `docker compose logs remoteman`)
 and add the second server under **Servers > Add server**: it gives you that server's `compose.yaml`,
 join key included. Until the first release only the `:test` image exists; switch both lines to `:latest` after it. More in [deploy/docker](deploy/docker/README.md);
 the script for servers without Docker is still in [deploy/postgres](deploy/postgres/README.md).

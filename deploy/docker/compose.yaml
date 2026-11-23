@@ -1,11 +1,11 @@
 # RemoteMan server: the first server (it becomes the primary).
 # Save as compose.yaml on the server and run:  docker compose up -d
-# Then open https://<this server>:8443 and add the next server under Servers > Add server.
+# Then open https://<this server>:4433 and add the next server under Servers > Add server.
 services:
   remoteman:
     image: ghcr.io/langeboi/remoteman-server:test     # :latest once there is a release
     container_name: remoteman
-    network_mode: host            # PostgreSQL on 5432, admin page on 8443
+    network_mode: host            # PostgreSQL on 5432, admin page on 4433
     restart: unless-stopped
     stop_grace_period: 60s
     environment:

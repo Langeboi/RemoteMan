@@ -2,7 +2,7 @@
 
 Every server runs the same container. One is the primary, the others are hot standbys streaming from it.
 Which servers exist, and the cluster settings, live in a small table in the database itself, so every
-standby has an up-to-date copy by replication. Servers watch each other through the admin API (port 8443).
+standby has an up-to-date copy by replication. Servers watch each other through the admin API (port 4433).
 """
 import concurrent.futures
 import glob
@@ -457,6 +457,33 @@ class Cluster:
         self.sync_role_settings()
         self.primary_gone_since = None
 
+    def _report_own_row(self, primary):
+        """A standby can't write the cluster table, so it asks the primary to fix its row when its address or
+        ports changed (for example a new ADMIN_PORT); otherwise the others keep calling the old port."""
+        me = next((s for s in self.servers if s["name"] == self.name), None)
+        if not me or (me["address"], me["pg_port"], me["admin_port"]) == (self.address, C.PG_PORT, C.ADMIN_PORT):
+            return
+        if time.time() - getattr(self, "_reported_at", 0) < 10:
+            return
+        self._reported_at = time.time()
+        try:
+            self.call(primary, "POST", "/internal/server-row",
+                      {"name": self.name, "address": self.address, "pg_port": C.PG_PORT, "admin_port": C.ADMIN_PORT})
+        except Exception as e:  # noqa: BLE001
+            log.warning("Telling %s about this server's new address or ports: %s", primary["name"], e)
+
+    def update_server_row(self, b):
+        """On the primary: a standby reports its own address and ports."""
+        if self._in_recovery():
+            raise RuntimeError("Only the primary updates the server list.")
+        name = str(b.get("name", ""))
+        if not any(s["name"] == name for s in self.servers):
+            raise RuntimeError(f"There's no server called {name}.")
+        C.q("UPDATE remoteman_cluster.servers SET address = %s, pg_port = %s, admin_port = %s WHERE name = %s",
+            (str(b.get("address", "")).strip(), int(b["pg_port"]), int(b["admin_port"]), name), db=C.DB_NAME)
+        self.refresh()
+        return {"ok": True}
+
     def standby_duties(self):
         primary = self.primary_peer()
         snap = self.sampler.snapshot if self.sampler else {}
@@ -470,6 +497,7 @@ class Cluster:
                 self.receiver_bad_since = time.time()
                 store.add_event("server", f"{self.name} now follows {primary['name']}")
                 return
+            self._report_own_row(primary)
             if snap.get("receiver") == "streaming":
                 self.receiver_bad_since = None
             else:

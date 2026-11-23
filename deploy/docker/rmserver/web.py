@@ -1,4 +1,4 @@
-"""The admin page and its API (HTTPS, port 8443), plus the internal API the servers use to talk to each other."""
+"""The admin page and its API (HTTPS, port 4433), plus the internal API the servers use to talk to each other."""
 import collections
 import csv
 import hmac
@@ -49,6 +49,7 @@ class Admin:
             ("POST", "/internal/promote"): lambda b, q: {"result": self.cl.switchover() if b.get("mode") == "switchover" else self.cl.promote()},
             ("POST", "/internal/demote"): lambda b, q: self.cl.demote(b["to"]),
             ("POST", "/internal/rejoin"): lambda b, q: {"result": self.cl.rejoin()},
+            ("POST", "/internal/server-row"): lambda b, q: self.cl.update_server_row(b),
         }
         # These only work on the primary; a standby passes them on.
         on_primary = {
