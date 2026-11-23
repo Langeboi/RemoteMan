@@ -1,29 +1,86 @@
 using System.Windows;
 using System.Windows.Media;
+using CommunityToolkit.Mvvm.ComponentModel;
 using RemoteMan.App.Services;
 using RemoteMan.App.ViewModels;
 using RemoteMan.Core.Integrations.Oxidized;
-using RemoteMan.Core.Model;
 
 namespace RemoteMan.App.Views;
 
 /// <summary>
-/// Every SSH entry as Oxidized gets it from the RemoteMan server: which ones Oxidized already has, which are missing
-/// (they arrive on its next reload), which are left out, and the devices that are only in Oxidized.
+/// Every SSH entry as Oxidized gets it from the RemoteMan server, with a tick per entry for whether it goes to Oxidized,
+/// and the devices that are only in Oxidized (tick to keep them in its list).
 /// </summary>
 public partial class OxidizedFeedWindow : Window
 {
     public sealed record Choice<T>(T Value, string Name) { public override string ToString() => Name; }
 
-    public sealed record Row(OxidizedFeedItem Item, Brush Dot, string EntryName, string OxName, string Address, string Model, string Login, string Why);
+    /// <summary>One line in the list: an SSH entry, or a device that's only in Oxidized.</summary>
+    public sealed partial class Row : ObservableObject
+    {
+        private readonly OxidizedFeedWindow _w;
 
-    private enum Show { All, Missing, InOxidized, LeftOut }
+        public Row(OxidizedFeedWindow w, OxidizedFeedItem? item, OxidizedNode? only, bool isChecked)
+        {
+            _w = w;
+            Item = item;
+            Only = only;
+            _isChecked = isChecked;
+        }
+
+        public OxidizedFeedItem? Item { get; }
+        /// <summary>A device only in Oxidized (ticked = kept in its list).</summary>
+        public OxidizedNode? Only { get; init; }
+        public OxidizedKeptNode? Kept { get; init; }
+
+        [ObservableProperty]
+        [NotifyPropertyChangedFor(nameof(StatusText), nameof(StatusBrush), nameof(Dot))]
+        private bool _isChecked;
+
+        partial void OnIsCheckedChanged(bool value) => _w.OnRowTicked();
+
+        public bool CanCheck => Item is null || Item.State != OxidizedFeedState.LeftOut;
+        public bool IsDevice => Item is null;
+        /// <summary>Oxidized has this device now.</summary>
+        public bool InOxidized => Item?.Node is not null || Only is not null;
+
+        public string Name => Item?.Entry.Name ?? Only?.Name ?? Kept?.Name ?? "";
+        public string Sub => Item is { } i
+            ? (i.State != OxidizedFeedState.LeftOut && !string.Equals(i.FullName, i.Entry.Name, StringComparison.Ordinal) ? $"In Oxidized as {i.FullName}" : "")
+            : "Only in Oxidized, no entry in RemoteMan";
+        public bool HasSub => Sub.Length > 0;
+        public string Address => Item is { Ip: { } ip } i ? (i.Port == 22 ? ip : $"{ip}:{i.Port}") : Only?.Ip ?? Kept?.Ip ?? "";
+        public string Model => Item is { } it ? it.Model ?? (it.State == OxidizedFeedState.LeftOut ? "" : "default") : Only?.Model ?? Kept?.Model ?? "";
+        public string Login => Item is null ? "Oxidized's" : Item.State == OxidizedFeedState.LeftOut ? "" : _w.HasLogin(Item) ? "Entry's" : "Oxidized's";
+        public string Tip => Item is { State: OxidizedFeedState.LeftOut } i ? $"{i.Why}: not sent to Oxidized" : Login == "Oxidized's" && Item is not null
+            ? "No login on this entry (or sending logins is off): Oxidized uses the username and password in its config." : "";
+
+        public string StatusText => (Item, IsChecked) switch
+        {
+            ({ State: OxidizedFeedState.LeftOut } i, _) => i.Why,
+            (not null, true) when InOxidized => "In Oxidized",
+            (not null, true) => _w.HasSnapshot ? "Missing: added on next reload" : "Sent to Oxidized",
+            (not null, false) when InOxidized => "Removed on next reload",
+            (not null, false) => "Not sent",
+            (null, true) => "Kept in Oxidized",
+            (null, false) => "Leaves Oxidized on next reload",
+        };
+
+        public Brush StatusBrush => _w.Brush(StatusText.StartsWith("Missing", StringComparison.Ordinal) ? "Warn"
+            : StatusText.StartsWith("Removed", StringComparison.Ordinal) || StatusText.StartsWith("Leaves", StringComparison.Ordinal) ? "Bad"
+            : IsChecked ? "Text" : "Muted");
+
+        public Brush Dot => _w.Brush(!CanCheck || !IsChecked ? "Faint" : InOxidized ? "Ok" : "Warn");
+    }
+
+    private enum Show { All, Missing, InOxidized, NotSent, OnlyInOxidized }
 
     private readonly MainViewModel _vm;
     private readonly bool _canChange;
     private bool _loading = true;
+    private bool _bulk;
     private List<Row> _rows = [];
-    private IReadOnlyList<OxidizedNode> _only = [];
+    private OxidizedFeedSync _sync = new();
 
     public OxidizedFeedWindow(MainViewModel vm)
     {
@@ -39,11 +96,16 @@ public partial class OxidizedFeedWindow : Window
         ModelBox.Text = cfg.FeedDefaultModel ?? "";
         TagBox.Text = cfg.FeedExcludeTag ?? "";
         LoginsBox.IsChecked = cfg.FeedSendLogins;
-        foreach (var c in new FrameworkElement[] { GroupBox, ModelBox, TagBox, LoginsBox }) c.IsEnabled = _canChange;
+        AutoAddBox.IsChecked = cfg.FeedAutoAdd;
+        foreach (var c in new FrameworkElement[] { GroupBox, ModelBox, TagBox, LoginsBox, AutoAddBox, TickAllButton, TickNoneButton, HeaderTick }) c.IsEnabled = _canChange;
 
-        var shows = new List<Choice<Show>> { new(Show.All, "All SSH entries"), new(Show.Missing, "Missing from Oxidized"), new(Show.InOxidized, "Already in Oxidized"), new(Show.LeftOut, "Left out") };
+        var shows = new List<Choice<Show>>
+        {
+            new(Show.All, "Everything"), new(Show.Missing, "Missing from Oxidized"), new(Show.InOxidized, "Already in Oxidized"),
+            new(Show.NotSent, "Not sent"), new(Show.OnlyInOxidized, "Only in Oxidized"),
+        };
         ShowBox.ItemsSource = shows;
-        ShowBox.SelectedItem = shows[1];
+        ShowBox.SelectedItem = shows[0];
 
         var host = ints?.FirstServerHost ?? "<RemoteMan server>";
         ConfigBox.Text = $"""
@@ -68,93 +130,123 @@ public partial class OxidizedFeedWindow : Window
             """;
         ReloadButton.IsEnabled = vm.OxidizedActive;
         _loading = false;
-        Rebuild();
+        Rebuild(keepTicks: false);
     }
+
+    internal bool HasSnapshot => _vm.OxidizedSnapshot is not null;
+    internal Brush Brush(string key) => (Brush)FindResource(key);
+    internal bool HasLogin(OxidizedFeedItem i) => LoginsBox.IsChecked == true && _sync.Logins.ContainsKey(OxidizedFeed.IdKey(i.Entry.Id));
 
     private OxidizedFeedOptions Options => new(
         (GroupBox.SelectedItem as Choice<OxidizedFeedGroup>)?.Value ?? OxidizedFeedGroup.None,
         ModelBox.Text.Trim(), TagBox.Text.Trim(), LoginsBox.IsChecked == true);
 
-    private void Rebuild()
+    private void Rebuild(bool keepTicks)
     {
         var ints = _vm.Integrations;
         var snap = _vm.OxidizedSnapshot;
-        var sync = _vm.ReadOxidizedFeedSync();
         var store = _vm.Store;
+        _sync = _vm.ReadOxidizedFeedSync();
 
-        // Where things stand
         if (ints is null || store is null) { Heading.Text = "Open a data source first."; SaveButton.IsEnabled = false; return; }
         var feed = ints.OxidizedFeedInfo?.PublicKey is { Length: > 0 };
         Heading.Text = feed
-            ? "The RemoteMan server gives Oxidized every SSH entry as its device list."
+            ? "Tick the SSH entries Oxidized should back up. The RemoteMan server gives Oxidized exactly this list."
             : ints.IsLocalSource
                 ? "Oxidized's device list comes from the RemoteMan server, and this data source is a local file."
                 : "This data source's server doesn't offer Oxidized a device list yet.";
         SubHeading.Text = feed
             ? (_canChange
-                ? "Your RemoteMan keeps the logins and names on the server up to date. Entries added later reach Oxidized on its next reload."
-                : "An admin's RemoteMan keeps the logins on the server up to date. " + (ints.WhyNotChangeable ?? ""))
+                ? "Changes reach Oxidized when it reloads its list; RemoteMan asks it to after saving. Devices Oxidized already has keep their name, so their history carries on."
+                : "Only admins can change what goes to Oxidized. " + (ints.WhyNotChangeable ?? ""))
             : "It needs the RemoteMan server in Docker, updated to this version (docker compose pull && docker compose up -d on each server).";
         SaveButton.IsEnabled = _canChange;
 
-        var plan = OxidizedFeed.Plan(store.Entries, Options, sync.Links, snap);
-        var sendLogins = LoginsBox.IsChecked == true;
-        _rows = plan.OrderBy(i => i.State switch { OxidizedFeedState.Missing => 0, OxidizedFeedState.InOxidized => 1, _ => 2 })
-            .ThenBy(i => i.Entry.Name, StringComparer.OrdinalIgnoreCase)
-            .Select(i => new Row(i,
-                (Brush)FindResource(i.State switch { OxidizedFeedState.InOxidized => "Ok", OxidizedFeedState.Missing => "Warn", _ => "Faint" }),
-                i.Entry.Name,
-                i.State == OxidizedFeedState.LeftOut ? "" : i.FullName,
-                i.Ip is null ? "" : i.Port == 22 ? i.Ip : $"{i.Ip}:{i.Port}",
-                i.Model ?? (i.State == OxidizedFeedState.LeftOut ? "" : "(default)"),
-                i.State == OxidizedFeedState.LeftOut ? "" : sendLogins && sync.Logins.ContainsKey(OxidizedFeed.IdKey(i.Entry.Id)) ? "Yes" : "Default",
-                i.State switch
-                {
-                    OxidizedFeedState.Missing when snap is not null => "Missing: added on next reload",
-                    _ => i.Why,
-                }))
-            .ToList();
-
-        var missing = plan.Count(i => i.State == OxidizedFeedState.Missing);
-        var inOx = plan.Count(i => i.State == OxidizedFeedState.InOxidized);
-        var left = plan.Count(i => i.State == OxidizedFeedState.LeftOut);
-        Counts.Text = snap is null
-            ? $"{plan.Count} SSH entries. Oxidized hasn't answered yet, so RemoteMan can't tell which it already has" + (_vm.OxidizedActive ? "." : " (set it up in More, Oxidized settings).")
-            : $"{plan.Count} SSH entries: {inOx} already in Oxidized, {missing} missing, {left} left out.";
-
-        // Devices only in Oxidized
-        if (snap is null) { OnlyBox.Visibility = Visibility.Collapsed; }
-        else
+        // Ticks the person changed but hasn't saved survive a change of options.
+        var ticks = keepTicks ? _rows.ToDictionary(r => r.Item?.Entry.Id.ToString() ?? "dev:" + r.Name, r => r.IsChecked) : null;
+        var plan = OxidizedFeed.Plan(store.Entries, Options, _sync.Links, snap, _sync.Choice(AutoAddBox.IsChecked == true));
+        var rows = new List<Row>();
+        foreach (var i in plan)
         {
-            _only = OxidizedFeed.OnlyInOxidized(snap, plan, sync.Keep);
-            OnlyBox.Visibility = _only.Count > 0 || sync.Keep.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
-            OnlyText.Text = _only.Count > 0
-                ? $"{_only.Count} device{(_only.Count == 1 ? " is" : "s are")} in Oxidized but not RemoteMan ({string.Join(", ", _only.Take(4).Select(n => n.Name))}{(_only.Count > 4 ? ", …" : "")}). " +
-                  "They drop out of Oxidized once it reads RemoteMan's list, unless you keep them. Kept devices use the login in Oxidized's config."
-                : $"{sync.Keep.Count} device{(sync.Keep.Count == 1 ? "" : "s")} from Oxidized {(sync.Keep.Count == 1 ? "is" : "are")} kept in the list without an entry in RemoteMan.";
-            KeepButton.Content = _only.Count > 0 ? "Keep them" : "Stop keeping";
-            KeepButton.IsEnabled = _canChange;
+            var on = i.State is OxidizedFeedState.InOxidized or OxidizedFeedState.Missing;
+            if (ticks?.TryGetValue(i.Entry.Id.ToString(), out var t) == true && i.State != OxidizedFeedState.LeftOut) on = t;
+            rows.Add(new Row(this, i, null, on));
         }
+        foreach (var k in _sync.Keep)
+        {
+            var on = ticks?.TryGetValue("dev:" + k.Name, out var t) != true || t;
+            rows.Add(new Row(this, null, null, on) { Kept = k, Only = snap?.Nodes.FirstOrDefault(n => string.Equals(n.Name, k.Name, StringComparison.OrdinalIgnoreCase)) });
+        }
+        if (snap is not null)
+            foreach (var n in OxidizedFeed.OnlyInOxidized(snap, plan, _sync.Keep))
+                rows.Add(new Row(this, null, n, ticks?.TryGetValue("dev:" + n.Name, out var t) == true && t));
+        _rows = rows.OrderBy(r => r.IsDevice ? 1 : 0).ThenBy(r => r.Name, StringComparer.OrdinalIgnoreCase).ToList();
         OnFilter(this, null!);
+    }
+
+    internal void OnRowTicked()
+    {
+        if (_loading || _bulk) return;
+        UpdateCounts();
+        Status.Text = "Not saved yet";
+    }
+
+    private IEnumerable<Row> Shown()
+    {
+        var show = (ShowBox.SelectedItem as Choice<Show>)?.Value ?? Show.All;
+        var q = SearchBox.Text.Trim();
+        return _rows.Where(r => show switch
+            {
+                Show.Missing => !r.IsDevice && r.CanCheck && r.IsChecked && !r.InOxidized,
+                Show.InOxidized => r.InOxidized && r.IsChecked,
+                Show.NotSent => !r.IsDevice && !r.IsChecked,
+                Show.OnlyInOxidized => r.IsDevice,
+                _ => true,
+            })
+            .Where(r => q.Length == 0 || r.Name.Contains(q, StringComparison.OrdinalIgnoreCase) || r.Address.Contains(q, StringComparison.OrdinalIgnoreCase));
     }
 
     private void OnFilter(object sender, RoutedEventArgs e)
     {
         if (_loading) return;
-        var show = (ShowBox.SelectedItem as Choice<Show>)?.Value ?? Show.All;
-        Rows.ItemsSource = show switch
-        {
-            Show.Missing => _rows.Where(r => r.Item.State == OxidizedFeedState.Missing).ToList(),
-            Show.InOxidized => _rows.Where(r => r.Item.State == OxidizedFeedState.InOxidized).ToList(),
-            Show.LeftOut => _rows.Where(r => r.Item.State == OxidizedFeedState.LeftOut).ToList(),
-            _ => _rows,
-        };
+        SearchHint.Visibility = SearchBox.Text.Length == 0 ? Visibility.Visible : Visibility.Collapsed;
+        var shown = Shown().ToList();
+        Rows.ItemsSource = shown;
+        Empty.Visibility = shown.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+        Empty.Text = _rows.Count == 0 ? "There are no SSH entries yet." : "Nothing matches.";
+        UpdateCounts();
     }
+
+    private void UpdateCounts()
+    {
+        var entries = _rows.Where(r => !r.IsDevice).ToList();
+        var sent = entries.Count(r => r.CanCheck && r.IsChecked);
+        var missing = entries.Count(r => r.CanCheck && r.IsChecked && !r.InOxidized);
+        var devices = _rows.Count(r => r.IsDevice);
+        Counts.Text = $"{sent} of {entries.Count} SSH entries go to Oxidized" +
+            (HasSnapshot ? $", {missing} of them missing now" : ", Oxidized hasn't answered yet") +
+            (devices > 0 ? $". {devices} device{(devices == 1 ? "" : "s")} only in Oxidized." : ".");
+        var shown = Shown().Where(r => r.CanCheck).ToList();
+        HeaderTick.IsChecked = shown.Count == 0 ? false : shown.All(r => r.IsChecked) ? true : shown.Any(r => r.IsChecked) ? null : false;
+    }
+
+    private void TickShown(bool on)
+    {
+        _bulk = true;
+        try { foreach (var r in Shown().Where(r => r.CanCheck)) r.IsChecked = on; }
+        finally { _bulk = false; }
+        UpdateCounts();
+        Status.Text = "Not saved yet";
+    }
+
+    private void OnTickAll(object sender, RoutedEventArgs e) => TickShown(true);
+    private void OnTickNone(object sender, RoutedEventArgs e) => TickShown(false);
+    private void OnHeaderTick(object sender, RoutedEventArgs e) => TickShown(HeaderTick.IsChecked == true);
 
     private void OnOptionChanged(object sender, RoutedEventArgs e)
     {
         if (_loading) return;
-        Rebuild();
+        Rebuild(keepTicks: true);
         Status.Text = "Not saved yet";
     }
 
@@ -171,30 +263,23 @@ public partial class OxidizedFeedWindow : Window
             cfg.FeedDefaultModel = string.IsNullOrWhiteSpace(o.DefaultModel) ? null : o.DefaultModel;
             cfg.FeedExcludeTag = string.IsNullOrWhiteSpace(o.LeaveOutTag) ? null : o.LeaveOutTag;
             cfg.FeedSendLogins = o.SendLogins;
-            await ints.SaveOxidizedAsync(cfg, null);
+            cfg.FeedAutoAdd = AutoAddBox.IsChecked == true;
+            if (System.Text.Json.JsonSerializer.Serialize(cfg) != System.Text.Json.JsonSerializer.Serialize(ints.Oxidized))
+                await ints.SaveOxidizedAsync(cfg, null);
+
+            var entries = _rows.Where(r => r.Item is { State: not OxidizedFeedState.LeftOut }).ToList();
+            var kept = _rows.Where(r => r.IsDevice && r.IsChecked)
+                .Select(r => r.Kept ?? new OxidizedKeptNode { Name = r.Only!.Name, Group = r.Only.Group, Ip = r.Only.Ip, Model = r.Only.Model }).ToList();
+            await _vm.SaveOxidizedChoiceAsync(
+                entries.Where(r => !r.IsChecked).Select(r => r.Item!.Entry.Id),
+                entries.Where(r => r.IsChecked).Select(r => r.Item!.Entry.Id),
+                kept);
             var note = await _vm.SyncOxidizedFeedAsync();
-            Status.Text = note ?? "Saved";
-            Rebuild();
+            Status.Text = note is null || note == "Oxidized device list updated" ? "Saved. Oxidized picks it up on its next reload." : note;
+            Rebuild(keepTicks: false);
         }
         catch (Exception ex) { Status.Text = ex.Message; }
         finally { SaveButton.IsEnabled = _canChange; }
-    }
-
-    private async void OnKeep(object sender, RoutedEventArgs e)
-    {
-        KeepButton.IsEnabled = false;
-        try
-        {
-            var sync = _vm.ReadOxidizedFeedSync();
-            var kept = _only.Count > 0
-                ? sync.Keep.Concat(_only.Select(n => new OxidizedKeptNode { Name = n.Name, Group = n.Group, Ip = n.Ip, Model = n.Model })).ToList()
-                : [];
-            await _vm.SaveOxidizedKeptAsync(kept);
-            Status.Text = kept.Count > 0 ? $"{kept.Count} device{(kept.Count == 1 ? "" : "s")} kept in Oxidized" : "Oxidized-only devices are no longer kept";
-            Rebuild();
-        }
-        catch (Exception ex) { Status.Text = ex.Message; }
-        finally { KeepButton.IsEnabled = _canChange; }
     }
 
     private async void OnReload(object sender, RoutedEventArgs e)
@@ -208,7 +293,7 @@ public partial class OxidizedFeedWindow : Window
             await Task.Delay(1500, cts.Token);
             await _vm.RefreshOxidizedAsync(cts.Token);
             Status.Text = "Oxidized read its device list again";
-            Rebuild();
+            Rebuild(keepTicks: true);
         }
         catch (Exception ex) { Status.Text = ex.Message; }
         finally { ReloadButton.IsEnabled = true; }

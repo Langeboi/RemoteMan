@@ -154,6 +154,8 @@ public sealed class OxidizedConfig
     public string? FeedExcludeTag { get; set; } = OxidizedFeed.DefaultLeaveOutTag;
     /// <summary>Send each entry's login (sealed for the server) so Oxidized logs in with it.</summary>
     public bool FeedSendLogins { get; set; } = true;
+    /// <summary>New SSH entries go to Oxidized by themselves; off = only entries ticked in the device list.</summary>
+    public bool FeedAutoAdd { get; set; } = true;
 
     public bool IsConfigured => Enabled && Url.Length > 0;
 

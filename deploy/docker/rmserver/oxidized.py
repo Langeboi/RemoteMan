@@ -162,6 +162,9 @@ def build_nodes(rows, config, sync, open_login=None):
     default_model = (config.get("FeedDefaultModel") or "").strip()
     leave_out = (config.get("FeedExcludeTag") or "no-oxidized").strip().lower()
     send_logins = config.get("FeedSendLogins", True) is not False
+    auto_add = config.get("FeedAutoAdd", True) is not False
+    excluded = {str(x).lower() for x in sync.get("Excluded") or []}
+    included = {str(x).lower() for x in sync.get("Included") or []}
     links = sync.get("Links") or {}
     logins = sync.get("Logins") or {}
 
@@ -180,6 +183,8 @@ def build_nodes(rows, config, sync, open_login=None):
     out, seen = [], set()
     for r in sorted((r for r in rows if r[2] == SSH and not r[5]), key=lambda r: str(r[0]).lower()):
         eid = str(r[0]).lower()
+        if eid in excluded or (not auto_add and eid not in included):
+            continue
         p = _json(r[4])
         if leave_out and leave_out in split_tags(p.get("Tags")):
             continue

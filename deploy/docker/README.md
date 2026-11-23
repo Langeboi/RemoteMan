@@ -57,8 +57,10 @@ anything added in RemoteMan is backed up without touching `router.db`.
 1. On the admin page: **Servers > Oxidized > Set up Oxidized** (or `docker exec remoteman remoteman-db oxidized`).
    It shows the token and a ready `source:` section.
 2. Replace the `source:` section of Oxidized's config (`~/.config/oxidized/config`) with it and restart Oxidized.
-3. In RemoteMan, **More > Oxidized device list** shows which entries Oxidized already has and which are missing,
-   and devices that are only in Oxidized (keep them there with **Keep them**, before switching, or they drop out).
+3. In RemoteMan, **More > Oxidized device list** has a tick per SSH entry: ticked entries go to Oxidized, and it
+   shows which ones Oxidized already has and which are missing. Devices that are only in Oxidized are listed too;
+   tick them to keep them there (before switching, or they drop out). With "Add new SSH entries automatically"
+   off, only ticked entries are sent and new ones wait until you tick them.
 
 What Oxidized gets per entry: the name (devices it already had keep their old name and group, so the history
 carries on), the first host and port, the model and the login. The model comes from a custom field

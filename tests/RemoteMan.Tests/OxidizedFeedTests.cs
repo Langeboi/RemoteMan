@@ -69,6 +69,27 @@ public class OxidizedFeedTests
     }
 
     [Fact]
+    public void Unticked_entries_are_not_sent_and_new_ones_wait_without_auto_add()
+    {
+        var a = Ssh("sw1", "10.0.0.2");
+        var b = Ssh("sw2", "10.0.0.3");
+        var c = Ssh("new", "10.0.0.4");
+        var snap = new OxidizedSnapshot([Node("sw1", "10.0.0.2")], new OxidizedMatchOptions(), DateTimeOffset.UtcNow);
+        var sync = new OxidizedFeedSync { Excluded = [OxidizedFeed.IdKey(a.Id)], Included = [OxidizedFeed.IdKey(b.Id)] };
+
+        var auto = OxidizedFeed.Plan([a, b, c], new OxidizedFeedOptions(), null, snap, sync.Choice(autoAdd: true));
+        Assert.Equal(OxidizedFeedState.Off, auto.Single(i => i.Entry == a).State);
+        Assert.NotNull(auto.Single(i => i.Entry == a).Node); // still in Oxidized until it reloads
+        Assert.Equal(OxidizedFeedState.Missing, auto.Single(i => i.Entry == c).State);
+
+        var picked = OxidizedFeed.Plan([a, b, c], new OxidizedFeedOptions(), null, snap, sync.Choice(autoAdd: false));
+        Assert.Equal(OxidizedFeedState.Missing, picked.Single(i => i.Entry == b).State);
+        Assert.Equal(OxidizedFeedState.Off, picked.Single(i => i.Entry == c).State);
+        // An unticked entry's device isn't counted as "only in Oxidized".
+        Assert.Empty(OxidizedFeed.OnlyInOxidized(snap, auto, []));
+    }
+
+    [Fact]
     public void Devices_only_in_oxidized_are_listed_unless_kept()
     {
         var snap = new OxidizedSnapshot([Node("sw1", "10.0.0.2"), Node("old-router", "10.9.9.9"), Node("gone", "10.9.9.8")], new OxidizedMatchOptions(), DateTimeOffset.UtcNow);

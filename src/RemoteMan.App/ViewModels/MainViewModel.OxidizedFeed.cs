@@ -71,7 +71,8 @@ public sealed partial class MainViewModel
             var logins = new Dictionary<string, OxidizedSealedLogin>();
             if (cfg.FeedSendLogins)
             {
-                foreach (var e in ssh)
+                var choice = sync.Choice(cfg.FeedAutoAdd);
+                foreach (var e in ssh.Where(e => choice.IsChosen(e.Id)))
                 {
                     string json;
                     try
@@ -116,9 +117,9 @@ public sealed partial class MainViewModel
             }
 
             // New or renamed devices: ask Oxidized to read the list again now instead of at its next reload.
-            var plan = OxidizedFeed.Plan(entries, cfg.FeedOptions, sync.Links, _oxSnapshot);
-            var stamp = string.Join("\n", plan.Where(i => i.State != OxidizedFeedState.LeftOut).Select(i => $"{i.FullName}|{i.Ip}|{i.Port}|{i.Model}"));
-            if (_feedNamesStamp is not null && stamp != _feedNamesStamp && OxidizedActive && plan.Any(i => i.State == OxidizedFeedState.Missing))
+            var plan = OxidizedFeed.Plan(entries, cfg.FeedOptions, sync.Links, _oxSnapshot, sync.Choice(cfg.FeedAutoAdd));
+            var stamp = string.Join("\n", plan.Where(i => i.State is OxidizedFeedState.InOxidized or OxidizedFeedState.Missing).Select(i => $"{i.FullName}|{i.Ip}|{i.Port}|{i.Model}"));
+            if (_feedNamesStamp is not null && stamp != _feedNamesStamp && OxidizedActive)
             {
                 try
                 {
@@ -148,12 +149,18 @@ public sealed partial class MainViewModel
         if (await SyncOxidizedFeedAsync() is { } note) OnUi(() => Message = note);
     }
 
-    /// <summary>Keeps devices that are only in Oxidized in the list the server gives it (or stops keeping them).</summary>
-    public async Task SaveOxidizedKeptAsync(IEnumerable<OxidizedKeptNode> kept)
+    /// <summary>
+    /// Saves which entries go to Oxidized (unticked ones in <paramref name="excluded"/>, ticked ones in <paramref name="included"/>)
+    /// and which Oxidized-only devices stay in its list, then brings the logins up to date.
+    /// </summary>
+    public async Task SaveOxidizedChoiceAsync(IEnumerable<Guid> excluded, IEnumerable<Guid> included, IEnumerable<OxidizedKeptNode> kept)
     {
         if (_integrations is not { } ints) return;
         var sync = ReadOxidizedFeedSync();
+        sync.Excluded = excluded.Select(OxidizedFeed.IdKey).Order(StringComparer.Ordinal).ToList();
+        sync.Included = included.Select(OxidizedFeed.IdKey).Order(StringComparer.Ordinal).ToList();
         sync.Keep = kept.ToList();
-        await ints.SaveOxidizedSyncAsync(JsonSerializer.Serialize(sync, OxidizedFeed.Json));
+        var json = JsonSerializer.Serialize(sync, OxidizedFeed.Json);
+        if (json != ints.OxidizedSyncRow?.Value) await ints.SaveOxidizedSyncAsync(json);
     }
 }
