@@ -323,7 +323,9 @@ public partial class EntryEditorWindow : Window
 
     private void Renumber()
     {
-        for (var i = 0; i < _hosts.Count; i++) _hosts[i].Role = i == 0 ? "Primary" : $"Fallback {i}";
+        // A web entry's primary is its URL, so every row here is a fallback.
+        var web = _e.Kind == EntryKind.Web;
+        for (var i = 0; i < _hosts.Count; i++) _hosts[i].Role = web ? $"Fallback {i + 1}" : i == 0 ? "Primary" : $"Fallback {i}";
     }
 
     private static string? Describe((LoginSource Source, Entry? Holder) r) => r.Source switch
@@ -439,9 +441,40 @@ public partial class EntryEditorWindow : Window
         UpdateLoginUi();
     }
 
+    /// <summary>
+    /// Tidies each host row ("https://10.0.0.5:8443/" becomes host 10.0.0.5, port 8443) and stops the save,
+    /// with a note under the list, when a host is not a host name or IP address or a port is out of range.
+    /// </summary>
+    private bool ValidateHosts()
+    {
+        HostsError.Visibility = Visibility.Collapsed;
+        foreach (var row in _hosts)
+        {
+            var portText = row.Port.Trim();
+            var port = 0;
+            if (portText.Length > 0 && (!int.TryParse(portText, out port) || port is < 1 or > 65535))
+                return HostError(row, $"Port \"{portText}\" isn't a number from 1 to 65535.");
+            if (string.IsNullOrWhiteSpace(row.Host)) continue;
+            if (RemoteMan.Core.Networking.EndpointResolver.Clean(new HostEndpoint(row.Host, port)) is not { } ep)
+                return HostError(row, $"\"{row.Host.Trim()}\" isn't a host name or IP address. Type just the address, like 10.0.0.5 or server.lab, and put the port in the port box.");
+            row.Host = ep.Host;
+            row.Port = ep.Port > 0 ? ep.Port.ToString() : "";
+        }
+        return true;
+    }
+
+    private bool HostError(HostRow row, string message)
+    {
+        HostsError.Text = $"{row.Role}: {message}";
+        HostsError.Visibility = Visibility.Visible;
+        TabGeneral.IsChecked = true;
+        return false;
+    }
+
     private void OnAddHost(object sender, RoutedEventArgs e)
     {
-        _hosts.Add(new HostRow { Port = _hosts.LastOrDefault()?.Port ?? Entry.DefaultPort(_e.Kind).ToString() });
+        // A web fallback with no port uses the URL's port.
+        _hosts.Add(new HostRow { Port = _e.Kind == EntryKind.Web ? "" : _hosts.LastOrDefault()?.Port ?? Entry.DefaultPort(_e.Kind).ToString() });
         Renumber();
     }
 
@@ -509,6 +542,7 @@ public partial class EntryEditorWindow : Window
             UrlBox.Select(at, EntryTemplates.HostPlaceholder.Length);
             return;
         }
+        if (_e.IsConnectable && !ValidateHosts()) return;
         if (TemplateMode) NameBox.Text = _e.Name.Length > 0 ? _e.Name : "template";
         if (string.IsNullOrWhiteSpace(NameBox.Text))
         {

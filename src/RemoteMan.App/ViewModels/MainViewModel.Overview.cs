@@ -175,9 +175,13 @@ public sealed partial class MainViewModel
         if (e.Kind == EntryKind.Web)
         {
             var url = e.Web?.Url ?? "";
-            var alts = e.Endpoints.Skip(1).Select(ep => SwapHost(url, ep)).ToList();
+            var targets = RemoteMan.Core.Networking.WebEndpoints.For(e);
+            var alts = targets.Fallbacks.Select(ep => RemoteMan.Core.Networking.WebEndpoints.UrlFor(url, ep) ?? ep.ToString()).ToList();
             rows.Add(new OverviewRow("Website", url) { Style = "link", Alternates = alts, Follow = connect, Open = connect, OpenTip = "Open in a tab", Copy = CopyText(url, "URL"), CopyTip = "Copy URL" });
             if (alts.Count > 0) o.ConnectionNote = "tries the main URL first, then the others in order";
+            if (targets.Invalid > 0)
+                o.ConnectionNote = (o.ConnectionNote.Length > 0 ? o.ConnectionNote + ". " : "")
+                    + $"{targets.Invalid} fallback host{(targets.Invalid == 1 ? " isn't a valid address and is" : "s aren't valid addresses and are")} skipped; edit the entry to fix {(targets.Invalid == 1 ? "it" : "them")}";
         }
         else if (e.Kind == EntryKind.Serial)
         {
@@ -213,15 +217,6 @@ public sealed partial class MainViewModel
             rows.Add(new OverviewRow("Tunnel", _store!.Get(tid)?.Name ?? "missing SSH entry") { Style = "dim" });
         if (e.Connection is { WakeOnLan: true } wol)
             rows.Add(new OverviewRow("Wake-on-LAN", wol.MacAddress ?? "on") { Style = "mono", Copy = wol.MacAddress is { } mac ? CopyText(mac, "MAC address") : null });
-    }
-
-    /// <summary>The url with its host (and port) swapped for a fallback endpoint.</summary>
-    private static string SwapHost(string url, HostEndpoint ep)
-    {
-        if (!Uri.TryCreate(WebSettings.NormalizeUrl(url), UriKind.Absolute, out var u)) return ep.ToString();
-        var b = new UriBuilder(u) { Host = ep.Host };
-        if (ep.Port > 0) b.Port = ep.Port;
-        return b.Uri.ToString();
     }
 
     private string ProtocolSummary(Entry e)

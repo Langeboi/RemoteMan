@@ -189,6 +189,7 @@
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
                         <Button Content="Add fallback" HorizontalAlignment="Left" Margin="0,6,0,0" Click="OnAddHost" />
+                        <TextBlock x:Name="HostsError" Foreground="{StaticResource Bad}" TextWrapping="Wrap" Margin="0,6,0,0" Visibility="Collapsed" />
                     </StackPanel>
                 </GroupBox>
 
