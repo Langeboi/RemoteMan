@@ -24,6 +24,14 @@ from .common import log
 SESSION_IDLE = 4 * 3600
 SESSION_MAX = 24 * 3600
 PRESENCE = {0: "Viewing", 1: "Editing", 2: "Connected to"}
+NO_ENTRY = "00000000-0000-0000-0000-000000000000"
+
+
+def activity(r):
+    """One presence row in words. The app keeps an all-zero entry id row while it's open: just online."""
+    if r.get("entry_id") == NO_ENTRY:
+        return "Online"
+    return f"{PRESENCE.get(r['state'], 'Viewing')} {r['entry'] or 'an entry'}"
 KINDS = {0: "folder", 1: "RDP", 2: "SSH", 3: "VNC", 4: "web", 5: "Telnet", 6: "serial", 7: "SFTP", 8: "FTP"}
 
 
@@ -157,7 +165,7 @@ class Admin:
         return out
 
     def presence(self):
-        rows = self.local_rows("""SELECT p.user_name, p.machine, p.state, p.last_seen, e.name AS entry, e.kind
+        rows = self.local_rows("""SELECT p.user_name, p.machine, p.entry_id, p.state, p.last_seen, e.name AS entry, e.kind
             FROM remoteman_presence p LEFT JOIN remoteman_entries e ON e.id = p.entry_id
             WHERE p.last_seen > (extract(epoch FROM now()) * 1000 - 120000) ORDER BY p.last_seen DESC""")
         out = collections.defaultdict(list)
@@ -231,7 +239,7 @@ class Admin:
         for u in people.values():
             acts = pres.get(u["user"].lower(), [])
             order = sorted(acts, key=lambda r: (-r["state"], -r["last_seen"]))
-            u["activity"] = [f"{PRESENCE.get(r['state'], 'Viewing')} {r['entry'] or 'an entry'}" for r in order[:2]]
+            u["activity"] = [activity(r) for r in order[:2]]
             u["machines"] = sorted({r["machine"] for r in acts})
         # Activity feed.
         feed = []
@@ -376,7 +384,7 @@ class Admin:
             acts = pres.get(r["login"].lower(), [])
             if acts:
                 a = sorted(acts, key=lambda x: -x["state"])[0]
-                r["activity"] = f"{PRESENCE.get(a['state'], 'Viewing')} {a['entry'] or 'an entry'}"
+                r["activity"] = activity(a)
         return rows
 
     def primary_conn(self, session):
