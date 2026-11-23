@@ -6,7 +6,7 @@
         xmlns:local="clr-namespace:RemoteMan.App"
         xmlns:updates="clr-namespace:RemoteMan.App.Updates"
         Title="RemoteMan" Width="1440" Height="900" MinWidth="900" MinHeight="520"
-        Style="{StaticResource RemoteManWindow}" WindowStartupLocation="CenterScreen">
+        Style="{StaticResource RemoteManWindow}" WindowStartupLocation="CenterScreen" WindowState="Maximized">
 
     <!-- Own title bar (no transparency, so RDP/WebView2 keep GPU rendering). -->
     <WindowChrome.WindowChrome>
