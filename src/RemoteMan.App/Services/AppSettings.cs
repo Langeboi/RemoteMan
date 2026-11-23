@@ -46,6 +46,8 @@ public sealed class AppSettings
 
     /// <summary>Whether to reopen the tabs and windows that were open when RemoteMan last closed.</summary>
     public ReopenMode ReopenSessions { get; set; } = ReopenMode.Ask;
+    /// <summary>Ask "Move X to Y?" before a drag-drop or Move to moves entries in the tree (accidental drags are easy).</summary>
+    public bool ConfirmMoves { get; set; } = true;
 
     /// <summary>Colour theme (see <see cref="Themes"/>). Takes effect on the next start.</summary>
     public string Theme { get; set; } = Themes.DefaultId;
