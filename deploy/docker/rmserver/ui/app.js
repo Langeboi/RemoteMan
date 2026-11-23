@@ -150,6 +150,7 @@ document.addEventListener("click", e => {
   else if (a === "u-enable") userEnable(n, b.dataset.on === "1");
   else if (a === "u-remove") dlgRemoveUser(n);
   else if (a === "backup") runBackup(b);
+  else if (a === "oxidized") dlgOxidized();
 });
 document.addEventListener("click", e => { const b = e.target.closest("[data-copy]"); if (b) copyText($("#" + b.dataset.copy).textContent, b); });
 
@@ -613,6 +614,22 @@ function dlgRemoveUser(name) {
       try { const r = await post("/api/users/remove", { name }); d.close(); toast(r.removed ? `${name} was removed.` : `${name} owns something in the database, so the login was turned off instead.`); loadUsers(true); } catch (e) { errBox(d, e.message); }
     } }],
   });
+}
+
+function dlgOxidized() {
+  const d = dialog({ title: "Oxidized device list", wide: true, body: `<p class="faint">Loading…</p>`, actions: [{ label: "New token", run: renew }, { label: "Close", primary: true }] });
+  function show(o) {
+    d.el.querySelector(".db").innerHTML = `
+      <p style="font-size:13px">Put this in Oxidized's config (usually <span class="mono">~/.config/oxidized/config</span>) in place of its <span class="mono">source:</span> section, then restart Oxidized. It then backs up every SSH entry in RemoteMan${o.devices == null ? "" : ` (${o.devices} now)`}, and picks up new ones each time it reloads its list.</p>
+      <div class="field"><label>Config</label><pre class="code" id="oxCfg">${esc(o.config)}</pre><div><button class="btn sm" data-copy="oxCfg">Copy</button></div></div>
+      <div class="field"><label>Address</label><pre class="code wrap">${esc(o.url)}</pre></div>
+      <p class="faint" style="font-size:12px">Any server in the cluster answers with the same list and token, so Oxidized can use a standby's address too. Logins only come through after an admin has opened RemoteMan once with the vault passphrase; devices without one use the <span class="mono">username</span> and <span class="mono">password</span> at the top of Oxidized's config. The token is like a password for every device login: keep it in Oxidized only. "New token" stops the old one at once.</p>`;
+  }
+  async function renew() {
+    try { show(await post("/api/oxidized/token")); toast("New token made. Put it in Oxidized's config."); }
+    catch (e) { errBox(d, e.message); }
+  }
+  api("/api/oxidized").then(show).catch(e => { d.el.querySelector(".db").innerHTML = `<p class="err">${esc(e.message)}</p>`; });
 }
 
 async function runBackup(btn) {

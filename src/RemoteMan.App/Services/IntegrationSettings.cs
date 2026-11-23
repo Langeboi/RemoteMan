@@ -3,6 +3,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using RemoteMan.Core.Integrations.Oxidized;
 using RemoteMan.Core.Security;
 using RemoteMan.Core.Storage;
 
@@ -58,11 +59,20 @@ public sealed class IntegrationSettings
     public IntegrationOrigin OxidizedOrigin { get; private set; }
     public SharedSetting? OxidizedRow { get; private set; }
 
+    /// <summary>The RemoteMan server's public key for Oxidized's device list (null: the server doesn't offer one).</summary>
+    public OxidizedFeedInfo? OxidizedFeedInfo { get; private set; }
+    /// <summary>Sealed logins, saved names and kept devices for Oxidized's device list, as last read.</summary>
+    public SharedSetting? OxidizedSyncRow { get; private set; }
+
     /// <summary>Set when a saved secret is there but this PC can't decrypt it (a different vault passphrase).</summary>
     public string? ZabbixProblem { get; private set; }
     public string? OxidizedProblem { get; private set; }
 
     public string SourceName => _cfg.Name;
+    /// <summary>The first server in the data source's connection string (for Oxidized's config), or null.</summary>
+    public string? FirstServerHost =>
+        _cfg.ConnectionStrings.Select(c => System.Text.RegularExpressions.Regex.Match(c, @"(?:^|;)\s*(?:Host|Server)\s*=\s*([^;:,\s]+)", System.Text.RegularExpressions.RegexOptions.IgnoreCase))
+            .FirstOrDefault(m => m.Success)?.Groups[1].Value;
     public bool IsLocalSource => _cfg.Kind == DataSourceKind.Sqlite;
 
     /// <summary>Whether saving goes through right now: online, the data source has the table, and this login may change it.</summary>
@@ -118,6 +128,8 @@ public sealed class IntegrationSettings
         }
         rows ??= _cache.Load() ?? [];
 
+        OxidizedFeedInfo = rows.FirstOrDefault(r => r.Name == OxidizedFeed.FeedKey) is { } feed ? Parse<OxidizedFeedInfo>(feed.Value) : null;
+        OxidizedSyncRow = rows.FirstOrDefault(r => r.Name == OxidizedFeed.SyncKey);
         var z = rows.FirstOrDefault(r => r.Name == ZabbixKey);
         var o = rows.FirstOrDefault(r => r.Name == OxidizedKey);
         string? moved = null;
@@ -213,6 +225,13 @@ public sealed class IntegrationSettings
         OxidizedPassword = password;
         OxidizedOrigin = IntegrationOrigin.DataSource;
         OxidizedProblem = null;
+        await RefreshCacheAsync(ct);
+    }
+
+    /// <summary>Saves Oxidized's device list data (sealed logins, names, kept devices) for the server.</summary>
+    public async Task SaveOxidizedSyncAsync(string json, CancellationToken ct = default)
+    {
+        OxidizedSyncRow = await PutAsync(OxidizedFeed.SyncKey, json, ct);
         await RefreshCacheAsync(ct);
     }
 

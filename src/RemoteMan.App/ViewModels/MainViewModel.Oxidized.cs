@@ -52,6 +52,7 @@ public sealed partial class MainViewModel
         OxidizedActive = cfg.IsConfigured;
         OxidizedStatusText = OxidizedActive ? "Oxidized: connecting…" : "";
         ApplyOxidized();
+        _ = RunOxidizedFeedSyncAsync();
         if (!OxidizedActive) return Task.CompletedTask;
 
         var cts = _oxCts = new CancellationTokenSource();
@@ -96,6 +97,7 @@ public sealed partial class MainViewModel
                 OxidizedStatusText = $"Oxidized: {nodes.Count} device{(nodes.Count == 1 ? "" : "s")}" +
                     (failing > 0 ? $", {failing} failing" : ", all backed up") + $" · {snap.FetchedAt.ToLocalTime():HH:mm}";
                 ApplyOxidized();
+                _ = RunOxidizedFeedSyncAsync();
             });
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested) { }

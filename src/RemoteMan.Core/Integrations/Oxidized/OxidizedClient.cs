@@ -129,6 +129,9 @@ public sealed partial class OxidizedClient : IDisposable
         await GetStringAsync($"node/next/{Uri.EscapeDataString(node.Name)}", ct);
     }
 
+    /// <summary>Asks Oxidized to read its device list again now (oxidized-web's reload), so new devices show up at once.</summary>
+    public async Task ReloadAsync(CancellationToken ct = default) => await GetStringAsync("reload.json", ct);
+
     private async Task<JsonNode?> GetJsonAsync(string path, CancellationToken ct)
     {
         var body = await GetStringAsync(path, ct);

@@ -202,6 +202,11 @@ class Cluster:
         C.q(login_functions_sql(), db=C.DB_NAME)
         C.q(SCHEMA_SQL, db=C.DB_NAME)
         self.sync_role_settings()
+        try:
+            from . import oxidized
+            oxidized.ensure_keys()
+        except Exception as e:  # noqa: BLE001
+            log.warning("Oxidized feed setup failed: %s", e)
 
     def sync_role_settings(self):
         """Editors act as the shared login once connected (see remoteman-db.sh); read-only people don't."""

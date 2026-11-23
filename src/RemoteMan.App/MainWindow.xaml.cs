@@ -64,6 +64,7 @@ public partial class MainWindow : Window
         };
         _vm.OxidizedSettingsDialog = () =>
             new OxidizedSettingsWindow(_vm.Integrations, _vm.Store, _vm.Protector) { Owner = this }.ShowDialog() == true;
+        _vm.OxidizedFeedDialog = () => new OxidizedFeedWindow(_vm) { Owner = this }.ShowDialog();
         DataContext = _vm;
         SetUpNotices();
 
@@ -215,6 +216,7 @@ public partial class MainWindow : Window
         menu.Items.Add(Cmd("Zabbix settings…", _vm.ZabbixSettingsCommand));
         if (_vm.ZabbixActive) menu.Items.Add(Cmd("Import from Zabbix…", _vm.ImportFromZabbixCommand));
         menu.Items.Add(Cmd("Oxidized settings…", _vm.OxidizedSettingsCommand));
+        menu.Items.Add(Cmd("Oxidized device list…", _vm.OxidizedDevicesCommand));
         var startup = new MenuItem { Header = "On startup, reopen last sessions" };
         foreach (var (mode, label) in new[] { (ReopenMode.Ask, "Ask"), (ReopenMode.Always, "Always"), (ReopenMode.Never, "Never") })
         {

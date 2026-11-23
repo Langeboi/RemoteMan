@@ -63,6 +63,11 @@ public partial class OxidizedSettingsWindow : Window
             MatchByAddress = ByAddressBox.IsChecked == true,
             MatchByName = ByNameBox.IsChecked == true,
             IgnoreBracketSuffix = BracketBox.IsChecked == true,
+            // Set in the Oxidized device list window; kept as they are here.
+            FeedGroup = _shared?.Oxidized.FeedGroup ?? nameof(OxidizedFeedGroup.None),
+            FeedDefaultModel = _shared?.Oxidized.FeedDefaultModel,
+            FeedExcludeTag = _shared?.Oxidized.FeedExcludeTag ?? OxidizedFeed.DefaultLeaveOutTag,
+            FeedSendLogins = _shared?.Oxidized.FeedSendLogins ?? true,
         };
     }
 

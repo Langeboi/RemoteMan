@@ -1,0 +1,97 @@
+<Window x:Class="RemoteMan.App.Views.OxidizedFeedWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Oxidized device list" Width="820" Height="680" MinWidth="620" MinHeight="480"
+        Style="{StaticResource RemoteManWindow}" WindowStartupLocation="CenterOwner" ShowInTaskbar="False">
+    <Window.Resources>
+        <Style TargetType="TextBlock" x:Key="Label" BasedOn="{StaticResource MutedText}">
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="Margin" Value="0,4,10,4" />
+        </Style>
+        <Style TargetType="TextBlock" x:Key="Hint" BasedOn="{StaticResource MutedText}">
+            <Setter Property="FontSize" Value="11" />
+            <Setter Property="TextWrapping" Value="Wrap" />
+        </Style>
+    </Window.Resources>
+    <DockPanel>
+        <Border DockPanel.Dock="Top" Background="{StaticResource Header}" BorderBrush="{StaticResource Border}" BorderThickness="0,0,0,1" Padding="12,8">
+            <StackPanel>
+                <TextBlock x:Name="Heading" FontWeight="SemiBold" TextWrapping="Wrap" />
+                <TextBlock x:Name="SubHeading" Style="{StaticResource Hint}" Margin="0,2,0,0" />
+            </StackPanel>
+        </Border>
+        <Border DockPanel.Dock="Bottom" Background="{StaticResource Header}" BorderBrush="{StaticResource Border}" BorderThickness="0,1,0,0" Padding="10,8">
+            <DockPanel>
+                <StackPanel Orientation="Horizontal" DockPanel.Dock="Right">
+                    <Button x:Name="ReloadButton" Content="Ask Oxidized to reload now" Margin="0,0,6,0" Click="OnReload" />
+                    <Button x:Name="SaveButton" Content="Save" MinWidth="76" Style="{StaticResource PrimaryButton}" Click="OnSave" />
+                    <Button Content="Close" MinWidth="76" Margin="6,0,0,0" IsCancel="True" />
+                </StackPanel>
+                <TextBlock x:Name="Status" Style="{StaticResource Hint}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" TextWrapping="NoWrap" />
+            </DockPanel>
+        </Border>
+        <Grid Background="{StaticResource Panel}">
+            <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="*" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
+
+            <!-- Options -->
+            <Grid Margin="12,10,12,0">
+                <Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition Width="170" /><ColumnDefinition Width="18" /><ColumnDefinition Width="Auto" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                <Grid.RowDefinitions><RowDefinition /><RowDefinition /></Grid.RowDefinitions>
+                <TextBlock Text="New devices' group" Style="{StaticResource Label}" />
+                <ComboBox x:Name="GroupBox" Grid.Column="1" Margin="0,2" DisplayMemberPath="Name" AutomationProperties.Name="New devices' group" SelectionChanged="OnOptionChanged" />
+                <TextBlock Grid.Column="3" Text="Model when unknown" Style="{StaticResource Label}" />
+                <TextBox x:Name="ModelBox" Grid.Column="4" Margin="0,2" FontFamily="{StaticResource MonoFont}" AutomationProperties.Name="Model when unknown" TextChanged="OnOptionChanged"
+                         ToolTip="Oxidized model (ios, aoscx, procurve, fortios, routeros, dnos, linuxgeneric…) for entries without one. Empty: Oxidized's own default model." />
+                <TextBlock Grid.Row="1" Text="Leave out tag" Style="{StaticResource Label}" />
+                <TextBox x:Name="TagBox" Grid.Row="1" Grid.Column="1" Margin="0,2" AutomationProperties.Name="Leave out tag" TextChanged="OnOptionChanged"
+                         ToolTip="SSH entries with this tag aren't sent to Oxidized." />
+                <CheckBox x:Name="LoginsBox" Grid.Row="1" Grid.Column="3" Grid.ColumnSpan="2" VerticalAlignment="Center" Margin="0,4"
+                          Content="Send each entry's login (sealed so only the RemoteMan server can open it)" Click="OnOptionChanged" />
+            </Grid>
+            <TextBlock Grid.Row="1" Margin="12,4,12,0" Style="{StaticResource Hint}"
+                       Text="Model: an &quot;Oxidized model&quot; custom field wins, then a tag that names a model (procurve, dnos, edgeos…), then the vendor icon (Aruba = aoscx, FortiGate = fortios, MikroTik = routeros, Cisco = ios). An &quot;Enable&quot; secret field is sent as the enable password. Devices Oxidized already has keep their name and group, so their history carries on." />
+
+            <!-- Filter -->
+            <DockPanel Grid.Row="2" Margin="12,10,12,6">
+                <ComboBox x:Name="ShowBox" DockPanel.Dock="Left" Width="200" DisplayMemberPath="Name" AutomationProperties.Name="Show" SelectionChanged="OnFilter" />
+                <TextBlock x:Name="Counts" Margin="10,0,0,0" Style="{StaticResource Hint}" VerticalAlignment="Center" />
+            </DockPanel>
+
+            <ListView x:Name="Rows" Grid.Row="3" Margin="12,0,12,0" Background="{StaticResource Panel2}" BorderBrush="{StaticResource Border}" BorderThickness="1"
+                      Foreground="{StaticResource Text}" AutomationProperties.Name="SSH entries for Oxidized" VirtualizingPanel.IsVirtualizing="True">
+                <ListView.View>
+                    <GridView>
+                        <GridViewColumn Header="" Width="22">
+                            <GridViewColumn.CellTemplate><DataTemplate><Ellipse Width="7" Height="7" Fill="{Binding Dot}" ToolTip="{Binding Why}" /></DataTemplate></GridViewColumn.CellTemplate>
+                        </GridViewColumn>
+                        <GridViewColumn Header="Entry" Width="190" DisplayMemberBinding="{Binding EntryName}" />
+                        <GridViewColumn Header="In Oxidized as" Width="180" DisplayMemberBinding="{Binding OxName}" />
+                        <GridViewColumn Header="Address" Width="130" DisplayMemberBinding="{Binding Address}" />
+                        <GridViewColumn Header="Model" Width="90" DisplayMemberBinding="{Binding Model}" />
+                        <GridViewColumn Header="Login" Width="50" DisplayMemberBinding="{Binding Login}" />
+                        <GridViewColumn Header="Status" Width="150" DisplayMemberBinding="{Binding Why}" />
+                    </GridView>
+                </ListView.View>
+            </ListView>
+
+            <!-- Only in Oxidized, and how to point Oxidized here -->
+            <StackPanel Grid.Row="4" Margin="12,10,12,10">
+                <Border x:Name="OnlyBox" Background="{StaticResource Panel2}" BorderBrush="{StaticResource BorderSoft}" BorderThickness="1" CornerRadius="4" Padding="10,7" Margin="0,0,0,8">
+                    <DockPanel>
+                        <Button x:Name="KeepButton" DockPanel.Dock="Right" Content="Keep them" MinWidth="90" Margin="8,0,0,0" VerticalAlignment="Center" Click="OnKeep" />
+                        <TextBlock x:Name="OnlyText" Style="{StaticResource Hint}" VerticalAlignment="Center" />
+                    </DockPanel>
+                </Border>
+                <Expander Header="How to point Oxidized at this list" Foreground="{StaticResource Muted}">
+                    <StackPanel Margin="0,6,0,0">
+                        <TextBlock Style="{StaticResource Hint}" Margin="0,0,0,6"
+                                   Text="Oxidized can't be told about new devices; it reads its whole list from a source. Replace the source: section of Oxidized's config (~/.config/oxidized/config) with this, then restart Oxidized. The token is on the RemoteMan server's admin page under Servers &gt; Oxidized (or: docker exec remoteman remoteman-db oxidized)." />
+                        <TextBox x:Name="ConfigBox" IsReadOnly="True" FontFamily="{StaticResource MonoFont}" FontSize="11" TextWrapping="NoWrap"
+                                 HorizontalScrollBarVisibility="Auto" Height="150" VerticalScrollBarVisibility="Auto" AutomationProperties.Name="Oxidized config" />
+                        <Button Content="Copy" HorizontalAlignment="Left" MinWidth="70" Margin="0,6,0,0" Click="OnCopy" />
+                    </StackPanel>
+                </Expander>
+            </StackPanel>
+        </Grid>
+    </DockPanel>
+</Window>
