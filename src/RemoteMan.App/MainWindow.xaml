@@ -29,13 +29,19 @@
 
         <HierarchicalDataTemplate DataType="{x:Type vm:EntryNode}" ItemsSource="{Binding Children}">
             <DockPanel LastChildFill="True">
-                <!-- Chevron column: always takes its space so icons line up; only folders show (and click) it -->
-                <Border x:Name="chevBox" Width="16" Height="16" Margin="0,0,2,0" Background="Transparent" Visibility="Hidden" VerticalAlignment="Center"
-                        MouseLeftButtonDown="OnChevronDown" Cursor="Hand">
-                    <Path x:Name="chevron" Width="8" Height="8" Stretch="Uniform" Stroke="{StaticResource Faint}" StrokeThickness="1.5"
-                          StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round"
-                          Data="M0,0 L4,4 L8,0" HorizontalAlignment="Center" VerticalAlignment="Center" />
-                </Border>
+                <!-- Chevron column: always takes its space so icons line up; only folders show (and click) it.
+                     Entries never have a chevron, so a favorite's yellow star sits in the same column. -->
+                <Grid Width="16" Height="16" Margin="0,0,2,0" VerticalAlignment="Center">
+                    <Border x:Name="chevBox" Background="Transparent" Visibility="Hidden" MouseLeftButtonDown="OnChevronDown" Cursor="Hand">
+                        <Path x:Name="chevron" Width="8" Height="8" Stretch="Uniform" Stroke="{StaticResource Faint}" StrokeThickness="1.5"
+                              StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round"
+                              Data="M0,0 L4,4 L8,0" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Border>
+                    <Path x:Name="favStar" Width="11" Height="11" Stretch="Uniform" Fill="#F5C542" Stroke="#F5C542" StrokeThickness="0.6" StrokeLineJoin="Round"
+                          Data="M7,0.8 L8.9,4.8 L13.2,5.3 L10,8.3 L10.9,12.6 L7,10.4 L3.1,12.6 L4,8.3 L0.8,5.3 L5.1,4.8 Z"
+                          HorizontalAlignment="Center" VerticalAlignment="Center" ToolTip="In your favorites"
+                          Visibility="{Binding IsFavorite, Converter={StaticResource BoolVis}}" />
+                </Grid>
                 <!-- Plain folders are filled in their colour; glyph folders (server, network…) stay outlined -->
                 <Path x:Name="folder" Width="16" Height="16" Margin="0,0,7,0" Stretch="None" Stroke="{Binding FolderBrush}" Fill="{Binding FolderFill}" StrokeThickness="1.3"
                       StrokeLineJoin="Round" StrokeStartLineCap="Round" StrokeEndLineCap="Round"

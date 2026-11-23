@@ -174,6 +174,7 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
         ReapplyMultiSelection();
         ApplyPresence();
         ApplyMyConnections();
+        ApplyFavorites();
         ApplyZabbix();
         ApplyOxidized();
     }

@@ -44,6 +44,8 @@ public sealed partial class EntryNode : ObservableObject
     public string ConnectedTip => MyTabs > 1 ? $"You're connected ({MyTabs} sessions)" : "You're connected";
     /// <summary>Picked with Ctrl+click or Shift+click as part of a multi-selection (moved together).</summary>
     [ObservableProperty] private bool _isMultiSelected;
+    /// <summary>In your Favorites: small yellow star to the left of the icon, in the chevron column (entries never have a chevron).</summary>
+    [ObservableProperty] private bool _isFavorite;
 
     /// <summary>Zabbix glyph on the right of the row: ok, warn, high, unreach, maint, or null for none.</summary>
     [ObservableProperty] private string? _health;
