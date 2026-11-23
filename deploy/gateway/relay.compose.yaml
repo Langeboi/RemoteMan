@@ -1,0 +1,34 @@
+# RemoteMan gateway relay: the one public piece. Run it at home (or on any box with a public IP) and point a
+# DNS name at it. Caddy gets a Let's Encrypt certificate for that name by itself and forwards to the relay.
+#
+#   1. DNS: an A record for remoteman.mydomain.dk -> your public IP. Router: forward TCP 443 (and 80) to this box.
+#   2. Change DOMAIN below, then:  docker compose -f relay.compose.yaml up -d
+#   3. docker exec remoteman-relay gateway site add school      (prints the connector's compose.yaml)
+#   4. docker exec remoteman-relay gateway device add my-laptop (prints the invite for RemoteMan)
+services:
+  relay:
+    image: ghcr.io/langeboi/remoteman-gateway:test     # :latest once there is a release
+    container_name: remoteman-relay
+    command: relay
+    restart: unless-stopped
+    environment:
+      PUBLIC_URL: https://remoteman.mydomain.dk          # the address RemoteMan and connectors use
+      TZ: Europe/Copenhagen
+    volumes:
+      - relay-data:/data                                 # sites, devices (tokens stored hashed)
+
+  caddy:
+    image: caddy:2
+    container_name: remoteman-relay-caddy
+    restart: unless-stopped
+    # Same name as PUBLIC_URL. Caddy renews the certificate on its own.
+    command: caddy reverse-proxy --from remoteman.mydomain.dk --to relay:8080
+    ports:
+      - "443:443"
+      - "80:80"          # Let's Encrypt's HTTP check and the redirect to https; optional (443 alone works too)
+    volumes:
+      - caddy-data:/data
+
+volumes:
+  relay-data:
+  caddy-data:

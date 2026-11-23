@@ -36,6 +36,9 @@ public abstract partial class SessionViewModel : ObservableObject, IDisposable
     /// <summary>Things that live as long as the tab, e.g. the SSH tunnel an RDP session goes through.</summary>
     public List<IDisposable> Owned { get; } = new();
     public HostEndpoint Endpoint { get; }
+    /// <summary>Where the session really goes when <see cref="Endpoint"/> is a local tunnel: "10.0.0.5:3389 via bastion",
+    /// "10.0.0.5:3389 via gateway school".</summary>
+    public string? Via { get; init; }
     public ResolvedCredential Credential { get; }
     public bool UsedFallback { get; }
     public virtual string KindTag => EntryNode.KindTagFor(Entry.Kind);
@@ -103,6 +106,8 @@ public sealed class SshSessionViewModel(Entry e, HostEndpoint ep, ResolvedCreden
 {
     public SshSettings Settings => Entry.Ssh ?? new SshSettings();
 
+    /// <summary>The real host behind a gateway tunnel, for host key checks.</summary>
+    public HostEndpoint? KnownHostAs { get; init; }
     /// <summary>Hosts to try in order. Without a jump host this is just the probed <see cref="SessionViewModel.Endpoint"/>.</summary>
     public IReadOnlyList<HostEndpoint>? Endpoints { get; init; }
 
@@ -148,9 +153,6 @@ public sealed class RdpSessionViewModel(Entry e, HostEndpoint ep, ResolvedCreden
     public RdpSettings Settings => Entry.Rdp ?? new RdpSettings();
     /// <summary>The RD Gateway's own login, when the entry picks one.</summary>
     public ResolvedCredential? GatewayCredential { get; init; }
-    /// <summary>"via bastion" when the connection goes through an SSH tunnel.</summary>
-    public string? Via { get; init; }
-
     public override bool CanShare => true;
 
     /// <summary>The RDP control's window handle once the view made it (for sharing its rectangle).</summary>

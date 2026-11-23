@@ -10,5 +10,6 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\src\RemoteMan.Data\RemoteMan.Data.csproj" />
+    <ProjectReference Include="..\..\src\RemoteMan.Gateway.Server\RemoteMan.Gateway.Server.csproj" />
   </ItemGroup>
 </Project>

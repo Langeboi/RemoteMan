@@ -172,6 +172,11 @@ public sealed class ConnectionSettings
     public bool WaitForRunBefore { get; set; } = true;
     /// <summary>Command run on this PC after the session closes.</summary>
     public string? RunAfter { get; set; }
+    /// <summary>RemoteMan gateway site to reach this through when it isn't reachable directly.
+    /// Null = as the folder says, "" = never (direct only). See <see cref="Storage.EntryStore.GatewayFor"/>.</summary>
+    public string? GatewaySite { get; set; }
+    /// <summary>Go through the gateway straight away instead of trying the hosts directly first.</summary>
+    public bool GatewayAlways { get; set; }
 
     public ConnectionSettings Copy() => (ConnectionSettings)MemberwiseClone();
 }

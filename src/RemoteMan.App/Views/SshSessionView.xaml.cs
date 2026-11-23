@@ -159,7 +159,7 @@ public partial class SshSessionView : UserControl
             await StartPlainAsync(kind, cols, rows);
             return;
         }
-        _ssh = new SshSession();
+        _ssh = new SshSession { KnownHostAs = _vm.KnownHostAs };
         _chan = _ssh;
         var ssh0 = _ssh;
         _ssh.Output += s => { lock (_pending) _pending.Append(s); _vm.Tail.Append(s); OnOutput(s); };
@@ -182,6 +182,7 @@ public partial class SshSessionView : UserControl
             await _ssh.ConnectAsync(targets, _vm.Jumps, _vm.Credential, _vm.Settings, KnownHosts, cols, rows);
             Post(new { t = "info", d = _ssh.NegotiatedSummary ?? "" });
             var via = _vm.Jumps.Count > 0 ? $" via {string.Join(" → ", _vm.Jumps.Select(j => j.Name))}" : "";
+            if (_vm.Via is { } gw) via = $" ({gw})";
             var fwd = _ssh.ActiveForwards.Count > 0 ? $"  ·  {_ssh.ActiveForwards.Count} forward{(_ssh.ActiveForwards.Count == 1 ? "" : "s")}" : "";
             _vm.StatusText = $"SSH {_ssh.ConnectedEndpoint ?? _vm.Endpoint}{via}  {_ssh.NegotiatedSummary}{fwd}";
             _reconnects = 0;

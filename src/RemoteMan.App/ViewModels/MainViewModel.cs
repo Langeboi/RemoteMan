@@ -8,6 +8,7 @@ using RemoteMan.Core.Networking;
 using RemoteMan.Core.Security;
 using RemoteMan.Core.Storage;
 using RemoteMan.Data;
+using RemoteMan.Gateway;
 using RemoteMan.Protocols.Rdp;
 using RemoteMan.Protocols.Ssh;
 
@@ -63,7 +64,9 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
         var cfg = _settings.Active;
         try
         {
-            var source = DataSourceFactory.Create(cfg);
+            GatewayService.Instance.Configure(_settings.Gateway);
+            GatewayService.Instance.Problem += m => OnUi(() => Message = $"Gateway: {m}");
+            var source = DataSourceFactory.Create(cfg, GatewayService.Instance.RouteFor(cfg));
             if (source is RedundantDataSource r)
                 r.FailedOver += (_, now) => OnUi(() => { DataSourceText = r.DisplayName; Message = $"Data source failed over to {now.DisplayName}"; });
             _protector = Secrets.For(cfg);
@@ -404,7 +407,19 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
             return;
         }
 
-        var result = await resolver.ResolveAsync(probe);
+        // A gateway site (on the entry or a folder above it): try the hosts directly first unless it says
+        // "always", then go through the site's connector, which tries them in the same order.
+        var gateway = _store?.GatewayFor(e);
+        var result = gateway is { Always: true } ? new ResolveResult(null, []) : await resolver.ResolveAsync(probe);
+        string? via = null;
+        HostEndpoint? realHost = null;
+        if (!result.Success && gateway is { } gw)
+        {
+            if (await ThroughGatewayAsync(e, probe, gw.Site) is not { } tunnel) return;
+            result = new ResolveResult(tunnel.Local, result.Attempts);
+            via = tunnel.Via;
+            realHost = tunnel.Real;
+        }
         if (!result.Success && conn is { WaitUntilUp: true })
         {
             var deadline = DateTime.UtcNow.AddSeconds(Math.Clamp(conn.WaitSeconds, 5, 3600));
@@ -470,11 +485,11 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
 
         SessionViewModel? s = e.Kind switch
         {
-            EntryKind.Ssh or EntryKind.Telnet => new SshSessionViewModel(e, endpoint, cred, result.UsedFallback),
-            EntryKind.Sftp or EntryKind.Ftp => new FilesSessionViewModel(e, endpoint, cred, result.UsedFallback),
-            EntryKind.Proxmox => new WebSessionViewModel(e, endpoint, cred, result.UsedFallback),
-            EntryKind.Rdp => new RdpSessionViewModel(e, endpoint, cred, result.UsedFallback) { GatewayCredential = GatewayLogin(e) },
-            EntryKind.Web when (e.Web?.Browser ?? BrowserKind.Embedded) == BrowserKind.Embedded => new WebSessionViewModel(e, endpoint, cred, result.UsedFallback),
+            EntryKind.Ssh or EntryKind.Telnet => new SshSessionViewModel(e, endpoint, cred, result.UsedFallback) { Via = via, KnownHostAs = realHost },
+            EntryKind.Sftp or EntryKind.Ftp => new FilesSessionViewModel(e, endpoint, cred, result.UsedFallback) { Via = via },
+            EntryKind.Proxmox => new WebSessionViewModel(e, endpoint, cred, result.UsedFallback) { Via = via },
+            EntryKind.Rdp => new RdpSessionViewModel(e, endpoint, cred, result.UsedFallback) { GatewayCredential = GatewayLogin(e), Via = via },
+            EntryKind.Web when (e.Web?.Browser ?? BrowserKind.Embedded) == BrowserKind.Embedded => new WebSessionViewModel(e, endpoint, cred, result.UsedFallback) { Via = via },
             _ => null,
         };
 
@@ -504,12 +519,48 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
             return;
         }
 
-        Message = result.UsedFallback ? $"{result.Attempts[0].Endpoint} {result.Attempts[0].Error}, using fallback {endpoint}" : "";
+        Message = via is not null ? $"{e.Name}: {via}"
+            : result.UsedFallback ? $"{result.Attempts[0].Endpoint} {result.Attempts[0].Error}, using fallback {endpoint}" : "";
         s.CloseRequested += (_, _) => CloseSession(s);
         TrackFailures(s);
         Prepare(s, e, fields);
         Show(s);
         RememberRecent(e);
+    }
+
+    /// <summary>
+    /// Opens (or reuses) a local forwarder through the entry's gateway site after checking that the site's connector
+    /// reaches one of the hosts. Null, with the reason shown, when it can't.
+    /// </summary>
+    private async Task<(HostEndpoint Local, string Via, HostEndpoint Real)?> ThroughGatewayAsync(Entry e, Entry probe, string site)
+    {
+        var gw = GatewayService.Instance;
+        if (!gw.IsConfigured)
+        {
+            Message = $"{e.Name}: no host answered, and the gateway isn't set up on this PC";
+            Notify(new ConnectionProblem("Gateway not set up", $"{e.Name} uses the gateway site {site} when it can't be reached directly, but this PC has no gateway invite.",
+                "Ask whoever runs the relay for an invite (gateway device add <name>) and paste it under More > Gateway.", null), e);
+            return null;
+        }
+        var targets = GatewayService.Targets(e, probe.Endpoints, e.Web?.Url);
+        if (targets.Count == 0) { Message = $"{e.Name} has no host"; return null; }
+        Message = $"Connecting to {e.Name} through the gateway ({site})…";
+        try
+        {
+            var reached = await gw.Client.ProbeAsync(site, targets);
+            // The host the connector reached goes first, so new connections don't wait on a dead primary.
+            var ordered = targets.Where(t => t == reached).Concat(targets.Where(t => t != reached)).ToList();
+            var fwd = gw.Forwarder(site, ordered, directFirst: false);
+            var real = GatewayProtocol.ParseTarget(reached) is var (h, p) ? new HostEndpoint(h, p) : new HostEndpoint(reached, 0);
+            return (new HostEndpoint("127.0.0.1", fwd.Port), $"{reached} via gateway {site}", real);
+        }
+        catch (Exception ex) when (ex is GatewayException or RelayRefusedException)
+        {
+            Message = $"{e.Name}: {ex.Message}";
+            Notify(new ConnectionProblem("Couldn't connect through the gateway", ex.Message,
+                ex is RelayRefusedException ? "Check More > Gateway on this PC, or the relay with: gateway status" : "Check that the connector is running and that its ALLOW setting covers this host.", null), e);
+            return null;
+        }
     }
 
     private RemoteMan.Protocols.ResolvedCredential? GatewayLogin(Entry e) =>

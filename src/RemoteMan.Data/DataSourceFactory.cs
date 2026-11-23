@@ -4,7 +4,13 @@ namespace RemoteMan.Data;
 
 public static class DataSourceFactory
 {
-    public static IDataSource Create(DataSourceConfig cfg)
+    /// <summary>
+    /// Rewrites one database server address, e.g. to a local gateway forwarder (127.0.0.1:port). Called once per
+    /// server when the source is created; the database client then connects to the rewritten address.
+    /// </summary>
+    public delegate (string Host, int Port) Route(string host, int port);
+
+    public static IDataSource Create(DataSourceConfig cfg, Route? route = null)
     {
         if (cfg.ConnectionStrings.Count == 0) throw new ArgumentException("No connection string configured.");
         var strings = cfg.ConnectionStrings.Where(cs => !string.IsNullOrWhiteSpace(cs)).ToList();
@@ -13,6 +19,7 @@ public static class DataSourceFactory
         if (cfg.Kind == DataSourceKind.PostgreSql && strings.Count > 0) strings = [PostgresPair(strings)];
         var members = strings
             .Select(cs => cfg.UseWindowsLogin ? WithWindowsLogin(cfg.Kind, cs) : cs)
+            .Select(cs => route is null ? cs : RouteHosts(cfg.Kind, cs, route))
             .Select(cs => Single(cfg.Kind, cs, cfg.PollMilliseconds)).ToList();
         return members.Count == 1 ? members[0] : new RedundantDataSource(members);
     }
@@ -44,6 +51,63 @@ public static class DataSourceFactory
         // Don't wait the default 15 s on a server that is down before trying the next one.
         if (!connectionStrings[0].Contains("Timeout", StringComparison.OrdinalIgnoreCase)) first.Timeout = 5;
         return first.ConnectionString;
+    }
+
+    /// <summary>
+    /// Every server named in a connection string, passed through <paramref name="route"/>. PostgreSQL and MySQL
+    /// keep their multi-host lists (each host gets its own route), SQL Server its "host,port". SQLite is unchanged.
+    /// TLS still checks the real server name: the host the client sees is only where the bytes go.
+    /// </summary>
+    public static string RouteHosts(DataSourceKind kind, string cs, Route route)
+    {
+        switch (kind)
+        {
+            case DataSourceKind.PostgreSql:
+            {
+                var b = new Npgsql.NpgsqlConnectionStringBuilder(cs);
+                var hosts = (b.Host ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                    .Select(h => SplitHostPort(h, b.Port)).Select(hp => route(hp.Host, hp.Port)).Select(r => $"{r.Host}:{r.Port}");
+                b.Host = string.Join(",", hosts);
+                // The certificate names the real server, not 127.0.0.1.
+                if (b.SslMode is Npgsql.SslMode.VerifyFull) b.SslMode = Npgsql.SslMode.VerifyCA;
+                return b.ConnectionString;
+            }
+            case DataSourceKind.MySql:
+            {
+                var b = new MySqlConnector.MySqlConnectionStringBuilder(cs);
+                // MySqlConnector has one port for every server, and each forwarder has its own, so only the first
+                // server goes through the gateway (failover between MySQL servers then needs a direct path).
+                var first = b.Server.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).FirstOrDefault() ?? b.Server;
+                var r = route(first, (int)b.Port);
+                b.Server = r.Host;
+                b.Port = (uint)r.Port;
+                return b.ConnectionString;
+            }
+            case DataSourceKind.SqlServer:
+            {
+                var b = new Microsoft.Data.SqlClient.SqlConnectionStringBuilder(cs);
+                var ds = b.DataSource.Trim();
+                var proto = ds.StartsWith("tcp:", StringComparison.OrdinalIgnoreCase) ? "tcp:" : "";
+                ds = ds[proto.Length..];
+                var comma = ds.LastIndexOf(',');
+                var host = comma > 0 ? ds[..comma] : ds;
+                var port = comma > 0 && int.TryParse(ds[(comma + 1)..], out var p) ? p : 1433;
+                var rs = route(host.Split('\\')[0], port);
+                b.DataSource = $"tcp:{rs.Host},{rs.Port}";
+                b.TrustServerCertificate = true;
+                return b.ConnectionString;
+            }
+            default:
+                return cs;
+        }
+    }
+
+    private static (string Host, int Port) SplitHostPort(string h, int fallbackPort)
+    {
+        if (h.StartsWith('[') && h.IndexOf("]:", StringComparison.Ordinal) is var e and > 0 && int.TryParse(h[(e + 2)..], out var p6)) return (h[1..e], p6);
+        if (h.StartsWith('[') && h.EndsWith(']')) return (h[1..^1], fallbackPort);
+        var i = h.LastIndexOf(':');
+        return i > 0 && h.IndexOf(':') == i && int.TryParse(h[(i + 1)..], out var p) ? (h[..i], p) : (h, fallbackPort);
     }
 
     /// <summary>Rewrites a connection string to sign in as the current Windows user (no stored password).</summary>

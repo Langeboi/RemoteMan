@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <!-- The gateway's server side in one program: "relay" (runs at home, reachable on 443) and "connector"
+       (runs in each remote network, connects out only), plus the admin commands. Shipped as the
+       ghcr.io/langeboi/remoteman-gateway image (deploy/gateway). -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>remoteman-gateway</AssemblyName>
+    <RootNamespace>RemoteMan.Gateway.Server</RootNamespace>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <Version>0.1.0</Version>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\RemoteMan.Gateway\RemoteMan.Gateway.csproj" />
+  </ItemGroup>
+</Project>

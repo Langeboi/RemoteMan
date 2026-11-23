@@ -29,6 +29,8 @@ public sealed class AppSettings
     /// <summary>Data sources that already got the built-in snippets, so deleted ones stay deleted.</summary>
     public List<string> SnippetsSeeded { get; set; } = new();
     public BackupSettings Backup { get; set; } = new();
+    /// <summary>This PC's RemoteMan gateway enrollment (More > Gateway). Null = not set up.</summary>
+    public GatewayConfig? Gateway { get; set; }
 
     // Per-user UI state (not shared through the data source).
     public List<Guid> Favorites { get; set; } = new();
@@ -177,4 +179,12 @@ public sealed class BackupSettings
     public int Keep { get; set; } = 14;
     public bool IncludeSecrets { get; set; } = true;
     public DateTimeOffset? LastBackup { get; set; }
+}
+
+/// <summary>The relay and this device's token (DPAPI-protected, so the file alone is no use on another PC).</summary>
+public sealed class GatewayConfig
+{
+    public string Url { get; set; } = "";
+    public string Token { get; set; } = "";
+    public string? Device { get; set; }
 }

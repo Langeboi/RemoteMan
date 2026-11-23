@@ -123,6 +123,14 @@ and add the second server under **Servers > Add server**: it gives you that serv
 join key included. Until the first release only the `:test` image exists; switch both lines to `:latest` after it. More in [deploy/docker](deploy/docker/README.md);
 the script for servers without Docker is still in [deploy/postgres](deploy/postgres/README.md).
 
+## Gateway: other networks without a VPN
+
+Reach the database and the machines at school, in a friend's homelab or behind CG-NAT over 443, with no port
+forwarding on their side. A relay runs at home (or anywhere with a public IP) and a connector runs in each remote
+network; both only connect out, and RemoteMan's traffic is encrypted end to end through them. Paste your invite
+under **More > Gateway**, then pick a site on a folder, an entry or the data source. Setup in
+[deploy/gateway](deploy/gateway/README.md).
+
 ## Install
 
 Download `RemoteMan-win-Setup.exe` from the [latest release](https://github.com/Langeboi/RemoteMan/releases/latest)
