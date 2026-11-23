@@ -178,10 +178,7 @@ public sealed class WebSessionViewModel(Entry e, HostEndpoint ep, ResolvedCreden
         {
             if (Entry.Kind == EntryKind.Proxmox) return RemoteMan.Protocols.Proxmox.ProxmoxConsole.ConsoleUrl(Endpoint, Entry.Proxmox ?? new ProxmoxSettings());
             var url = WebSettings.NormalizeUrl(Settings.Url);
-            if (!Uri.TryCreate(url, UriKind.Absolute, out var u)) return url;
-            var b = new UriBuilder(u) { Host = Endpoint.Host };
-            if (Endpoint.Port > 0 && Endpoint.Port != (u.Scheme == "https" ? 443 : 80)) b.Port = Endpoint.Port;
-            return b.Uri.ToString();
+            return RemoteMan.Core.Networking.WebEndpoints.UrlFor(url, Endpoint) ?? url;
         }
     }
 }

@@ -342,9 +342,8 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
         }
 
         var probe = EntryStore.Clone(e);
-        if (probe.Kind == EntryKind.Web && probe.Endpoints.Count == 0 && WebSettings.NormalizeUrl(probe.Web?.Url) is { Length: > 0 } url)
-            probe.Endpoints.Add(EndpointResolver.Parse(url) is var ep && ep.Port == 0
-                ? ep with { Port = url.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ? 80 : 443 } : ep);
+        // A web entry tries the URL's own host first, then its fallback hosts in order.
+        if (probe.Kind == EntryKind.Web) probe.Endpoints = WebEndpoints.For(e).All.ToList();
 
         Message = $"Connecting to {e.Name}…";
 

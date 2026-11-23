@@ -32,8 +32,14 @@ public sealed class EndpointResolver
     {
         var attempts = new List<EndpointAttempt>();
         var defaultPort = Entry.DefaultPort(entry.Kind);
-        foreach (var ep in entry.Endpoints.Where(e => !string.IsNullOrWhiteSpace(e.Host)))
+        foreach (var raw in entry.Endpoints.Where(e => !string.IsNullOrWhiteSpace(e.Host)))
         {
+            // "10.0.0.5:8443" or "https://10.0.0.5" typed into the host box still works; junk is skipped, not fatal.
+            if (Clean(raw) is not { } ep)
+            {
+                attempts.Add(new(raw, false, TimeSpan.Zero, "is not a valid host name or IP address"));
+                continue;
+            }
             var target = ep.Port > 0 ? ep : ep with { Port = defaultPort };
             var sw = Stopwatch.StartNew();
             using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
@@ -68,9 +74,8 @@ public sealed class EndpointResolver
         text = text.Trim();
         if (Uri.TryCreate(text, UriKind.Absolute, out var uri) && !string.IsNullOrEmpty(uri.Host) && text.Contains("://"))
             return new HostEndpoint(uri.Host.Trim('[', ']'), uri.IsDefaultPort ? 0 : uri.Port);
-        if (text.StartsWith('['))
+        if (text.StartsWith('[') && text.IndexOf(']') is var close and > 0)
         {
-            var close = text.IndexOf(']');
             var host = text[1..close];
             var rest = text[(close + 1)..];
             return new HostEndpoint(host, rest.StartsWith(':') && int.TryParse(rest[1..], out var p6) ? p6 : 0);
@@ -79,5 +84,29 @@ public sealed class EndpointResolver
         if (colon > 0 && text.IndexOf(':') == colon && int.TryParse(text[(colon + 1)..], out var port))
             return new HostEndpoint(text[..colon], port);
         return new HostEndpoint(text);
+    }
+
+    /// <summary>
+    /// The endpoint as something a socket or URL can use: trimmed, with a scheme, path or ":port" typed into
+    /// the host box moved out of it, and IPv6 brackets removed. Null when what is left is not a host name or
+    /// IP address, or the port is out of range. Never throws.
+    /// </summary>
+    public static HostEndpoint? Clean(HostEndpoint? ep)
+    {
+        var text = (ep?.Host ?? "").Trim();
+        if (text.Length == 0) return null;
+        var port = ep!.Port;
+        try
+        {
+            if (!text.Contains("://", StringComparison.Ordinal) && text.IndexOfAny(['/', '\\', '?', '#']) is var cut and > 0)
+                text = text[..cut];
+            var parsed = Parse(text);
+            text = parsed.Host.Trim().Trim('[', ']');
+            if (parsed.Port > 0) port = parsed.Port;
+        }
+        catch (Exception ex) when (ex is ArgumentException or FormatException or UriFormatException) { return null; }
+        if (port is < 0 or > 65535) return null;
+        if (text.Length == 0 || Uri.CheckHostName(text) == UriHostNameType.Unknown) return null;
+        return new HostEndpoint(text, port);
     }
 }
