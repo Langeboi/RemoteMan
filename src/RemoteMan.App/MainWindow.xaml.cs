@@ -896,8 +896,10 @@ public partial class MainWindow : Window
     private void OnDataSources(object sender, RoutedEventArgs e)
     {
         var dlg = new DataSourceWindow(_settings) { Owner = this };
-        if (dlg.ShowDialog() == true)
-            Views.ChoiceDialog.Info(this, "Restart to switch", "Restart RemoteMan to switch to the new data source.");
+        if (dlg.ShowDialog() != true) return;
+        if (Views.ChoiceDialog.Show(this, "Restart to apply",
+                "The data source (and its gateway site) is used from the next start. Restart RemoteMan now? Open sessions are closed; you can reopen them when it starts.",
+                ["Restart now", "Later"], Views.DialogIcon.Question) == 0) RestartApp();
     }
 
     private void OnImport(object sender, RoutedEventArgs e) => new ImportWindow(_vm) { Owner = this }.ShowDialog();

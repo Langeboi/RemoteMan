@@ -78,6 +78,12 @@ public sealed class GatewayService
     /// <summary>Raised about once a second while set up, and on every change (from a worker thread).</summary>
     public event Action? Changed;
 
+    /// <summary>
+    /// Where this PC is told to use the gateway ("Data source", "3 folders/entries"), for the status box's hint
+    /// when nothing has gone through it yet. Set by the main window's view model.
+    /// </summary>
+    public Func<string?>? UsageSummary { get; set; }
+
     /// <summary>Measure the relay now (the box was opened).</summary>
     public void RefreshSoon() => _nextPing = DateTime.MinValue;
 
