@@ -107,6 +107,19 @@ public sealed class GatewayTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task The_manual_switch_beats_direct_first()
+    {
+        using var client = Client();
+        bool? manual = true;
+        using var fwd = new LocalForwarder(client, "lab", [$"127.0.0.1:{EchoPort}"], directFirst: true) { Override = () => manual };
+        Assert.Equal("a"u8.ToArray(), await RoundTrip(fwd.Port, "a"u8.ToArray()));
+        Assert.Equal($"127.0.0.1:{EchoPort} via lab", fwd.LastPath);    // connected: the gateway though it answers directly
+        manual = false;
+        Assert.Equal("b"u8.ToArray(), await RoundTrip(fwd.Port, "b"u8.ToArray()));
+        Assert.Equal($"127.0.0.1:{EchoPort}", fwd.LastPath);            // disconnected: direct
+    }
+
+    [Fact]
     public async Task Many_connections_at_once_all_get_through()
     {
         // Four people with a few sessions each: tunnels are independent, so they open side by side.

@@ -25,6 +25,7 @@ public sealed class GatewayStatusBox : Border
     private readonly TextBlock _hint = new() { TextWrapping = TextWrapping.Wrap, FontSize = 11, Margin = new Thickness(0, 10, 0, 0), Visibility = Visibility.Collapsed };
     private readonly TextBlock _error = new() { TextWrapping = TextWrapping.Wrap, FontSize = 11, Margin = new Thickness(0, 8, 0, 0), Visibility = Visibility.Collapsed };
     private string _sitesKey = "";
+    private readonly Border[] _modeButtons = new Border[3];
 
     /// <summary>"Gateway settings…" was clicked.</summary>
     public event Action? SettingsRequested;
@@ -49,6 +50,27 @@ public sealed class GatewayStatusBox : Border
         head.Children.Add(_chip);
         head.Children.Add(title);
 
+        var modes = new Grid { Margin = new Thickness(0, 10, 0, 2) };
+        var modeTrack = new Border { CornerRadius = new CornerRadius(8), Padding = new Thickness(2), Child = modes };
+        modeTrack.SetResourceReference(BackgroundProperty, "Inset");
+        (GatewayMode Mode, string Label, string Tip)[] options =
+        [
+            (GatewayMode.Auto, "Auto", "Directly when the host answers, through the gateway when it doesn't"),
+            (GatewayMode.Connected, "Connected", "Everything goes through the gateway"),
+            (GatewayMode.Disconnected, "Disconnected", "Nothing goes through the gateway: direct connections only"),
+        ];
+        for (var i = 0; i < options.Length; i++)
+        {
+            var (mode, label, tip) = options[i];
+            modes.ColumnDefinitions.Add(new ColumnDefinition());
+            var text = new TextBlock { Text = label, FontSize = 11.5, FontWeight = FontWeights.SemiBold, HorizontalAlignment = HorizontalAlignment.Center };
+            var b = new Border { CornerRadius = new CornerRadius(6), Padding = new Thickness(0, 5, 0, 6), Child = text, Cursor = Cursors.Hand, ToolTip = tip, Background = Brushes.Transparent };
+            b.MouseLeftButtonUp += (_, _) => GatewayService.Instance.SetMode(mode);
+            Grid.SetColumn(b, i);
+            modes.Children.Add(b);
+            _modeButtons[i] = b;
+        }
+
         var kpis = new Grid { Margin = new Thickness(0, 6, 0, 0) };
         for (var i = 0; i < 3; i++) kpis.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(i == 2 ? 1.4 : 1, GridUnitType.Star) });
         kpis.Children.Add(Kpi("Relay latency", _latency, null, 0));
@@ -66,7 +88,7 @@ public sealed class GatewayStatusBox : Border
         var rule = new Border { Height = 1, Margin = new Thickness(-14, 10, -14, 0) };
         rule.SetResourceReference(BackgroundProperty, "BorderSoft");
 
-        Child = new StackPanel { Children = { head, _sub, _flow, _error, kpis, sitesHead, _sites, _hint, rule, settings } };
+        Child = new StackPanel { Children = { head, _sub, modeTrack, _flow, _error, kpis, sitesHead, _sites, _hint, rule, settings } };
 
         IsVisibleChanged += (_, _) =>
         {
@@ -90,7 +112,15 @@ public sealed class GatewayStatusBox : Border
         var open = GatewayActivity.OpenTunnels;
         var opening = GatewayActivity.Opening > 0;
 
-        var (text, key) = gw.State switch
+        var off = gw.Mode == GatewayMode.Disconnected;
+        for (var i = 0; i < _modeButtons.Length; i++)
+        {
+            var on = (int)gw.Mode == i;
+            var accent = Themes.GetColor(i == 2 ? "Faint" : i == 1 ? "Ok" : "Accent");
+            _modeButtons[i].Background = on ? new SolidColorBrush(Color.FromArgb(0x40, accent.R, accent.G, accent.B)) : Brushes.Transparent;
+            ((TextBlock)_modeButtons[i].Child).Foreground = Themes.GetBrush(on ? "TextStrong" : "Muted");
+        }
+        var (text, key) = off ? ("Disconnected", "Faint") : gw.State switch
         {
             GatewayState.Down => ("Relay down", "Bad"),
             GatewayState.Connecting => ("Connecting", "Accent"),
@@ -108,7 +138,7 @@ public sealed class GatewayStatusBox : Border
 
         _flow.Relay = gw.RelayHost ?? "Relay";
         _flow.Site = site ?? "Site";
-        _flow.Mode = gw.State switch
+        _flow.Mode = off ? FlowMode.Off : gw.State switch
         {
             GatewayState.Down => FlowMode.RelayDown,
             GatewayState.Connecting => FlowMode.Waiting,
@@ -122,7 +152,7 @@ public sealed class GatewayStatusBox : Border
         _error.Visibility = gw.State == GatewayState.Down && gw.Error is not null ? Visibility.Visible : Visibility.Collapsed;
 
         // The gateway only carries what names a site; say so when nothing has gone through it yet.
-        var idle = open == 0 && !opening && GatewayActivity.BytesIn == 0 && gw.State == GatewayState.Ok && gw.LiveSites.Count > 0;
+        var idle = !off && open == 0 && !opening && GatewayActivity.BytesIn == 0 && gw.State == GatewayState.Ok && gw.LiveSites.Count > 0;
         var usage = idle ? gw.UsageSummary?.Invoke() : null;
         _hint.Text = !idle ? "" : usage is null
             ? $"Nothing uses the gateway yet. Pick {site ?? "a site"} under Gateway on a folder or entry (Edit > Advanced > Connection), " +
@@ -207,7 +237,7 @@ public sealed class GatewayStatusBox : Border
     };
 }
 
-public enum FlowMode { Up, Waiting, SiteDown, RelayDown }
+public enum FlowMode { Up, Waiting, SiteDown, RelayDown, Off }
 
 /// <summary>
 /// This PC → relay → site, drawn as three nodes on two wires with glowing bubbles that drift end to end at random:
@@ -278,7 +308,7 @@ public sealed class GatewayFlow : FrameworkElement
             _ => 1.0,
         };
         _spawnIn -= dt;
-        if (_spawnIn <= 0)
+        if (_spawnIn <= 0 && Mode != FlowMode.Off)
         {
             Spawn();
             if (_burst <= 0 && _rng.NextDouble() < (Mode == FlowMode.Up ? 0.12 : 0.05)) _burst = 2 + _rng.Next(4);
@@ -346,7 +376,8 @@ public sealed class GatewayFlow : FrameworkElement
 
         var ok = Themes.GetColor("Ok"); var bad = Themes.GetColor("Bad"); var accent = Themes.GetColor("Accent");
         var muted = Themes.GetBrush("Muted"); var strong = Themes.GetBrush("TextStrong");
-        var line = Mode == FlowMode.Up ? ok : accent;
+        var off = Mode == FlowMode.Off;
+        var line = off ? Themes.GetColor("Faint") : Mode == FlowMode.Up ? ok : accent;
 
         // Wires: a soft wide glow under a thin line; the broken one red and dashed.
         void Wire(double a, double b, bool broken)
@@ -395,9 +426,9 @@ public sealed class GatewayFlow : FrameworkElement
         }
         var relayDown = Mode == FlowMode.RelayDown;
         var siteDown = Mode == FlowMode.SiteDown;
-        Node(x0, PcGlyph, "This PC", "", true, false, 0);
-        Node(x1, RelayGlyph, "Relay", relayDown ? "unreachable" : Shorten(Relay), !relayDown, relayDown, 1.7);
-        Node(x2, SiteGlyph, Shorten(Site), siteDown ? "offline" : relayDown ? "" : "site", !relayDown && !siteDown, siteDown, 3.1);
+        Node(x0, PcGlyph, "This PC", "", !off, false, 0);
+        Node(x1, RelayGlyph, "Relay", off ? "not used" : relayDown ? "unreachable" : Shorten(Relay), !off && !relayDown, relayDown, 1.7);
+        Node(x2, SiteGlyph, Shorten(Site), siteDown ? "offline" : relayDown || off ? "" : "site", !off && !relayDown && !siteDown, siteDown, 3.1);
     }
 
     private static string Shorten(string s) => s.Length > 22 ? s[..21] + "…" : s;

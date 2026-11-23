@@ -67,7 +67,19 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
             GatewayService.Instance.Configure(_settings.Gateway);
             GatewayService.Instance.Problem += m => OnUi(() => Message = $"Gateway: {m}");
             GatewayService.Instance.UsageSummary = () => GatewayUsage(cfg);
-            var source = DataSourceFactory.Create(cfg, GatewayService.Instance.RouteFor(cfg));
+            GatewayService.Instance.ModeChanged += () => OnUi(() =>
+            {
+                try { _settings.Save(); } catch (Exception ex) { Message = $"Could not save settings: {ex.Message}"; }
+                Message = GatewayService.Instance.Mode switch
+                {
+                    GatewayMode.Connected => "Gateway: connected, everything goes through it",
+                    GatewayMode.Disconnected => "Gateway: disconnected, everything connects directly",
+                    _ => "Gateway: automatic, directly when possible and through the gateway when not",
+                };
+            });
+            // No site named on the data source but the relay has just one: the database uses it too (directly first).
+            var dbSite = await GatewayService.Instance.DefaultSiteAtStartupAsync(cfg);
+            var source = DataSourceFactory.Create(cfg, GatewayService.Instance.RouteFor(cfg, dbSite));
             if (source is RedundantDataSource r)
                 r.FailedOver += (_, now) => OnUi(() => { DataSourceText = r.DisplayName; Message = $"Data source failed over to {now.DisplayName}"; });
             _protector = Secrets.For(cfg);
@@ -107,7 +119,7 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
     private string? GatewayUsage(DataSourceConfig cfg)
     {
         var parts = new List<string>();
-        if (cfg.GatewaySite is { Length: > 0 } ds) parts.Add($"the database and every entry in it ({ds}) unless a folder or entry says otherwise");
+        if (GatewayService.Instance.DefaultSite(cfg) is { } ds) parts.Add($"the database and every entry ({ds}) unless a folder or entry says otherwise");
         var own = _store?.Entries.Count(e => e.Connection?.GatewaySite is { Length: > 0 }) ?? 0;
         if (own > 0) parts.Add($"{own} folder{(own == 1 ? "" : "s")} or entr{(own == 1 ? "y" : "ies")}");
         return parts.Count == 0 ? null : string.Join(" and ", parts);
@@ -420,7 +432,9 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
 
         // A gateway site (on the entry or a folder above it): try the hosts directly first unless it says
         // "always", then go through the site's connector, which tries them in the same order.
-        var gateway = _store?.GatewayFor(e, GatewayService.Instance.IsConfigured ? _settings.Active.GatewaySite : null);
+        // The status box's switch: Disconnected = direct only, as if no gateway were set up.
+        var gateway = GatewayService.Instance.Mode == GatewayMode.Disconnected ? null
+            : _store?.GatewayFor(e, GatewayService.Instance.DefaultSite(_settings.Active));
         // Off-site (the last connection to this site needed the gateway, the database's included): skip the
         // direct try and its timeout.
         var skipDirect = gateway is { } g0 && (g0.Always || GatewayService.Instance.PreferGateway(g0.Site));

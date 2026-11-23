@@ -56,7 +56,7 @@
                                       ToolTip="Sign in to the database as the current Windows user (Kerberos/NTLM). User and password in the server lines are ignored." />
                             <TextBlock Grid.Row="5" Text="Gateway site" Style="{StaticResource MutedText}" VerticalAlignment="Center" />
                             <StackPanel Grid.Row="5" Grid.Column="1" Orientation="Horizontal" Margin="0,4,0,2">
-                                <TextBox x:Name="GatewayBox" Width="140" ToolTip="A site on your RemoteMan gateway relay (More > Gateway settings). Empty = always direct." />
+                                <TextBox x:Name="GatewayBox" Width="140" ToolTip="A site on your RemoteMan gateway relay (More > Gateway settings). Empty = the relay's only site when it has just one. The database is tried directly first either way." />
                                 <CheckBox x:Name="GatewayAlwaysBox" Content="Always (skip the direct try)" Margin="10,0,0,0" VerticalAlignment="Center"
                                           ToolTip="Off: each connection tries the servers directly first and uses the gateway only when they don't answer (off-site)." />
                             </StackPanel>

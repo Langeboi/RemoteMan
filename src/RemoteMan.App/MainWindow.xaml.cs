@@ -511,7 +511,7 @@ public partial class MainWindow : Window
         GwPill.Visibility = gw.IsConfigured ? Visibility.Visible : Visibility.Collapsed;
         if (!gw.IsConfigured) { GwButton.IsChecked = false; return; }
         var site = gw.LiveSites.FirstOrDefault(s => string.Equals(s.Name, gw.ActiveSite, StringComparison.OrdinalIgnoreCase));
-        var (led, tip) = gw.State switch
+        var (led, tip) = gw.Mode == Services.GatewayMode.Disconnected ? ("Faint", "Gateway: disconnected (direct connections only)") : gw.State switch
         {
             Services.GatewayState.Down => ("Bad", $"Gateway: can't reach the relay {gw.RelayHost}"),
             Services.GatewayState.Connecting => ("Accent", $"Gateway: connecting to {gw.RelayHost}"),

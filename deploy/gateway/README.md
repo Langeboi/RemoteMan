@@ -142,6 +142,10 @@ the PC may use and whether their connectors are online.
 
 ## 4. Use it
 
+With one site there's nothing to set: the database and every entry try directly first and go through the site when
+that doesn't answer. Once RemoteMan notices it's off-site, it skips the direct try (and its timeout) until a direct
+connection works again. With several sites, or to pin things down:
+
 - **Entries and folders**: Edit > Advanced > Connection > **Gateway**: pick the site. On a folder it covers everything
   inside (an entry or sub-folder can say *None (direct only)* or another site). *Always* skips the direct try.
 - **The database**: Data sources > your source > **Gateway site**. Entries in that data source then use the same site
