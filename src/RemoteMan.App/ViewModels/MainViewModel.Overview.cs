@@ -5,31 +5,32 @@ using RemoteMan.Core.Model;
 namespace RemoteMan.App.ViewModels;
 
 /// <summary>
-/// The Overview tab: a click on an entry in the tree shows what it is, where it points and how it logs in.
-/// There is only ever one; it follows the selection and comes to the front when an entry is clicked.
+/// The entry overview: a click on an entry in the tree shows what it is, where it points and how it logs in,
+/// inside the Dashboard tab (no tab of its own). It follows the selection; opening a session puts the dashboard back.
 /// </summary>
 public sealed partial class MainViewModel
 {
-    /// <summary>The Overview tab while it is open (closing it is fine: the next click opens it again).</summary>
+    /// <summary>The one overview, created on the first click and reused after that.</summary>
     public OverviewViewModel? Overview { get; private set; }
 
-    /// <summary>A click on an entry in the tree: show its Overview in the focused pane, in front.</summary>
+    /// <summary>A click on an entry in the tree: show its overview in the Dashboard tab and bring that tab to the front.</summary>
     public void ShowOverview()
     {
         if (Selected is not { } node || node.Id == FavoritesId || node.IsFolder) return;
-        if (Overview is { } o && Sessions.Contains(o))
+        if (Overview is null)
         {
-            // Stays where it is, unless the other pane has the focus in split view: then it moves there.
-            if (IsSplit && o.Pane != FocusedPane) MoveSession(o, FocusedPane);
-            RefreshOverview();
-            ActiveSession = o;
-            return;
+            Overview = new OverviewViewModel { Main = this };
+            Overview.CopyTotp = CopyTotpCommand;
         }
-        Overview = new OverviewViewModel { Main = this };
-        Overview.CopyTotp = CopyTotpCommand;
-        Overview.Closed += s => { ((OverviewViewModel)s).Stop(); if (Overview == s) Overview = null; };
         RefreshOverview();
-        AddSession(Overview);
+        Dashboard.EntryInfo = Overview;
+        ActiveSession = Dashboard;
+    }
+
+    /// <summary>Back to the plain dashboard (a session was opened, or the shown entry is gone).</summary>
+    private void HideOverview()
+    {
+        if (Dashboard is { EntryInfo: not null } d) d.EntryInfo = null;
     }
 
     /// <summary>Fills the Overview from the selected entry. Runs on every selection, presence, Zabbix or Oxidized change.</summary>
@@ -38,7 +39,7 @@ public sealed partial class MainViewModel
         if (Overview is not { } o || _store is null) return;
         if (Selected is not { } node || node.Id == FavoritesId || node.IsRoot)
         {
-            if (Selected is null && o.Node is { } shown && _store.Get(shown.Id) is null) CloseSession(o);
+            if (Selected is null && o.Node is { } shown && _store.Get(shown.Id) is null) HideOverview();
             return;
         }
         var e = node.Entry;

@@ -146,9 +146,22 @@
                 </DataTrigger>
             </DataTemplate.Triggers>
         </DataTemplate>
+        <DataTemplate DataType="{x:Type vm:OverviewViewModel}"><views:OverviewView /></DataTemplate>
     </UserControl.Resources>
 
-    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False">
+    <Grid>
+    <!-- A click on an entry in the tree shows its overview here, in place of the widgets; opening a session brings the widgets back -->
+    <DockPanel Visibility="{Binding ShowingEntry, Converter={StaticResource BoolVis}}">
+        <Border DockPanel.Dock="Top" BorderBrush="{StaticResource Depth.CardBorder}" BorderThickness="0,0,0,1" Padding="20,7,12,7">
+            <TextBlock FontSize="12" VerticalAlignment="Center">
+                <Hyperlink Command="{Binding BackToDashboardCommand}" Foreground="{StaticResource Link}" TextDecorations="{x:Null}" ToolTip="Back to the dashboard widgets"><Run Text="&#x2190; Dashboard" /></Hyperlink>
+                <Run Text="  /  " Foreground="{StaticResource Faint}" /><Run Text="{Binding EntryInfo.Name, Mode=OneWay}" Foreground="{StaticResource Muted}" />
+            </TextBlock>
+        </Border>
+        <ContentControl Content="{Binding EntryInfo}" Focusable="False" />
+    </DockPanel>
+    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False"
+                  Visibility="{Binding ShowingEntry, Converter={StaticResource InvBoolVis}}">
         <StackPanel Margin="20,18,8,10">
             <!-- Heading: data source, state, buttons -->
             <DockPanel Margin="0,0,12,16">
@@ -487,4 +500,5 @@
             </UniformGrid>
         </StackPanel>
     </ScrollViewer>
+    </Grid>
 </UserControl>
