@@ -66,6 +66,7 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
         {
             GatewayService.Instance.Configure(_settings.Gateway);
             GatewayService.Instance.Problem += m => OnUi(() => Message = $"Gateway: {m}");
+            GatewayService.Instance.UsageSummary = () => GatewayUsage(cfg);
             var source = DataSourceFactory.Create(cfg, GatewayService.Instance.RouteFor(cfg));
             if (source is RedundantDataSource r)
                 r.FailedOver += (_, now) => OnUi(() => { DataSourceText = r.DisplayName; Message = $"Data source failed over to {now.DisplayName}"; });
@@ -100,6 +101,16 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
             DataSourceText = $"{cfg.Name}: {ex.Message}";
             Message = DataSourceText;
         }
+    }
+
+    /// <summary>What on this PC names a gateway site: the data source, and folders or entries that set one themselves.</summary>
+    private string? GatewayUsage(DataSourceConfig cfg)
+    {
+        var parts = new List<string>();
+        if (cfg.GatewaySite is { Length: > 0 } ds) parts.Add($"the data source ({ds})");
+        var own = _store?.Entries.Count(e => e.Connection?.GatewaySite is { Length: > 0 }) ?? 0;
+        if (own > 0) parts.Add($"{own} folder{(own == 1 ? "" : "s")} or entr{(own == 1 ? "y" : "ies")}");
+        return parts.Count == 0 ? null : string.Join(" and ", parts);
     }
 
     private void ShowOnlineState(IDataSource source, EntryStore store)

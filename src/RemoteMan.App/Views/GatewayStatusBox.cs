@@ -22,6 +22,7 @@ public sealed class GatewayStatusBox : Border
     private readonly TextBlock _latency = Big(), _tunnels = Big(), _rate = Big();
     private readonly Sparkline _spark = new() { Height = 22, Margin = new Thickness(0, 4, 0, 0) };
     private readonly StackPanel _sites = new() { Margin = new Thickness(0, 4, 0, 0) };
+    private readonly TextBlock _hint = new() { TextWrapping = TextWrapping.Wrap, FontSize = 11, Margin = new Thickness(0, 10, 0, 0), Visibility = Visibility.Collapsed };
     private readonly TextBlock _error = new() { TextWrapping = TextWrapping.Wrap, FontSize = 11, Margin = new Thickness(0, 8, 0, 0), Visibility = Visibility.Collapsed };
     private string _sitesKey = "";
 
@@ -38,6 +39,7 @@ public sealed class GatewayStatusBox : Border
         SetResourceReference(BorderBrushProperty, "ButtonBorder");
         Effect = new System.Windows.Media.Effects.DropShadowEffect { BlurRadius = 18, ShadowDepth = 4, Opacity = 0.45, Color = Colors.Black };
         _error.SetResourceReference(TextBlock.ForegroundProperty, "Bad");
+        _hint.SetResourceReference(TextBlock.ForegroundProperty, "Warn");
 
         var title = new TextBlock { Text = "Gateway", FontSize = 14, FontWeight = FontWeights.SemiBold, VerticalAlignment = VerticalAlignment.Center };
         title.SetResourceReference(TextBlock.ForegroundProperty, "TextStrong");
@@ -64,7 +66,7 @@ public sealed class GatewayStatusBox : Border
         var rule = new Border { Height = 1, Margin = new Thickness(-14, 10, -14, 0) };
         rule.SetResourceReference(BackgroundProperty, "BorderSoft");
 
-        Child = new StackPanel { Children = { head, _sub, _flow, _error, kpis, sitesHead, _sites, rule, settings } };
+        Child = new StackPanel { Children = { head, _sub, _flow, _error, kpis, sitesHead, _sites, _hint, rule, settings } };
 
         IsVisibleChanged += (_, _) =>
         {
@@ -118,6 +120,16 @@ public sealed class GatewayStatusBox : Border
 
         _error.Text = gw.Error ?? "";
         _error.Visibility = gw.State == GatewayState.Down && gw.Error is not null ? Visibility.Visible : Visibility.Collapsed;
+
+        // The gateway only carries what names a site; say so when nothing has gone through it yet.
+        var idle = open == 0 && !opening && GatewayActivity.BytesIn == 0 && gw.State == GatewayState.Ok && gw.LiveSites.Count > 0;
+        var usage = idle ? gw.UsageSummary?.Invoke() : null;
+        _hint.Text = !idle ? "" : usage is null
+            ? $"Nothing uses the gateway yet. Pick {site ?? "a site"} under Gateway on a folder or entry (Edit > Advanced > Connection), " +
+              "or for the database in Data sources (then restart)."
+            : $"Set to use it: {usage}. Nothing has needed it yet: each connection first tries directly, unless Always is ticked. " +
+              "A data source change applies after a restart.";
+        _hint.Visibility = idle ? Visibility.Visible : Visibility.Collapsed;
         _latency.Text = gw.Latency is { } l ? $"{l.TotalMilliseconds:0} ms" : "–";
         _tunnels.Text = opening ? $"{open} +1" : open.ToString(CultureInfo.CurrentCulture);
         _rate.Text = Rate(gw.InPerSecond + gw.OutPerSecond);
