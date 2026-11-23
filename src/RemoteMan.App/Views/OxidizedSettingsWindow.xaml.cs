@@ -12,17 +12,19 @@ public partial class OxidizedSettingsWindow : Window
 {
     public sealed record Choice<T>(T Value, string Name) { public override string ToString() => Name; }
 
-    private readonly AppSettings _settings;
+    private readonly IntegrationSettings? _shared;
     private readonly EntryStore? _store;
     private readonly ISecretProtector? _protector;
 
-    public OxidizedSettingsWindow(AppSettings settings, EntryStore? store, ISecretProtector? protector)
+    /// <param name="shared">The open data source's settings, where these are saved for everyone on it.</param>
+    public OxidizedSettingsWindow(IntegrationSettings? shared, EntryStore? store, ISecretProtector? protector)
     {
         InitializeComponent();
-        _settings = settings;
+        _shared = shared;
         _store = store;
         _protector = protector;
-        var o = settings.Oxidized;
+        var o = shared?.Oxidized ?? new OxidizedConfig();
+        ShowSharedNote();
 
         EnabledBox.IsChecked = o.Enabled || string.IsNullOrEmpty(o.Url);
         UrlBox.Text = o.Url;
@@ -54,7 +56,7 @@ public partial class OxidizedSettingsWindow : Window
             Enabled = EnabledBox.IsChecked == true,
             Url = UrlBox.Text.Trim(),
             UserName = user.Length == 0 ? null : user,
-            ProtectedPassword = user.Length == 0 ? null : newProtectedPassword ?? _settings.Oxidized.ProtectedPassword,
+            ProtectedPassword = user.Length == 0 ? null : newProtectedPassword ?? _shared?.Oxidized.ProtectedPassword,
             JumpHostEntryId = (ViaBox.SelectedItem as Choice<Guid?>)?.Value,
             IgnoreCertificateErrors = IgnoreCertBox.IsChecked == true,
             PollMinutes = (PollBox.SelectedItem as Choice<int>)?.Value ?? 5,
@@ -64,7 +66,20 @@ public partial class OxidizedSettingsWindow : Window
         };
     }
 
-    private string? Password => PasswordBox.Password is { Length: > 0 } p ? p : OxidizedConnector.LoadPassword(_settings.Oxidized);
+    private string? Password => PasswordBox.Password is { Length: > 0 } p ? p : _shared?.OxidizedPassword;
+
+    private void ShowSharedNote()
+    {
+        if (_shared is null) { SharedNote.Text = "Open a data source first: Oxidized settings are saved in it."; SaveButton.IsEnabled = false; }
+        else
+        {
+            var note = _shared.Note(_shared.OxidizedOrigin, _shared.OxidizedRow);
+            if (_shared.OxidizedProblem is { } p) note += " " + p;
+            if (_shared.WhyNotChangeable is { } why) { note += " " + why; SaveButton.IsEnabled = false; }
+            SharedNote.Text = note;
+        }
+        SharedNoteBox.Visibility = Visibility.Visible;
+    }
 
     private async void OnTest(object sender, RoutedEventArgs e)
     {
@@ -100,17 +115,27 @@ public partial class OxidizedSettingsWindow : Window
         };
     }
 
-    private void OnSave(object sender, RoutedEventArgs e)
+    private async void OnSave(object sender, RoutedEventArgs e)
     {
+        if (_shared is null) return;
         var typed = PasswordBox.Password;
-        var cfg = Read(typed.Length > 0 ? OxidizedConnector.ProtectPassword(typed) : null);
+        var cfg = Read(null);
         if (cfg.Enabled && cfg.Url.Length > 0)
         {
             try { OxidizedClient.BaseUri(cfg.Url); }
             catch (OxidizedApiException ex) { Show(ex.Message, false); return; }
         }
-        _settings.Oxidized = cfg;
-        _settings.Save();
-        DialogResult = true;
+        SaveButton.IsEnabled = false;
+        Show("Saving…", null);
+        try
+        {
+            await _shared.SaveOxidizedAsync(cfg, typed.Length > 0 ? typed : null);
+            DialogResult = true;
+        }
+        catch (Exception ex)
+        {
+            Show(ex.Message, false);
+            SaveButton.IsEnabled = true;
+        }
     }
 }

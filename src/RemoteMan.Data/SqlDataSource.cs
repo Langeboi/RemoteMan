@@ -132,6 +132,7 @@ public abstract partial class SqlDataSource : IDataSource
             await using var cmd = Cmd(c, who);
             DatabaseUser = (await cmd.ExecuteScalarAsync(ct))?.ToString();
         }
+        await InitializeSettingsAsync(c, ct);
     }
 
     // ---------------- shared-session invites ----------------
@@ -431,6 +432,7 @@ public abstract partial class SqlDataSource : IDataSource
                         }
                         catch (DbException) { }
                     }
+                    await PollSettingsAsync(c, ct);
                     SetConnected(true);
                     await Task.Delay(intervalMs, ct);
                 }

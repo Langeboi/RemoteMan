@@ -39,15 +39,15 @@ public sealed partial class MainViewModel
     /// <summary>A connected client with the current settings. The caller disposes it.</summary>
     public Task<OxidizedClient> ConnectOxidizedAsync(CancellationToken ct = default)
     {
-        var cfg = _settings.Oxidized;
-        return OxidizedConnector.ConnectAsync(cfg, OxidizedConnector.LoadPassword(cfg), _store, _protector, ct);
+        var cfg = OxidizedCfg;
+        return OxidizedConnector.ConnectAsync(cfg, _integrations?.OxidizedPassword, _store, _protector, ct);
     }
 
     /// <summary>(Re)starts the node list refresh with the current settings. Called on open and after the settings change.</summary>
     public Task StartOxidizedAsync()
     {
         StopOxidized();
-        var cfg = _settings.Oxidized;
+        var cfg = OxidizedCfg;
         _oxSnapshot = null;
         OxidizedActive = cfg.IsConfigured;
         OxidizedStatusText = OxidizedActive ? "Oxidized: connecting…" : "";
@@ -80,7 +80,7 @@ public sealed partial class MainViewModel
     /// <summary>Fetches the node list now (also after Back up now in a backups tab).</summary>
     public async Task RefreshOxidizedAsync(CancellationToken ct = default)
     {
-        var cfg = _settings.Oxidized;
+        var cfg = OxidizedCfg;
         try
         {
             using var linked = CancellationTokenSource.CreateLinkedTokenSource(ct);
@@ -182,7 +182,7 @@ public sealed partial class MainViewModel
             m = _oxSnapshot?.Matcher.Match(e);
             if (m is null) return;
         }
-        var s = new ConfigBackupsSessionViewModel(e, m.Node, _settings.Oxidized.Url, ConnectOxidizedAsync, () => RefreshOxidizedAsync(_oxCts?.Token ?? default));
+        var s = new ConfigBackupsSessionViewModel(e, m.Node, OxidizedCfg.Url, ConnectOxidizedAsync, () => RefreshOxidizedAsync(_oxCts?.Token ?? default));
         TrackFailures(s);
         AddSession(s);
         Message = "";
@@ -192,7 +192,7 @@ public sealed partial class MainViewModel
     private void OpenInOxidized()
     {
         if (_oxSnapshot is not { } snap || Selected?.Entry is not { } e || snap.Matcher.Match(e) is not { } m) return;
-        try { Process.Start(new ProcessStartInfo(OxidizedClient.NodePageUrl(_settings.Oxidized.Url, m.Node)) { UseShellExecute = true }); }
+        try { Process.Start(new ProcessStartInfo(OxidizedClient.NodePageUrl(OxidizedCfg.Url, m.Node)) { UseShellExecute = true }); }
         catch (Exception ex) { Message = ex.Message; }
     }
 

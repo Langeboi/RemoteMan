@@ -44,6 +44,10 @@ Make each person their own login under **Users** (edit, read-only or admin). Adm
 and manage logins in RemoteMan's Data sources > Users too. When everyone has one, turn the shared
 `remoteman` login off there.
 
+The Zabbix and Oxidized settings live in the database too, so the whole team gets them. Everyone can read them;
+only admins can change them (in RemoteMan, More > Zabbix settings / Oxidized settings). The image sets this up
+on start, so an existing server only needs the usual upgrade below.
+
 ## Day to day
 
 | Where | What |

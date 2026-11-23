@@ -54,12 +54,12 @@ public sealed partial class MainViewModel
     public async Task StartZabbixAsync()
     {
         await StopZabbixAsync();
-        var cfg = _settings.Zabbix;
-        var token = cfg.IsConfigured ? ZabbixConnector.LoadToken(cfg) : null;
+        var cfg = ZabbixCfg;
+        var token = cfg.IsConfigured ? _integrations?.ZabbixToken : null;
         if (token is null)
         {
             ZabbixActive = false;
-            ZabbixStatusText = "";
+            ZabbixStatusText = cfg.IsConfigured && _integrations?.ZabbixProblem is { } problem ? $"Zabbix: {problem}" : "";
             ZabbixStatusTag = null;
             ApplyZabbix();
             return;
@@ -197,7 +197,7 @@ public sealed partial class MainViewModel
     private void OpenInZabbix()
     {
         if (ZabbixSnapshot is not { } snap || Selected?.Entry is not { } e || snap.HealthFor(e).Host is not { } host) return;
-        try { Process.Start(new ProcessStartInfo(ZabbixClient.ProblemsUrl(_settings.Zabbix.Url, host.HostId)) { UseShellExecute = true }); }
+        try { Process.Start(new ProcessStartInfo(ZabbixClient.ProblemsUrl(ZabbixCfg.Url, host.HostId)) { UseShellExecute = true }); }
         catch (Exception ex) { Message = ex.Message; }
     }
 

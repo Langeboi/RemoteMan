@@ -76,6 +76,19 @@ functions in the database that can only create, change or remove RemoteMan login
 replication login or anything else), and only admins may call them, so nobody needs to be a database
 superuser. Logins live in the database, so the standby gets every change by replication.
 
+### Shared Zabbix and Oxidized settings
+
+The Zabbix and Oxidized connections (URL, API token, jump host, refresh and matching) are kept in the
+database, so everyone on it gets them without setting anything up. The token and password are encrypted
+with the team vault passphrase like every other secret. Everyone can read them; only **Admin** logins
+(and the shared `remoteman` login) can change them, in More > Zabbix settings / Oxidized settings.
+The server enforces that, so an editor can't change them with another client either.
+
+Servers set up before this need the same `sudo bash remoteman-db.sh update` on each (it adds the
+`remoteman_settings` table and the admins-only guard). Until then the settings still work, but anyone who
+can edit could change them. The first admin who opens RemoteMan after updating is asked whether to share the
+Zabbix and Oxidized settings their PC already has.
+
 ### From the command line
 
 Run these on the **primary** (logins reach the standby by themselves):

@@ -52,18 +52,18 @@ public partial class MainWindow : Window
         };
         _vm.ZabbixImportDialog = (snap, store) =>
         {
-            var dlg = new ZabbixImportWindow(snap, store, _settings.Zabbix.Url, _vm.ImportParentFolder()) { Owner = this };
+            var dlg = new ZabbixImportWindow(snap, store, _vm.ZabbixCfg.Url, _vm.ImportParentFolder()) { Owner = this };
             return dlg.ShowDialog() == true ? dlg.Plan : null;
         };
         _vm.ZabbixSettingsDialog = () =>
-            new ZabbixSettingsWindow(_settings, _vm.Store, _vm.Protector) { Owner = this }.ShowDialog() == true;
+            new ZabbixSettingsWindow(_vm.Integrations, _vm.Store, _vm.Protector) { Owner = this }.ShowDialog() == true;
         _vm.OxidizedLinkDialog = (snap, entry) =>
         {
             var dlg = new OxidizedLinkWindow(snap, entry) { Owner = this };
             return dlg.ShowDialog() == true ? dlg.ChosenNode ?? "" : null;
         };
         _vm.OxidizedSettingsDialog = () =>
-            new OxidizedSettingsWindow(_settings, _vm.Store, _vm.Protector) { Owner = this }.ShowDialog() == true;
+            new OxidizedSettingsWindow(_vm.Integrations, _vm.Store, _vm.Protector) { Owner = this }.ShowDialog() == true;
         DataContext = _vm;
         SetUpNotices();
 

@@ -12,17 +12,19 @@ public partial class ZabbixSettingsWindow : Window
 {
     public sealed record Choice<T>(T Value, string Name) { public override string ToString() => Name; }
 
-    private readonly AppSettings _settings;
+    private readonly IntegrationSettings? _shared;
     private readonly EntryStore? _store;
     private readonly ISecretProtector? _protector;
 
-    public ZabbixSettingsWindow(AppSettings settings, EntryStore? store, ISecretProtector? protector)
+    /// <param name="shared">The open data source's settings, where these are saved for everyone on it.</param>
+    public ZabbixSettingsWindow(IntegrationSettings? shared, EntryStore? store, ISecretProtector? protector)
     {
         InitializeComponent();
-        _settings = settings;
+        _shared = shared;
         _store = store;
         _protector = protector;
-        var z = settings.Zabbix;
+        var z = shared?.Zabbix ?? new ZabbixConfig();
+        ShowSharedNote();
 
         EnabledBox.IsChecked = z.Enabled || string.IsNullOrEmpty(z.Url);
         UrlBox.Text = z.Url;
@@ -58,7 +60,7 @@ public partial class ZabbixSettingsWindow : Window
     {
         Enabled = EnabledBox.IsChecked == true,
         Url = UrlBox.Text.Trim(),
-        ProtectedToken = newProtectedToken ?? _settings.Zabbix.ProtectedToken,
+        ProtectedToken = newProtectedToken ?? _shared?.Zabbix.ProtectedToken,
         JumpHostEntryId = (ViaBox.SelectedItem as Choice<Guid?>)?.Value,
         IgnoreCertificateErrors = IgnoreCertBox.IsChecked == true,
         PollSeconds = (PollBox.SelectedItem as Choice<int>)?.Value ?? 30,
@@ -68,7 +70,20 @@ public partial class ZabbixSettingsWindow : Window
         IgnoreBracketSuffix = BracketBox.IsChecked == true,
     };
 
-    private string? Token => TokenBox.Password.Trim() is { Length: > 0 } t ? t : ZabbixConnector.LoadToken(_settings.Zabbix);
+    private string? Token => TokenBox.Password.Trim() is { Length: > 0 } t ? t : _shared?.ZabbixToken;
+
+    private void ShowSharedNote()
+    {
+        if (_shared is null) { SharedNote.Text = "Open a data source first: Zabbix settings are saved in it."; SaveButton.IsEnabled = false; }
+        else
+        {
+            var note = _shared.Note(_shared.ZabbixOrigin, _shared.ZabbixRow);
+            if (_shared.ZabbixProblem is { } p) note += " " + p;
+            if (_shared.WhyNotChangeable is { } why) { note += " " + why; SaveButton.IsEnabled = false; }
+            SharedNote.Text = note;
+        }
+        SharedNoteBox.Visibility = Visibility.Visible;
+    }
 
     private async void OnTest(object sender, RoutedEventArgs e)
     {
@@ -101,18 +116,28 @@ public partial class ZabbixSettingsWindow : Window
         };
     }
 
-    private void OnSave(object sender, RoutedEventArgs e)
+    private async void OnSave(object sender, RoutedEventArgs e)
     {
+        if (_shared is null) return;
         var typed = TokenBox.Password.Trim();
-        var cfg = Read(typed.Length > 0 ? ZabbixConnector.ProtectToken(typed) : null);
+        var cfg = Read(null);
         if (cfg.Enabled && cfg.Url.Length > 0)
         {
             try { ZabbixClient.ApiEndpoint(cfg.Url); }
             catch (ZabbixApiException ex) { Show(ex.Message, false); return; }
-            if (string.IsNullOrEmpty(cfg.ProtectedToken)) { Show("Paste an API token to turn this on.", false); return; }
+            if (typed.Length == 0 && _shared.ZabbixToken is null) { Show("Paste an API token to turn this on.", false); return; }
         }
-        _settings.Zabbix = cfg;
-        _settings.Save();
-        DialogResult = true;
+        SaveButton.IsEnabled = false;
+        Show("Saving…", null);
+        try
+        {
+            await _shared.SaveZabbixAsync(cfg, typed.Length > 0 ? typed : null);
+            DialogResult = true;
+        }
+        catch (Exception ex)
+        {
+            Show(ex.Message, false);
+            SaveButton.IsEnabled = true;
+        }
     }
 }
