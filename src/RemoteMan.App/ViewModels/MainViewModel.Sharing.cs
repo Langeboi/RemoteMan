@@ -119,6 +119,9 @@ public sealed partial class MainViewModel
             host.RdpConnectionString = desk.ConnectionString;
             host.RdpPassword = desk.Password;
             host.RdpPort = desk.Port;
+            host.RdpListeners = desk.Listeners;
+            string Who(string id) => host.Control.Participants.FirstOrDefault(p => p.Id == id)?.Name ?? "A teammate";
+            desk.ViewerConnected += id => OnUi(() => Message = $"{Who(id)} now sees your {s.Entry.Name} screen");
             // Follow the tab as the window moves; pause the picture while the tab isn't on screen.
             h.Follow = new DispatcherTimer(TimeSpan.FromMilliseconds(400), DispatcherPriority.Background, (_, _) =>
             {

@@ -212,6 +212,37 @@ public class SharingTests
     }
 
     [Fact]
+    public async Task Rdp_tunnel_falls_back_to_the_port_the_invitation_lists()
+    {
+        var echo = new TcpListener(IPAddress.Loopback, 0);
+        echo.Start();
+        _ = Task.Run(async () =>
+        {
+            using var c = await echo.AcceptTcpClientAsync();
+            var s = c.GetStream();
+            var buf = new byte[1024];
+            int n;
+            while ((n = await s.ReadAsync(buf)) > 0) await s.WriteAsync(buf.AsMemory(0, n));
+        });
+        // Windows ignored the port we asked for: nothing listens there, the invitation names the real one.
+        var real = ((IPEndPoint)echo.LocalEndpoint).Port;
+        await using var host = new ShareHost(ShareKind.Rdp, "DC01", "lange", "PC1") { RdpPort = 1, RdpListeners = [("127.0.0.1", real)], RdpConnectionString = "<E/>" };
+        await host.StartAsync([], preferredPort: 0);
+        host.Invite("mads");
+        await using var guest = await ShareClient.ConnectAsync(InviteFor(host, "mads"), "mads", "PC2", false, []);
+        using var viewer = new TcpClient();
+        await viewer.ConnectAsync(IPAddress.Loopback, guest.StartTunnel());
+        var vs = viewer.GetStream();
+        await vs.WriteAsync("pong"u8.ToArray());
+        var got = new byte[4];
+        var read = 0;
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        while (read < 4) read += await vs.ReadAsync(got.AsMemory(read), timeout.Token);
+        Assert.Equal("pong", System.Text.Encoding.ASCII.GetString(got));
+        echo.Stop();
+    }
+
+    [Fact]
     public async Task Rdp_tunnel_carries_bytes_both_ways()
     {
         // Stand-in for the Windows Desktop Sharing port: echoes what it gets.
