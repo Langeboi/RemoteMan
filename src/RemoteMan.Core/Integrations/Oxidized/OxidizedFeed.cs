@@ -166,7 +166,7 @@ public static class OxidizedFeed
             if (TagAliases.TryGetValue(t, out var m)) return m;
         }
         if (e.Icon is { } icon && IconModels.TryGetValue(icon.Trim(), out var byIcon)) return byIcon;
-        foreach (var w in System.Text.RegularExpressions.Regex.Split(e.Name, "[^A-Za-z0-9]+"))
+        foreach (var w in System.Text.RegularExpressions.Regex.Split(e.Name ?? "", "[^A-Za-z0-9]+"))
             if (w.Length > 0 && NameModels.TryGetValue(w, out var byName)) return byName;
         return null;
     }
