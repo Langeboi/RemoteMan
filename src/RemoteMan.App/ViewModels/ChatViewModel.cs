@@ -154,7 +154,7 @@ public sealed partial class ChatViewModel : ObservableObject
         var last = _hub!.LastMessage(room.Id);
         var preview = last is null ? fallback
             : (last.Pending ? "Sending… " : "") + (room.Kind == ChatRoomKind.Direct || ChatRoom.SameUser(last.Sender, _hub.Me) ? (ChatRoom.SameUser(last.Sender, _hub.Me) ? "You: " : "") : Short(last.Sender) + ": ")
-              + ChatLink.Plain(last.Body).Replace('\n', ' ');
+              + ChatFormat.Preview(last.Body);
         return new ChatContact(room, title, initials, user is null ? "" : PresenceChip.ColorFor(user))
         {
             Preview = preview,
@@ -297,25 +297,39 @@ public sealed partial class ChatViewModel : ObservableObject
             if (text.Count > 0) blocks.Add(new ChatTextBlock(text.ToList()));
             text.Clear();
         }
-        var lines = m.Body.Replace("\r\n", "\n").Split('\n');
-        for (var i = 0; i < lines.Length; i++)
+        // Code (``` blocks and pasted config, logs or shell output) first; the rest is text with links and `inline code`.
+        foreach (var seg in ChatFormat.Split(m.Body))
         {
-            var parts = ChatLink.Parse(lines[i]);
-            var only = parts.Where(p => p.Link is not null || p.Text.Trim().Length > 0).ToList();
-            if (only.Count == 1 && only[0].Link is { Kind: ChatLink.Invite } inv)
+            if (seg.Kind == ChatSegmentKind.Code)
             {
                 FlushText();
-                blocks.Add(new ChatInviteBlock(new ChatLinkItem(inv, null, this)));
+                blocks.Add(new ChatCodeBlock(ChatLink.Plain(seg.Text), seg.Language, _main));
                 continue;
             }
-            if (only.Count == 1 && only[0].Link is { Kind: ChatLink.Entry } solo && Resolve(solo) is { Entry: not null } card)
+            var lines = seg.Text.Split('\n');
+            for (var i = 0; i < lines.Length; i++)
             {
-                FlushText();
-                blocks.Add(new ChatCardBlock(card));
-                continue;
+                var parts = ChatLink.Parse(lines[i]);
+                var only = parts.Where(p => p.Link is not null || p.Text.Trim().Length > 0).ToList();
+                if (only.Count == 1 && only[0].Link is { Kind: ChatLink.Invite } inv)
+                {
+                    FlushText();
+                    blocks.Add(new ChatInviteBlock(new ChatLinkItem(inv, null, this)));
+                    continue;
+                }
+                if (only.Count == 1 && only[0].Link is { Kind: ChatLink.Entry } solo && Resolve(solo) is { Entry: not null } card)
+                {
+                    FlushText();
+                    blocks.Add(new ChatCardBlock(card));
+                    continue;
+                }
+                if (text.Count > 0) text.Add(new ChatInlinePart("\n", null));
+                foreach (var p in parts)
+                {
+                    if (p.Link is not null) { text.Add(new ChatInlinePart(p.Text, Resolve(p.Link))); continue; }
+                    foreach (var (t, code) in ChatFormat.Inline(p.Text)) text.Add(new ChatInlinePart(t, null, code));
+                }
             }
-            if (text.Count > 0) text.Add(new ChatInlinePart("\n", null));
-            foreach (var p in parts) text.Add(new ChatInlinePart(p.Text, p.Link is null ? null : Resolve(p.Link)));
         }
         FlushText();
         return blocks;
@@ -528,7 +542,7 @@ public sealed partial class ChatViewModel : ObservableObject
         var mentioned = m.Body.Contains("@" + Short(_hub.Me), StringComparison.OrdinalIgnoreCase);
         if (room.Kind == ChatRoomKind.Everyone && !mentioned) return;
         var where = room.Kind switch { ChatRoomKind.Direct => "direct message", ChatRoomKind.Group => room.Name ?? "group", _ => "mentioned you in Everyone" };
-        var t = new ChatToast(m.RoomId, Short(m.Sender), Initials(m.Sender), PresenceChip.ColorFor(m.Sender), where, ChatLink.Plain(m.Body));
+        var t = new ChatToast(m.RoomId, Short(m.Sender), Initials(m.Sender), PresenceChip.ColorFor(m.Sender), where, ChatFormat.Preview(m.Body));
         Toasts.Insert(0, t);
         while (Toasts.Count > 3) Toasts.RemoveAt(Toasts.Count - 1);
         _main.ChatToastShown();
@@ -595,11 +609,49 @@ public sealed class ChatMessageItem(ChatMessage message, string sender, string i
     public bool IsPending => Message.Pending;
     public bool IsUnreadable => Message.Unreadable;
     public string FullTime => Message.SentAt.ToLocalTime().ToString("f");
+    /// <summary>The whole message as plain text (links as names), for Copy message.</summary>
+    public string PlainText => ChatLink.Plain(Message.Body);
 }
 
 /// <summary>Text with inline link chips (built into a TextBlock by Views.ChatInlines).</summary>
 public sealed record ChatTextBlock(IReadOnlyList<ChatInlinePart> Parts);
-public sealed record ChatInlinePart(string Text, ChatLinkItem? Link);
+public sealed record ChatInlinePart(string Text, ChatLinkItem? Link, bool IsCode = false);
+
+/// <summary>Code, config, logs or shell output: monospace, a few lines high until "Show all", with Copy.</summary>
+public sealed partial class ChatCodeBlock : ObservableObject
+{
+    /// <summary>Lines shown before "Show all".</summary>
+    public const int CollapsedLines = 10;
+    private readonly MainViewModel _main;
+
+    public ChatCodeBlock(string text, string? language, MainViewModel main)
+    {
+        Text = text;
+        Language = language;
+        _main = main;
+        LineCount = text.Count(c => c == '\n') + 1;
+    }
+
+    public string Text { get; }
+    public string? Language { get; }
+    public int LineCount { get; }
+    public string Title => (Language is { Length: > 0 } l ? l : "Code") + $" · {LineCount} line{(LineCount == 1 ? "" : "s")}";
+    public bool IsLong => LineCount > CollapsedLines;
+    [ObservableProperty] [NotifyPropertyChangedFor(nameof(ToggleText))] private bool _isExpanded;
+    [ObservableProperty] private string _copyText = "Copy";
+    public string ToggleText => IsExpanded ? "Show less" : $"Show all {LineCount} lines";
+
+    [RelayCommand] private void Toggle() => IsExpanded = !IsExpanded;
+
+    [RelayCommand]
+    private async Task CopyAsync()
+    {
+        try { Clipboard.SetText(Text); CopyText = "Copied"; }
+        catch (Exception) { _main.Message = "Could not use the clipboard"; return; }
+        await Task.Delay(1500);
+        CopyText = "Copy";
+    }
+}
 /// <summary>A link on a line of its own: a card with the entry's details and buttons.</summary>
 public sealed record ChatCardBlock(ChatLinkItem Link);
 /// <summary>A shared-session invite on a line of its own: a card with Join.</summary>
