@@ -470,6 +470,7 @@
 
                 <TreeView x:Name="Tree" Grid.Row="2" ItemsSource="{Binding Roots}" ItemContainerStyle="{StaticResource EntryItem}"
                           Background="Transparent" BorderThickness="0" Padding="0,3"
+                          ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                           VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling"
                           SelectedItemChanged="OnTreeSelectionChanged" PreviewMouseLeftButtonDown="OnTreeMouseDown" PreviewMouseLeftButtonUp="OnTreeMouseUp"
                           PreviewMouseMove="OnTreeMouseMove" AllowDrop="True" DragOver="OnTreeDragOver" DragLeave="OnTreeDragLeave" Drop="OnTreeDrop"
