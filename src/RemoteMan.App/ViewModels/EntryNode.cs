@@ -37,6 +37,11 @@ public sealed partial class EntryNode : ObservableObject
     /// <summary>Tiny initials badge on the corner of the protocol icon: the first person on this entry, tooltip lists everyone.</summary>
     [ObservableProperty] private PresenceChip? _badge;
     [ObservableProperty] private bool _isDropTarget;
+    /// <summary>How many of your own sessions (tabs or windows) are open to this entry; 0 = not connected.</summary>
+    [ObservableProperty] [NotifyPropertyChangedFor(nameof(IsConnected), nameof(ConnectedTip))] private int _myTabs;
+    /// <summary>You have a session open to this entry: green dot on the icon and a bold name in the tree.</summary>
+    public bool IsConnected => MyTabs > 0;
+    public string ConnectedTip => MyTabs > 1 ? $"You're connected ({MyTabs} sessions)" : "You're connected";
     /// <summary>Picked with Ctrl+click or Shift+click as part of a multi-selection (moved together).</summary>
     [ObservableProperty] private bool _isMultiSelected;
 

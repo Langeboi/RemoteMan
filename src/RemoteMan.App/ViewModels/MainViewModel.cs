@@ -26,6 +26,7 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
         _isSplit = settings.SplitPane;
         CreateDashboard();
         Sessions.CollectionChanged += (_, _) => RefreshDashboard();
+        StartTrackingConnections();
     }
 
     // --- dialogs supplied by the window ---
@@ -173,6 +174,7 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
         else Selected = null;
         ReapplyMultiSelection();
         ApplyPresence();
+        ApplyMyConnections();
         ApplyZabbix();
         ApplyOxidized();
     }
@@ -202,8 +204,9 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
         foreach (var n in _nodes.Values)
         {
             n.People.Clear();
-            foreach (var p in _store.PresenceFor(n.Id))
-                n.People.Add(new PresenceChip(p.Initials, $"{p.User} ({p.Machine}) is {p.State.ToString().ToLowerInvariant()}", PresenceChip.ColorFor(p.User)));
+            // Only teammates with a session open to the entry; selecting or editing it doesn't put them on it.
+            foreach (var p in _store.ConnectedTo(n.Id))
+                n.People.Add(new PresenceChip(p.Initials, $"{p.User} ({p.Machine}) is connected", PresenceChip.ColorFor(p.User)));
             n.Badge = n.People.Count == 0 ? null
                 : n.People[0] with { Initials = n.People[0].Initials[..1], ToolTip = string.Join("\n", n.People.Select(c => c.ToolTip)) };
         }
