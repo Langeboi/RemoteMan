@@ -477,7 +477,7 @@
                                Typography.Capitals="AllSmallCaps" />
                 </Border>
 
-                <TreeView x:Name="Tree" Grid.Row="2" ItemsSource="{Binding Roots}" ItemContainerStyle="{StaticResource EntryItem}"
+                <TreeView x:Name="Tree" Grid.Row="2" views:SmoothScroll.IsEnabled="True" ItemsSource="{Binding Roots}" ItemContainerStyle="{StaticResource EntryItem}"
                           Background="Transparent" BorderThickness="0" Padding="0,3"
                           ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                           VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling"
