@@ -56,7 +56,7 @@ public sealed partial class MainViewModel
 
     private void OpenZabbixHome()
     {
-        var url = _settings.Zabbix.Url;
+        var url = ZabbixCfg.Url;
         if (string.IsNullOrWhiteSpace(url)) return;
         try { Process.Start(new ProcessStartInfo(ZabbixClient.ProblemsUrl(url)) { UseShellExecute = true }); }
         catch (Exception ex) { Message = ex.Message; }
@@ -256,7 +256,7 @@ public sealed partial class MainViewModel
         d.BackupsToday = ox.Nodes.Count(n => n.IsOk && n.LastRun is { } t && t >= now - TimeSpan.FromHours(24));
         d.BackupsFailing = ox.FailingCount;
         d.BackupsChanged = ox.Nodes.Count(n => n.LastChanged is { } c && c >= now - TimeSpan.FromDays(7));
-        d.BackupsMeta = $"{ZabbixLessHost(_settings.Oxidized.Url)} · {ox.FetchedAt.ToLocalTime():HH:mm}";
+        d.BackupsMeta = $"{ZabbixLessHost(OxidizedCfg.Url)} · {ox.FetchedAt.ToLocalTime():HH:mm}";
 
         DashEntry Row(RemoteMan.Core.Integrations.Oxidized.OxidizedNode n, string side, string? health)
         {
@@ -349,7 +349,7 @@ public sealed partial class MainViewModel
 
     private string ZabbixRouteHost()
     {
-        try { return ZabbixClient.ApiEndpoint(_settings.Zabbix.Url).Host; }
-        catch (ZabbixApiException) { return _settings.Zabbix.Url; }
+        try { return ZabbixClient.ApiEndpoint(ZabbixCfg.Url).Host; }
+        catch (ZabbixApiException) { return ZabbixCfg.Url; }
     }
 }

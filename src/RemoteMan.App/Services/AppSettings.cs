@@ -63,8 +63,15 @@ public sealed class AppSettings
     /// <summary>Whether the chat drawer was open at the last exit.</summary>
     public bool ChatOpen { get; set; }
 
+    /// <summary>This PC's Zabbix settings. The data source's shared settings win (see <see cref="IntegrationSettings"/>);
+    /// these are what earlier versions saved, moved up the first time a data source has none, and what the setup window fills in.</summary>
     public ZabbixConfig Zabbix { get; set; } = new();
+    /// <summary>This PC's Oxidized settings; see <see cref="Zabbix"/>.</summary>
     public OxidizedConfig Oxidized { get; set; } = new();
+    /// <summary>Data sources where you chose to keep this PC's integration settings instead of sharing them (so you aren't asked again).</summary>
+    public List<string> IntegrationsKeptLocal { get; set; } = new();
+    /// <summary>Data sources the setup window changed the integrations for: they are saved there the next time it opens.</summary>
+    public List<string> IntegrationsPending { get; set; } = new();
 
     /// <summary>AI assistant providers (keys are not stored here; see <see cref="Secrets"/>).</summary>
     public AiSettings Ai { get; set; } = new();
@@ -99,12 +106,12 @@ public sealed class OpenSessionRecord
     public bool Active { get; set; }
 }
 
-/// <summary>Per-user Zabbix connection. The links between entries and Zabbix hosts live on the entries, so they are shared.</summary>
+/// <summary>Zabbix connection, stored in the data source for everyone on it. The links between entries and Zabbix hosts live on the entries.</summary>
 public sealed class ZabbixConfig
 {
     public bool Enabled { get; set; }
     public string Url { get; set; } = "";
-    /// <summary>API token, DPAPI-protected for this Windows user.</summary>
+    /// <summary>API token: encrypted with the data source's vault key when stored there, DPAPI-protected in this PC's own settings.</summary>
     public string? ProtectedToken { get; set; }
     /// <summary>SSH entry to tunnel the API calls through; null = connect directly.</summary>
     public Guid? JumpHostEntryId { get; set; }
@@ -120,7 +127,7 @@ public sealed class ZabbixConfig
     public ZabbixMatchOptions MatchOptions => new() { ByAddress = MatchByAddress, ByName = MatchByName, IgnoreBracketSuffix = IgnoreBracketSuffix };
 }
 
-/// <summary>Per-user Oxidized connection (config backups of network gear). Hand-made links live on the entries.</summary>
+/// <summary>Oxidized connection (config backups of network gear), stored in the data source for everyone on it. Hand-made links live on the entries.</summary>
 public sealed class OxidizedConfig
 {
     public bool Enabled { get; set; }
@@ -128,7 +135,7 @@ public sealed class OxidizedConfig
     public string Url { get; set; } = "";
     /// <summary>Basic auth in front of Oxidized (nginx, Apache). Empty = no login.</summary>
     public string? UserName { get; set; }
-    /// <summary>DPAPI-protected for this Windows user.</summary>
+    /// <summary>Encrypted with the data source's vault key when stored there, DPAPI-protected in this PC's own settings.</summary>
     public string? ProtectedPassword { get; set; }
     public Guid? JumpHostEntryId { get; set; }
     public bool IgnoreCertificateErrors { get; set; } = true;

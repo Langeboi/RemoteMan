@@ -72,6 +72,8 @@ public sealed class EntryStore : IAsyncDisposable
     public event EventHandler? PresenceChanged;
     /// <summary>Shared-session invites changed (someone invited, accepted, declined or ended).</summary>
     public event EventHandler? SharesChanged;
+    /// <summary>Someone changed the shared settings (Zabbix, Oxidized).</summary>
+    public event EventHandler? SettingsChanged;
 
     public Entry? Get(Guid id) => _entries.TryGetValue(id, out var e) && !e.Deleted ? e : null;
 
@@ -385,6 +387,7 @@ public sealed class EntryStore : IAsyncDisposable
         {
             if (signal.Kind == ChangeSignalKind.Presence) await RefreshPresenceAsync();
             else if (signal.Kind == ChangeSignalKind.Shares) SharesChanged?.Invoke(this, EventArgs.Empty);
+            else if (signal.Kind == ChangeSignalKind.Settings) SettingsChanged?.Invoke(this, EventArgs.Empty);
             else if (signal.Revision is null || signal.Revision > LastRevision) await PullAsync(_cts.Token);
         }
         catch (Exception) when (_cts.IsCancellationRequested) { }

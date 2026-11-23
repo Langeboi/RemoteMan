@@ -81,6 +81,12 @@ public sealed class SqlServerDataSource : SqlDataSource
             updated_at BIGINT NOT NULL, expires_at BIGINT NOT NULL, payload NVARCHAR(MAX) NULL)
         """;
 
+    protected override string? SettingsTableSql => """
+        IF OBJECT_ID(N'dbo.remoteman_settings', N'U') IS NULL
+        CREATE TABLE dbo.remoteman_settings (
+            name NVARCHAR(100) NOT NULL PRIMARY KEY, value NVARCHAR(MAX) NOT NULL, updated_at BIGINT NOT NULL, updated_by NVARCHAR(200) NULL)
+        """;
+
     /// <summary>DOMAIN\user with Windows authentication, the SQL login name otherwise.</summary>
     protected override string? CurrentUserSql => "SELECT SUSER_SNAME()";
 

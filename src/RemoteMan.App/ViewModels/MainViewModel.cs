@@ -85,8 +85,7 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
             ShowOnlineState(source, store);
             RebuildTree();
             OfferReopen();
-            await StartZabbixAsync();
-            await StartOxidizedAsync();
+            await LoadIntegrationsAsync(cfg, store);
             await SeedSnippetsAsync(cfg.Name);
             _ = BackupLoopAsync();
             await StartChatAsync(store);

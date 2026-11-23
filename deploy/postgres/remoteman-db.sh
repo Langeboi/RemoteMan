@@ -509,7 +509,7 @@ $f$;
 -- Who am I, and does this server have the functions (version) RemoteMan expects.
 CREATE OR REPLACE FUNCTION remoteman_admin.me(OUT login text, OUT access text, OUT is_admin boolean, OUT version int)
 LANGUAGE sql STABLE SECURITY DEFINER SET search_path = pg_catalog, pg_temp AS $f$
-    SELECT session_user::text, remoteman_admin.access_of(session_user), remoteman_admin.is_admin(), 1
+    SELECT session_user::text, remoteman_admin.access_of(session_user), remoteman_admin.is_admin(), 2
 $f$;
 
 CREATE OR REPLACE FUNCTION remoteman_admin.require_admin() RETURNS void
@@ -669,6 +669,27 @@ BEGIN
         RETURN false;
     END;
 END $f$;
+
+-- Shared settings (the Zabbix and Oxidized connections everyone on this database uses). Owned by postgres so
+-- nobody can drop the guard below; everyone reads, only admins (and the shared login) may change them.
+-- RemoteMan creates the same table on its own when it connects first, so ownership is taken over here.
+CREATE TABLE IF NOT EXISTS public.remoteman_settings (
+    name VARCHAR(100) PRIMARY KEY, value TEXT NOT NULL, updated_at BIGINT NOT NULL, updated_by VARCHAR(200) NULL);
+ALTER TABLE public.remoteman_settings OWNER TO postgres;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.remoteman_settings TO __APP__;
+GRANT SELECT ON public.remoteman_settings TO __RO__;
+
+CREATE OR REPLACE FUNCTION remoteman_admin.guard_settings() RETURNS trigger
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, pg_temp AS $f$
+BEGIN
+    IF NOT remoteman_admin.is_admin() THEN
+        RAISE EXCEPTION 'Only RemoteMan admins can change shared settings.' USING ERRCODE = 'insufficient_privilege';
+    END IF;
+    RETURN CASE WHEN TG_OP = 'DELETE' THEN OLD ELSE NEW END;
+END $f$;
+DROP TRIGGER IF EXISTS remoteman_settings_admins_only ON public.remoteman_settings;
+CREATE TRIGGER remoteman_settings_admins_only BEFORE INSERT OR UPDATE OR DELETE ON public.remoteman_settings
+    FOR EACH ROW EXECUTE FUNCTION remoteman_admin.guard_settings();
 
 DO $d$
 DECLARE f text;

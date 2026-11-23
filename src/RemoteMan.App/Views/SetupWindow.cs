@@ -902,6 +902,8 @@ public sealed class SetupWindow : Window
                 else if (_oxPass.Password.Length > 0) o.ProtectedPassword = OxidizedConnector.ProtectPassword(_oxPass.Password);
             }
             integrationsChanged = true;
+            // The data source holds the integrations for everyone: these go there the next time it opens.
+            if (!_settings.IntegrationsPending.Contains(_settings.Active.Name)) _settings.IntegrationsPending.Add(_settings.Active.Name);
         }
 
         if (Confirmed(Step.Import) && _import is "rdm" or "rdp" or "putty") ImportAfter = _import;

@@ -61,6 +61,11 @@ public sealed class MySqlDataSource : SqlDataSource
             updated_at BIGINT NOT NULL, expires_at BIGINT NOT NULL, payload LONGTEXT NULL) CHARACTER SET utf8mb4
         """;
 
+    protected override string? SettingsTableSql => """
+        CREATE TABLE IF NOT EXISTS remoteman_settings (
+            name VARCHAR(100) NOT NULL PRIMARY KEY, value LONGTEXT NOT NULL, updated_at BIGINT NOT NULL, updated_by VARCHAR(200) NULL) CHARACTER SET utf8mb4
+        """;
+
     // USER() is the name the client logged in with (CURRENT_USER() may be a wildcard account).
     protected override string? CurrentUserSql => "SELECT SUBSTRING_INDEX(USER(), '@', 1)";
 

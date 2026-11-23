@@ -93,6 +93,11 @@ public sealed class RedundantDataSource : IDataSource, IChatSource
     public Task SetShareInviteStateAsync(Guid id, RemoteMan.Core.Sharing.ShareInviteState st, CancellationToken ct = default) => Run(m => m.SetShareInviteStateAsync(id, st, ct));
     public Task<IReadOnlyList<RemoteMan.Core.Sharing.ShareInvite>> GetShareInvitesAsync(CancellationToken ct = default) => Run(m => m.GetShareInvitesAsync(ct));
 
+    public bool SupportsSettings => Active.SupportsSettings;
+    public bool CanChangeSettings => Active.CanChangeSettings;
+    public Task<IReadOnlyList<SharedSetting>> GetSettingsAsync(CancellationToken ct = default) => Run(m => m.GetSettingsAsync(ct));
+    public Task PutSettingAsync(string name, string value, string user, CancellationToken ct = default) => Run(m => m.PutSettingAsync(name, value, user, ct));
+
     // Chat goes to the active member too, with the same failover.
     private IChatSource ChatOf(IDataSource m) => m as IChatSource ?? throw new NotSupportedException($"{m.DisplayName} has no chat.");
     public bool SupportsChat => Active is IChatSource { SupportsChat: true };

@@ -95,6 +95,27 @@ public sealed class PostgresDataSource : SqlDataSource
             updated_at BIGINT NOT NULL, expires_at BIGINT NOT NULL, payload TEXT NULL)
         """;
 
+    protected override string? SettingsTableSql => """
+        CREATE TABLE IF NOT EXISTS remoteman_settings (
+            name VARCHAR(100) PRIMARY KEY, value TEXT NOT NULL, updated_at BIGINT NOT NULL, updated_by VARCHAR(200) NULL)
+        """;
+    protected override string? AfterSettingsWriteSql => $"SELECT pg_notify('{Channel}', 'g')";
+
+    // remoteman-db servers know who is an admin; a plain PostgreSQL server doesn't have the function.
+    protected override async Task<bool?> IsServerAdminAsync(DbConnection c, CancellationToken ct)
+    {
+        try
+        {
+            await using var cmd = Cmd(c, "SELECT is_admin FROM remoteman_admin.me()");
+            return await cmd.ExecuteScalarAsync(ct) is bool b ? b : null;
+        }
+        catch (PostgresException ex) when (ex.SqlState is PostgresErrorCodes.InvalidSchemaName or PostgresErrorCodes.UndefinedFunction
+                                               or PostgresErrorCodes.InsufficientPrivilege)
+        {
+            return null;
+        }
+    }
+
     public override async Task StartChangeFeedAsync(CancellationToken ct = default)
     {
         // Slow safety-net poll in case a notification is missed during a reconnect.
@@ -122,6 +143,8 @@ public sealed class PostgresDataSource : SqlDataSource
                         RaiseChanged(new ChangeSignal(ChangeSignalKind.Chat, seq));
                     else if (e.Payload == "s")
                         RaiseChanged(new ChangeSignal(ChangeSignalKind.Shares));
+                    else if (e.Payload == "g")
+                        RaiseChanged(new ChangeSignal(ChangeSignalKind.Settings));
                 };
                 await using (var cmd = new NpgsqlCommand($"LISTEN {Channel}", conn)) await cmd.ExecuteNonQueryAsync(ct);
                 // Catch up on anything that happened while we were not listening.

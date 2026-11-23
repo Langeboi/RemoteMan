@@ -69,6 +69,11 @@ public sealed class SqliteDataSource : SqlDataSource
         ("ALTER TABLE remoteman_entries ADD COLUMN created_by TEXT NULL", true),
     ];
 
+    protected override string? SettingsTableSql => """
+        CREATE TABLE IF NOT EXISTS remoteman_settings (
+            name TEXT PRIMARY KEY, value TEXT NOT NULL, updated_at INTEGER NOT NULL, updated_by TEXT NULL)
+        """;
+
     protected override string NextCounterSql(int id) => $"UPDATE remoteman_meta SET rev = rev + 1 WHERE id = {id} RETURNING rev";
     public override bool SupportsChat => false;
 }

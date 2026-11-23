@@ -57,11 +57,26 @@ public interface IDataSource : IAsyncDisposable
     /// <summary>Invites that haven't expired, for everyone (callers pick theirs).</summary>
     Task<IReadOnlyList<RemoteMan.Core.Sharing.ShareInvite>> GetShareInvitesAsync(CancellationToken ct = default) =>
         Task.FromResult<IReadOnlyList<RemoteMan.Core.Sharing.ShareInvite>>([]);
+
+    // ---- shared settings (integration settings everyone on the data source uses) ----
+
+    bool SupportsSettings => false;
+    /// <summary>Whether this login may change shared settings: admins on a RemoteMan server, anyone who can edit elsewhere.
+    /// Known after <see cref="InitializeAsync"/>.</summary>
+    bool CanChangeSettings => false;
+    Task<IReadOnlyList<SharedSetting>> GetSettingsAsync(CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyList<SharedSetting>>([]);
+    /// <summary>Adds or replaces one setting. Throws <see cref="UnauthorizedAccessException"/> when the login may not.</summary>
+    Task PutSettingAsync(string name, string value, string user, CancellationToken ct = default) =>
+        throw new NotSupportedException("This data source has no shared settings.");
 }
+
+/// <summary>One row of remoteman_settings. <see cref="Value"/> is JSON; secrets inside it are encrypted with the data source's vault key.</summary>
+public sealed record SharedSetting(string Name, string Value, DateTimeOffset UpdatedAt, string? UpdatedBy);
 
 public enum DataSourceKind { Sqlite, PostgreSql, SqlServer, MySql }
 
-public enum ChangeSignalKind { Entries, Presence, Chat, Shares }
+public enum ChangeSignalKind { Entries, Presence, Chat, Shares, Settings }
 
 public sealed record ChangeSignal(ChangeSignalKind Kind, long? Revision = null);
 

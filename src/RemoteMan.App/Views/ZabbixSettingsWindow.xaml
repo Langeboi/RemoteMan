@@ -17,12 +17,16 @@
     <DockPanel>
         <Border DockPanel.Dock="Bottom" Background="{StaticResource Header}" BorderBrush="{StaticResource Border}" BorderThickness="0,1,0,0" Padding="10,8">
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
-                <Button Content="Save" MinWidth="76" IsDefault="True" Style="{StaticResource PrimaryButton}" Click="OnSave" />
+                <Button x:Name="SaveButton" Content="Save" MinWidth="76" IsDefault="True" Style="{StaticResource PrimaryButton}" Click="OnSave" />
                 <Button Content="Cancel" MinWidth="76" Margin="6,0,0,0" IsCancel="True" />
             </StackPanel>
         </Border>
         <ScrollViewer VerticalScrollBarVisibility="Auto" Background="{StaticResource Panel}">
             <StackPanel Margin="14,12">
+                <Border x:Name="SharedNoteBox" Background="{StaticResource Panel2}" BorderBrush="{StaticResource BorderSoft}" BorderThickness="1" CornerRadius="4"
+                        Padding="10,7" Margin="0,0,0,12" Visibility="Collapsed">
+                    <TextBlock x:Name="SharedNote" TextWrapping="Wrap" FontSize="11" Style="{StaticResource MutedText}" />
+                </Border>
                 <CheckBox x:Name="EnabledBox" Content="Show Zabbix health on entries" FontWeight="SemiBold" Margin="0,0,0,10" />
                 <Grid>
                     <Grid.ColumnDefinitions><ColumnDefinition Width="130" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
@@ -35,7 +39,7 @@
                     <TextBlock Grid.Row="1" Text="API token" Style="{StaticResource Label}" />
                     <PasswordBox x:Name="TokenBox" Grid.Row="1" Grid.Column="1" Margin="0,2" AutomationProperties.Name="API token" />
                     <TextBlock x:Name="TokenHint" Grid.Row="2" Grid.Column="1" Style="{StaticResource Hint}"
-                               Text="Make one in Zabbix under User settings, API tokens. A read-only user is enough. Saved encrypted for your Windows account." />
+                               Text="Make one in Zabbix under User settings, API tokens. A read-only user is enough. Saved in the data source, encrypted with its vault passphrase." />
                     <TextBlock Grid.Row="3" Text="Connect through" Style="{StaticResource Label}" />
                     <ComboBox x:Name="ViaBox" Grid.Row="3" Grid.Column="1" Margin="0,2" DisplayMemberPath="Name" AutomationProperties.Name="Connect through" />
                     <TextBlock Grid.Row="4" Grid.Column="1" Style="{StaticResource Hint}"
