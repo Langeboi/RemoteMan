@@ -6,6 +6,9 @@ services:
     image: ghcr.io/langeboi/remoteman-gateway:test
     container_name: remoteman-connector
     command: connector
+    # The host's own DNS and routes: internal names (server.school.local) resolve and every subnet the machine
+    # reaches is reachable. On Docker's default network, a host using systemd-resolved hands containers public DNS.
+    network_mode: host
     restart: unless-stopped
     environment:
       RELAY_URL: https://remoteman.mydomain.dk

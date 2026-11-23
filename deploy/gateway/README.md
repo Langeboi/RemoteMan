@@ -109,7 +109,7 @@ docker exec -it remoteman-relay gateway site add school
 It prints one `docker run` line with the relay address and the site's token filled in, then waits:
 
 ```text
-docker run -d --name remoteman-connector --restart unless-stopped -e RELAY_URL=https://remoteman.mydomain.dk -e SITE_TOKEN=… -e NAME=school-1 -v remoteman-connector:/data ghcr.io/langeboi/remoteman-gateway:test connector
+docker run -d --name remoteman-connector --restart unless-stopped --network host -e RELAY_URL=https://remoteman.mydomain.dk -e SITE_TOKEN=… -e NAME=school-1 -v remoteman-connector:/data ghcr.io/langeboi/remoteman-gateway:test connector
 
 Waiting for school's connector to come online (Ctrl+C to stop waiting; the connector can come later) |
 ```

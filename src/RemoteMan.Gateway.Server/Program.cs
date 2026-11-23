@@ -140,6 +140,7 @@ void PrintConnectorSetup(string name, string token, bool compose)
                 container_name: remoteman-connector
                 command: connector
                 restart: unless-stopped
+                network_mode: host   # the machine's own DNS and routes, so internal names and subnets resolve
                 environment:
                   RELAY_URL: {relayText}
                   SITE_TOKEN: {token}
@@ -157,7 +158,7 @@ void PrintConnectorSetup(string name, string token, bool compose)
         Console.WriteLine($"""
             On a machine inside {name}'s network (any Linux box or VM with Docker; nothing to open in its firewall), paste:
 
-            docker run -d --name remoteman-connector --restart unless-stopped -e RELAY_URL={relayText} -e SITE_TOKEN={token} -e NAME={name}-1 -v remoteman-connector:/data {image} connector
+            docker run -d --name remoteman-connector --restart unless-stopped --network host -e RELAY_URL={relayText} -e SITE_TOKEN={token} -e NAME={name}-1 -v remoteman-connector:/data {image} connector
 
             Add -e ALLOW=10.0.0.0/8,192.168.1.0/24 to limit what it may open (default: all private ranges).
             For a second connector (failover), run the same line on another machine with NAME={name}-2.
