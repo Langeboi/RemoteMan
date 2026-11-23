@@ -194,4 +194,25 @@ public class PostgresChatTests
         Assert.Equal(ChatRoom.DirectId(storeA.User, storeB.User), m.RoomId);
         Assert.Contains(storeA.User, b.Users);
     }
+
+    [Fact]
+    public async Task OneMessageArrivesOnce()
+    {
+        if (Cs is null || Cs2 is null) return;
+        var srcA = new PostgresDataSource(Cs, pollMs: 1_000);
+        var srcB = new PostgresDataSource(Cs2, pollMs: 1_000);
+        await using var storeA = new EntryStore(srcA, "ignored", "chat-pc3");
+        await using var storeB = new EntryStore(srcB, "ignored", "chat-pc4");
+        await storeA.OpenAsync(); await storeB.OpenAsync();
+        var pass = new AesGcmSecretProtector("team");
+        await using var a = new ChatHub(srcA, () => storeA.User, pass);
+        await using var b = new ChatHub(srcB, () => storeB.User, pass);
+        await a.StartAsync(); await b.StartAsync();
+        var text = "once " + Guid.NewGuid().ToString("N")[..6];
+        var n = 0;
+        b.MessageArrived += (_, m) => { if (m.Body == text) Interlocked.Increment(ref n); };
+        await a.SendAsync(a.DirectWith(storeB.User), text);
+        await Task.Delay(3000);
+        Assert.Equal(1, n);
+    }
 }
