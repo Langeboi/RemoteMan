@@ -50,6 +50,8 @@ public sealed class ShareHost : IAsyncDisposable
     public string? RdpConnectionString { get; set; }
     public string? RdpPassword { get; set; }
     public int RdpPort { get; set; }
+    /// <summary>RDP: other places the sharer listens (from its invitation), tried when the loopback port doesn't answer.</summary>
+    public IReadOnlyList<(string Address, int Port)> RdpListeners { get; set; } = [];
 
     /// <summary>Participants or control changed (raised on a pool thread).</summary>
     public event Action<ShareSnapshot>? StateChanged;
@@ -270,7 +272,7 @@ public sealed class ShareHost : IAsyncDisposable
         {
             try
             {
-                await t.Tcp.ConnectAsync(IPAddress.Loopback, RdpPort, _cts.Token);
+                t.Tcp = await ConnectToSharerAsync();
                 t.Ready.TrySetResult();
                 var s = t.Tcp.GetStream();
                 var buf = new byte[64 * 1024];
@@ -287,9 +289,31 @@ public sealed class ShareHost : IAsyncDisposable
         });
     }
 
+    /// <summary>The sharer's port on loopback first, then the addresses its invitation lists (some Windows builds bind only those).</summary>
+    private async Task<TcpClient> ConnectToSharerAsync()
+    {
+        var targets = new List<(string Address, int Port)> { ("127.0.0.1", RdpPort) };
+        foreach (var l in RdpListeners)
+        {
+            if (l.Port > 0 && !targets.Contains(l)) targets.Add(l);
+            if (l.Port > 0 && l.Port != RdpPort && !targets.Contains(("127.0.0.1", l.Port))) targets.Insert(1, ("127.0.0.1", l.Port));
+        }
+        Exception? last = null;
+        foreach (var (address, port) in targets)
+        {
+            if (!IPAddress.TryParse(address, out var ip) || port <= 0) continue;
+            using var attempt = CancellationTokenSource.CreateLinkedTokenSource(_cts.Token);
+            attempt.CancelAfter(TimeSpan.FromSeconds(3));
+            var tcp = new TcpClient(ip.AddressFamily) { NoDelay = true };
+            try { await tcp.ConnectAsync(ip, port, attempt.Token); return tcp; }
+            catch (Exception ex) when (!_cts.IsCancellationRequested) { last = ex; tcp.Dispose(); }
+        }
+        throw last ?? new SocketException((int)SocketError.ConnectionRefused);
+    }
+
     private sealed class Tunnel : IDisposable
     {
-        public TcpClient Tcp { get; } = new() { NoDelay = true };
+        public TcpClient? Tcp { get; set; }
         public TaskCompletionSource Ready { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         private Task _chain = Task.CompletedTask;
         private readonly object _gate = new();
@@ -302,11 +326,11 @@ public sealed class ShareHost : IAsyncDisposable
                 _chain = _chain.ContinueWith(async _ =>
                 {
                     await Ready.Task;
-                    if (Tcp.Connected) await Tcp.GetStream().WriteAsync(copy);
+                    if (Tcp is { Connected: true } tcp) await tcp.GetStream().WriteAsync(copy);
                 }, TaskScheduler.Default).Unwrap();
         }
 
-        public void Dispose() { try { Tcp.Dispose(); } catch (Exception) { } }
+        public void Dispose() { try { Tcp?.Dispose(); } catch (Exception) { } }
     }
 
     // ---------------- what the host does ----------------

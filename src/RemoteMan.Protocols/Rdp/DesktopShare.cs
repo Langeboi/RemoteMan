@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Sockets;
 using System.Runtime.InteropServices;
 using System.Windows.Forms;
+using RemoteMan.Core.Sharing;
 
 namespace RemoteMan.Protocols.Rdp;
 
@@ -25,6 +26,7 @@ public sealed class DesktopShare : IDisposable
     private readonly Dictionary<string, dynamic> _attendees = new(StringComparer.Ordinal);
     private string? _controller;
     private bool _paused;
+    private System.Drawing.Rectangle _area;
 
     /// <summary>The invitation the guests' viewers open (sent to them over the shared-session link).</summary>
     public string ConnectionString { get; private set; } = "";
@@ -45,26 +47,50 @@ public sealed class DesktopShare : IDisposable
         Try(() => s.Properties["PortProtocol"] = 2);                       // IPv4
         Try(() => s.Properties["DefaultAttendeeControlLevel"] = CtrlView);   // everyone watches until given control
         HookEvents(s);
-
-        // Only RemoteMan's own windows; everything else shows as a hatched area to the guests.
-        Try(() =>
-        {
-            var filter = s.ApplicationFilter;
-            var pid = Environment.ProcessId;
-            foreach (dynamic app in (System.Collections.IEnumerable)filter.Applications)
-            {
-                bool ours = (int)app.Id == pid;
-                app.Shared = ours;
-                if (!ours) continue;
-                foreach (dynamic w in (System.Collections.IEnumerable)app.Windows) Try(() => w.Shared = true);
-            }
-            filter.Enabled = true;
-        });
-        SetArea(area);
         s.Open();
+        // The filter and the shared rectangle only take once the session is open.
+        ApplyFilter();
+        SetArea(area);
         // No area yet (the session is still connecting or hidden): show nothing until there is one.
         if (area.Width < 16 || area.Height < 16) SetPaused(true);
         ConnectionString = CreateInvitation(s);
+        // Windows may ignore PortId; tunnels go to the port the invitation actually lists.
+        var listed = DesktopShareTicket.Listeners(ConnectionString).Where(l => l.Port > 0).ToList();
+        Listeners = listed;
+        if (listed.Count > 0 && listed.All(l => l.Port != Port)) Port = listed[0].Port;
+    }
+
+    /// <summary>Addresses and ports the sharer listed in its invitation (where tunnels may connect).</summary>
+    public IReadOnlyList<(string Address, int Port)> Listeners { get; private set; } = [];
+
+    /// <summary>A guest's viewer connected or left (their participant id).</summary>
+    public event Action<string>? ViewerConnected;
+    public event Action<string>? ViewerLeft;
+
+    /// <summary>
+    /// Only RemoteMan's own windows; everything else shows as a hatched area to the guests. If this
+    /// Windows doesn't list our process (or the filter fails), share the tab's rectangle unfiltered
+    /// rather than a blank picture: the rectangle is the RDP tab anyway.
+    /// </summary>
+    private void ApplyFilter()
+    {
+        if (_session is not { } s) return;
+        try
+        {
+            var filter = s.ApplicationFilter;
+            var pid = Environment.ProcessId;
+            var found = false;
+            foreach (dynamic app in (System.Collections.IEnumerable)filter.Applications)
+            {
+                bool ours = (int)app.Id == pid;
+                Try(() => app.Shared = ours);
+                if (!ours) continue;
+                found = true;
+                foreach (dynamic w in (System.Collections.IEnumerable)app.Windows) Try(() => w.Shared = true);
+            }
+            filter.Enabled = found;
+        }
+        catch (Exception) { Try(() => s.ApplicationFilter.Enabled = false); }
     }
 
     /// <summary>
@@ -92,8 +118,8 @@ public sealed class DesktopShare : IDisposable
     /// <summary>Follows the RDP tab when the window moves or resizes.</summary>
     public void SetArea(System.Drawing.Rectangle r)
     {
-        if (_session is not { } s || r.Width < 16 || r.Height < 16) return;
-        Try(() => s.SetDesktopSharedRect(r.Left, r.Top, r.Right, r.Bottom));
+        if (_session is not { } s || r.Width < 16 || r.Height < 16 || r == _area) return;
+        try { s.SetDesktopSharedRect(r.Left, r.Top, r.Right, r.Bottom); _area = r; } catch (Exception) { }
     }
 
     /// <summary>Pauses the picture while the shared tab isn't on screen.</summary>
@@ -133,6 +159,7 @@ public sealed class DesktopShare : IDisposable
         Try(() => name = (string)a.RemoteName);
         _attendees[name] = a;
         Try(() => a.ControlLevel = name == _controller ? CtrlInteractive : CtrlView);
+        ViewerConnected?.Invoke(name);
     }
 
     private void OnAttendeeDisconnected(object info)
@@ -140,7 +167,7 @@ public sealed class DesktopShare : IDisposable
         // The argument is disconnect info, not the attendee: drop entries whose attendee no longer answers.
         foreach (var (name, a) in _attendees.ToList())
         {
-            try { _ = a.Id; } catch (Exception) { _attendees.Remove(name); }
+            try { _ = a.Id; } catch (Exception) { _attendees.Remove(name); ViewerLeft?.Invoke(name); }
         }
     }
 
@@ -182,7 +209,17 @@ public sealed class DesktopShareViewer : AxHost
     private const string Clsid = "32be5ed2-5c86-480f-a914-0ff8885a1b3f";
     private const int CtrlInteractive = 3;
 
+    // _IRDPSessionEvents as the viewer raises them (rdpencomapi.h).
+    private static readonly Guid EventsIid = new("98a97042-6698-40e9-8efd-b3200990004b");
+    private const int DispIdError = 304, DispIdConnected = 305, DispIdTerminated = 306, DispIdAuthenticated = 307, DispIdFailed = 308;
+    private bool _hooked;
+
     public DesktopShareViewer() : base(Clsid) { }
+
+    /// <summary>The picture is coming (authenticated with the sharer).</summary>
+    public event Action? Connected;
+    /// <summary>Couldn't connect, or the connection ended; the text says why as far as Windows tells.</summary>
+    public event Action<string>? Failed;
 
     private dynamic Ocx => GetOcx() ?? throw new InvalidOperationException("Viewer not created yet.");
 
@@ -191,8 +228,25 @@ public sealed class DesktopShareViewer : AxHost
     {
         if (!IsHandleCreated) CreateControl();
         var ocx = Ocx;
+        HookEvents((object)ocx);
         try { ocx.SmartSizing = true; } catch (Exception) { }
         ocx.Connect(connectionString, name, password);
+    }
+
+    private void HookEvents(object ocx)
+    {
+        if (_hooked) return;
+        _hooked = true;
+        try
+        {
+            ComEventsHelper.Combine(ocx, EventsIid, DispIdConnected, new Action(() => Connected?.Invoke()));
+            ComEventsHelper.Combine(ocx, EventsIid, DispIdAuthenticated, new Action(() => Connected?.Invoke()));
+            ComEventsHelper.Combine(ocx, EventsIid, DispIdFailed, new Action(() => Failed?.Invoke("The viewer couldn't connect to the host's screen.")));
+            ComEventsHelper.Combine(ocx, EventsIid, DispIdTerminated, new Action<int, int>((reason, info) =>
+                Failed?.Invoke($"The host's screen disconnected (reason {reason}, {info}).")));
+            ComEventsHelper.Combine(ocx, EventsIid, DispIdError, new Action<object>(e => Failed?.Invoke($"Desktop Sharing error {e}.")));
+        }
+        catch (Exception) { /* without events the picture still works; we just can't say why it doesn't */ }
     }
 
     /// <summary>Asks for mouse and keyboard once the shared session says we have control.</summary>

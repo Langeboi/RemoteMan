@@ -20,7 +20,7 @@ public partial class SharedSessionView : UserControl
 {
     private SharedSessionViewModel? _vm;
     private DesktopShareViewer? _viewer;
-    private bool _started, _ready, _hadControl;
+    private bool _started, _ready, _hadControl, _screenUp, _screenFailed;
     private readonly System.Text.StringBuilder _pending = new();
     private readonly DispatcherTimer _flush;
 
@@ -121,6 +121,8 @@ public partial class SharedSessionView : UserControl
         {
             var port = c.StartTunnel();
             _viewer = new DesktopShareViewer { Dock = System.Windows.Forms.DockStyle.Fill };
+            _viewer.Connected += () => Dispatcher.BeginInvoke(() => { _screenUp = true; Apply(c.State); });
+            _viewer.Failed += why => Dispatcher.BeginInvoke(() => ShowScreenProblem(c, why));
             Host.Child = _viewer;
             Host.Visibility = Visibility.Visible;
             Waiting.Visibility = Visibility.Collapsed;
@@ -136,6 +138,19 @@ public partial class SharedSessionView : UserControl
         }
     }
 
+    /// <summary>The viewer gave up: hide it (WPF can't draw over it) and say why, so it isn't just a white area.</summary>
+    private void ShowScreenProblem(ShareClient c, string why)
+    {
+        if (_viewer is null) return;
+        _screenFailed = true;
+        _screenUp = false;
+        Host.Visibility = Visibility.Collapsed;
+        Waiting.Visibility = Visibility.Visible;
+        WaitTitle.Text = $"Couldn't show {c.State.Host?.Name ?? "the host"}'s screen";
+        WaitText.Text = why + " Close this tab and accept the invite again. If it keeps happening, the host can stop sharing and share again.";
+        if (_vm is not null) _vm.StatusText = $"Shared by {c.State.Host?.Name} · screen not connected";
+    }
+
     // ---------------- control ----------------
 
     private void Apply(ShareSnapshot s)
@@ -144,6 +159,7 @@ public partial class SharedSessionView : UserControl
         var mine = s.ControllerId == _vm.Client.MyId;
         if (_vm.IsRdp)
         {
+            if (_screenFailed) { _hadControl = mine; return; }
             if (mine != _hadControl) _viewer?.RequestControl(mine);
             // Paused: the host switched tabs; hide the frozen picture and say so.
             var paused = s.Paused && _viewer is not null;
@@ -157,7 +173,8 @@ public partial class SharedSessionView : UserControl
             if (mine && !_hadControl) Post(new { t = "focus" });
         }
         _hadControl = mine;
-        _vm.StatusText = $"Shared by {s.Host?.Name} · {_vm.Client.Via} · {(mine ? "you have control" : $"{s.Controller?.Name} has control")}";
+        _vm.StatusText = $"Shared by {s.Host?.Name} · {_vm.Client.Via} · {(mine ? "you have control" : $"{s.Controller?.Name} has control")}"
+            + (_vm.IsRdp && !_screenUp ? " · connecting to the screen…" : "");
     }
 
     private void Close()
