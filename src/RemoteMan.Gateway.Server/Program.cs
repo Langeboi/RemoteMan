@@ -20,7 +20,7 @@ try
     {
         case "relay": return await RunRelayAsync();
         case "connector": return await RunConnectorAsync();
-        case "site": return Site(args.Skip(1).ToArray());
+        case "site": return await SiteAsync(args.Skip(1).ToArray());
         case "device": return Device(args.Skip(1).ToArray());
         case "status": return await StatusAsync();
         case "health": return await HealthAsync();
@@ -48,7 +48,7 @@ async Task<int> RunRelayAsync()
     var app = RelayHost.Build(relay, urls, cert, key, publicUrl);
     Log($"RemoteMan gateway relay {Version()} listening on {urls}{(publicUrl is null ? "" : $", reached as {publicUrl}")}");
     if (publicUrl is null) Log("Set PUBLIC_URL (e.g. https://remoteman.example.com) so `gateway device add` can print ready invites.");
-    if (relay.Store.Sites.Count == 0) Log("No sites yet. Add one with: docker exec remoteman-relay gateway site add <name>");
+    if (relay.Store.Sites.Count == 0) Log("No sites yet. Add one (it prints the connector's setup line and waits for it): docker exec -it remoteman-relay gateway site add <name>");
     await app.RunAsync();
     return 0;
 }
@@ -85,40 +85,25 @@ async Task<int> RunConnectorAsync()
     return 0;
 }
 
-int Site(string[] a)
+async Task<int> SiteAsync(string[] a)
 {
     var store = new RelayStore(storePath);
     switch (a)
     {
-        case ["add", var name]:
+        case ["add", var name, .. var opts]:
         {
             var token = store.AddSite(name);
-            var relay = env("PUBLIC_URL", "https://<your relay>");
-            Console.WriteLine($"""
-                Site {name} added. Run the connector inside that network with this compose.yaml (docker compose up -d):
-
-                services:
-                  connector:
-                    image: ghcr.io/langeboi/remoteman-gateway:test
-                    container_name: remoteman-connector
-                    command: connector
-                    restart: unless-stopped
-                    environment:
-                      RELAY_URL: {relay}
-                      SITE_TOKEN: {token}
-                      NAME: {name}-1
-                      # ALLOW: 10.0.0.0/8,192.168.0.0/16   # what it may open (default: all private ranges)
-                    volumes:
-                      - connector-data:/data
-                volumes:
-                  connector-data:
-
-                The token is shown only now. Lost it? gateway site token {name}
-                """);
-            return 0;
+            Console.WriteLine($"Site {name} added.\n");
+            PrintConnectorSetup(name, token, opts.Contains("--compose"));
+            if (opts.Contains("--no-wait")) return 0;
+            return await WaitForConnectorAsync(name, offerDevice: true);
         }
-        case ["token", var name]:
-            Console.WriteLine($"New token for {name} (the old one stops working):\n{store.NewSiteToken(name)}");
+        case ["wait", var name]:
+            if (store.Site(name) is null) { Console.WriteLine($"No site called {name}."); return 1; }
+            return await WaitForConnectorAsync(name, offerDevice: false);
+        case ["token", var name, .. var opts]:
+            Console.WriteLine($"New token for {name}; the old one stops working, so connectors still using it go offline.\n");
+            PrintConnectorSetup(name, store.NewSiteToken(name), opts.Contains("--compose"));
             return 0;
         case ["remove", var name]:
             Console.WriteLine(store.RemoveSite(name) ? $"Removed {name}." : $"No site called {name}.");
@@ -137,6 +122,111 @@ int Site(string[] a)
     }
 }
 
+// The copy-paste that sets up a connector: one docker run line (or a compose.yaml with --compose).
+void PrintConnectorSetup(string name, string token, bool compose)
+{
+    var relay = env("PUBLIC_URL", null);
+    var image = env("CONNECTOR_IMAGE", "ghcr.io/langeboi/remoteman-gateway:test")!;
+    var relayText = relay ?? "https://<your relay>";
+    if (relay is null) Console.WriteLine("(PUBLIC_URL isn't set on the relay, so replace https://<your relay> below with its address.)\n");
+    if (compose)
+    {
+        Console.WriteLine($"""
+            On a machine inside {name}'s network, save this as compose.yaml and run docker compose up -d:
+
+            services:
+              connector:
+                image: {image}
+                container_name: remoteman-connector
+                command: connector
+                restart: unless-stopped
+                environment:
+                  RELAY_URL: {relayText}
+                  SITE_TOKEN: {token}
+                  NAME: {name}-1
+                  # ALLOW: 10.0.0.0/8,192.168.0.0/16   # what it may open (default: all private ranges)
+                volumes:
+                  - connector-data:/data
+            volumes:
+              connector-data:
+
+            """);
+    }
+    else
+    {
+        Console.WriteLine($"""
+            On a machine inside {name}'s network (any Linux box or VM with Docker; nothing to open in its firewall), paste:
+
+            docker run -d --name remoteman-connector --restart unless-stopped -e RELAY_URL={relayText} -e SITE_TOKEN={token} -e NAME={name}-1 -v remoteman-connector:/data {image} connector
+
+            Add -e ALLOW=10.0.0.0/8,192.168.1.0/24 to limit what it may open (default: all private ranges).
+            For a second connector (failover), run the same line on another machine with NAME={name}-2.
+            Prefer a compose.yaml? gateway site token {name} --compose  (makes a new token)
+
+            """);
+    }
+    Console.WriteLine($"The token is shown only now. Lost it? gateway site token {name}");
+}
+
+// Watches the relay (in this container) until the site has a connector, then offers to set up a RemoteMan PC.
+async Task<int> WaitForConnectorAsync(string name, bool offerDevice)
+{
+    using var http = LocalHttp(TimeSpan.FromSeconds(5));
+    var url = $"{LocalScheme()}://127.0.0.1:{port}{GatewayProtocol.StatusPath}";
+    using var cts = new CancellationTokenSource();
+    Console.CancelKeyPress += (_, e) => { e.Cancel = true; cts.Cancel(); };
+    Console.WriteLine();
+    Console.Write($"Waiting for {name}'s connector to come online (Ctrl+C to stop waiting; the connector can come later) ");
+    var frames = "|/-\\";
+    var at = DateTime.UtcNow;
+    var i = 0;
+    while (!cts.IsCancellationRequested)
+    {
+        JsonElement json;
+        try { json = await http.GetFromJsonAsync<JsonElement>(url, cts.Token); }
+        catch (OperationCanceledException) { break; }
+        catch (HttpRequestException)
+        {
+            Console.WriteLine($"\nThe relay isn't running in this container, so I can't watch for the connector. Run this where the relay runs: gateway site wait {name}");
+            return 1;
+        }
+        var site = json.GetProperty("sites").EnumerateArray().FirstOrDefault(s => string.Equals(s.GetProperty("name").GetString(), name, StringComparison.OrdinalIgnoreCase));
+        if (site.ValueKind == JsonValueKind.Object && site.GetProperty("connectors").EnumerateArray().FirstOrDefault() is { ValueKind: JsonValueKind.Object } c)
+        {
+            var from = c.TryGetProperty("from", out var f) && f.GetString() is { } fs ? $" from {fs}" : "";
+            Console.WriteLine($"\r\n✓ {name} is online: connector {c.GetProperty("name").GetString()}{from}, key {c.GetProperty("key").GetString()?[..16]}");
+            if (offerDevice) OfferDevice(name);
+            else Console.WriteLine($"RemoteMan reaches {name} now. New PC? gateway device add <pc-name>");
+            return 0;
+        }
+        if (!Console.IsOutputRedirected) Console.Write($"\b{frames[i++ % frames.Length]}");
+        if (DateTime.UtcNow - at > TimeSpan.FromMinutes(2) && i % 60 == 0)
+            Console.Write($"\r\nStill nothing. Check the connector's log: docker logs remoteman-connector  ");
+        try { await Task.Delay(1000, cts.Token); } catch (OperationCanceledException) { break; }
+    }
+    Console.WriteLine($"\nStopped waiting. The connector can still connect; check with: gateway site wait {name}");
+    return 0;
+}
+
+void OfferDevice(string site)
+{
+    var store = new RelayStore(storePath);
+    if (store.Devices.Count > 0)
+    {
+        Console.WriteLine($"PCs that already have an invite for all sites reach {site} now. Another PC? gateway device add <pc-name>");
+        return;
+    }
+    if (Console.IsInputRedirected)
+    {
+        Console.WriteLine("\nNext, give RemoteMan an invite: gateway device add <pc-name>");
+        return;
+    }
+    Console.Write("\nNext, RemoteMan. Name the PC to invite (e.g. laptop), or press Enter to skip: ");
+    var pc = Console.ReadLine()?.Trim();
+    if (string.IsNullOrEmpty(pc)) { Console.WriteLine("Later: gateway device add <pc-name>"); return; }
+    Device(["add", pc]);
+}
+
 int Device(string[] a)
 {
     var store = new RelayStore(storePath);
@@ -153,7 +243,7 @@ int Device(string[] a)
                 return 0;
             }
             Console.WriteLine($"""
-                Device {name} added ({(sites is null ? "all sites" : string.Join(", ", sites))}). In RemoteMan: More > Gateway settings, paste:
+                Device {name} added ({(sites is null ? "all sites" : string.Join(", ", sites))}). In RemoteMan: More > Gateway settings, paste the invite and Save:
 
                 {new GatewayInvite(url, token, name).Encode()}
 
@@ -220,8 +310,10 @@ static int Usage()
     Console.WriteLine("""
         remoteman-gateway relay                       run the relay (PORT, DATA, PUBLIC_URL, TLS_CERT/TLS_KEY)
         remoteman-gateway connector                   run a connector (RELAY_URL, SITE_TOKEN, ALLOW, NAME, DATA)
-        gateway site add <name>                       new site; prints the connector's compose.yaml with its token
-        gateway site list | remove <name> | token <name> | reset-key <name>
+        gateway site add <name> [--compose|--no-wait] new site: prints the connector's docker run line, waits for it
+                                                      to come online, then offers an invite for a RemoteMan PC
+        gateway site wait <name>                      wait until the site's connector is online
+        gateway site list | remove <name> | token <name> [--compose] | reset-key <name>
         gateway device add <name> [--sites a,b]       new device; prints the invite to paste into RemoteMan
         gateway device list | remove <name>
         gateway status                                connectors online and tunnels open

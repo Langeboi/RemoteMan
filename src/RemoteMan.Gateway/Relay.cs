@@ -13,8 +13,9 @@ namespace RemoteMan.Gateway;
 /// </summary>
 public sealed class Relay
 {
-    private sealed class Link(string site, string name, string key, WebSocket control)
+    private sealed class Link(string site, string name, string key, WebSocket control, string? from)
     {
+        public string? From { get; } = from;
         public string Site { get; } = site;
         public string Name { get; } = name;
         public string Key { get; } = key;
@@ -45,14 +46,14 @@ public sealed class Relay
     public bool IsOnline(string site) => _links.TryGetValue(site, out var l) && Snapshot(l).Length > 0;
 
     /// <summary>A connector's control connection. Returns when it goes away.</summary>
-    public async Task ServeConnectorAsync(SiteRecord site, string name, string key, WebSocket ws, CancellationToken ct)
+    public async Task ServeConnectorAsync(SiteRecord site, string name, string key, WebSocket ws, CancellationToken ct, string? from = null)
     {
         if (_store.AddKey(site.Name, key))
             _log($"Site {site.Name}: new connector key {SecureChannel.Fingerprint(Convert.FromBase64String(key))} from {name}");
-        var link = new Link(site.Name, name, key, ws);
+        var link = new Link(site.Name, name, key, ws, from);
         var list = _links.GetOrAdd(site.Name, _ => []);
         lock (list) list.Add(link);
-        _log($"Site {site.Name}: connector {name} online");
+        _log($"Site {site.Name}: connector {name} online{(from is null ? "" : $" from {from}")}");
         try
         {
             var buf = new byte[64];
@@ -177,7 +178,7 @@ public sealed class Relay
             name = s.Name,
             connectors = (_links.TryGetValue(s.Name, out var l) ? Snapshot(l) : []).Select(c => new
             {
-                name = c.Name, since = c.Since, active = Volatile.Read(ref c.Active),
+                name = c.Name, since = c.Since, active = Volatile.Read(ref c.Active), from = c.From,
                 key = SecureChannel.Fingerprint(Convert.FromBase64String(c.Key)),
             }),
         }),

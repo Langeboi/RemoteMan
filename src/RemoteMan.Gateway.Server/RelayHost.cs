@@ -48,7 +48,9 @@ public static class RelayHost
             if (!ValidKey(key)) { c.Response.StatusCode = 400; return; }
             var name = c.Request.Headers[GatewayProtocol.NameHeader].ToString() is { Length: > 0 and <= 64 } n ? n : "connector";
             using var ws = await c.WebSockets.AcceptWebSocketAsync();
-            await relay.ServeConnectorAsync(site, name, key, ws, c.RequestAborted);
+            // Behind a reverse proxy the connector's address is the first X-Forwarded-For entry; it's only shown, never trusted.
+            var from = c.Request.Headers["X-Forwarded-For"].ToString().Split(',')[0].Trim() is { Length: > 0 and <= 64 } fwd ? fwd : c.Connection.RemoteIpAddress?.ToString();
+            await relay.ServeConnectorAsync(site, name, key, ws, c.RequestAborted, from);
         });
 
         app.Map(GatewayProtocol.AcceptPath + "{id}", async (HttpContext c, string id) =>

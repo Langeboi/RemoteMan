@@ -100,20 +100,32 @@ traffic inside is still end-to-end encrypted, but the tokens would cross the int
 
 ## 2. A site per remote network
 
-On the relay:
+On the relay (`-it` so it can wait and ask):
 
 ```bash
-docker exec remoteman-relay gateway site add school
+docker exec -it remoteman-relay gateway site add school
 ```
 
-It prints a complete `compose.yaml` for the connector, with the relay address and the site's token filled in.
-Save it on any Docker host in that network (a VM, a Pi, the NAS) and run `docker compose up -d`. The connector shows
-up within seconds:
+It prints one `docker run` line with the relay address and the site's token filled in, then waits:
 
-```bash
-docker exec remoteman-relay gateway status
-#   school    school-1 (0 open)
+```text
+docker run -d --name remoteman-connector --restart unless-stopped -e RELAY_URL=https://remoteman.mydomain.dk -e SITE_TOKEN=… -e NAME=school-1 -v remoteman-connector:/data ghcr.io/langeboi/remoteman-gateway:test connector
+
+Waiting for school's connector to come online (Ctrl+C to stop waiting; the connector can come later) |
 ```
+
+Paste the line on any Docker host in that network (a VM, a Pi, the NAS). Nothing needs opening there. Within seconds
+the relay answers:
+
+```text
+✓ school is online: connector school-1 from 203.0.113.7, key 64a4f6bc37b249bc
+
+Next, RemoteMan. Name the PC to invite (e.g. laptop), or press Enter to skip: lange-laptop
+```
+
+Name your PC and it prints the invite for step 3 right there. Want a `compose.yaml` instead of the one-liner?
+`gateway site add school --compose`. Set up the connector later? `--no-wait`, and `gateway site wait school` watches
+for it whenever you like.
 
 Limit what it may open with `ALLOW` (comma-separated): `10.20.0.0/16`, `192.168.1.10`, `10.20.5.0/24:22|3389`
 (only those ports), `private` (the default: 10/8, 172.16/12, 192.168/16, 100.64/10, link-local, IPv6 ULA) or `*`.
@@ -147,7 +159,8 @@ sites on one address) shows its default site; give those entries their own IP or
 | --- | --- |
 | `gateway status` | Connectors online per site, tunnels open, traffic |
 | `gateway site list` | Sites and their connector key fingerprints |
-| `gateway site token <site>` | New token for a site (the old one stops working; update the connector) |
+| `gateway site wait <site>` | Wait until the site's connector is online |
+| `gateway site token <site>` | New token and setup line for a site (the old token stops working; re-run the connector) |
 | `gateway site reset-key <site>` | Forget the site's connector keys (after replacing a connector on purpose) |
 | `gateway site remove <site>` | |
 | `gateway device list` / `gateway device remove <name>` | A removed device is refused at once |
