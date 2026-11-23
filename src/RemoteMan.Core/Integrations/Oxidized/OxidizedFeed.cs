@@ -40,6 +40,23 @@ public sealed class OxidizedFeedSync
     /// <summary>Entry id (lower case) to Oxidized "group/name".</summary>
     public Dictionary<string, string> Links { get; set; } = new();
     public List<OxidizedKeptNode> Keep { get; set; } = new();
+    /// <summary>Entry ids (lower case) unticked in the device list: never sent.</summary>
+    public List<string> Excluded { get; set; } = new();
+    /// <summary>Entry ids ticked in the device list: sent even when new entries aren't added automatically.</summary>
+    public List<string> Included { get; set; } = new();
+
+    public OxidizedFeedChoice Choice(bool autoAdd) => new(new HashSet<string>(Excluded, StringComparer.OrdinalIgnoreCase),
+        new HashSet<string>(Included, StringComparer.OrdinalIgnoreCase), autoAdd);
+}
+
+/// <summary>Which SSH entries go to Oxidized: all except unticked ones, or (no auto add) only ticked ones.</summary>
+public sealed record OxidizedFeedChoice(IReadOnlySet<string> Excluded, IReadOnlySet<string> Included, bool AutoAdd)
+{
+    public bool IsChosen(Guid id)
+    {
+        var k = OxidizedFeed.IdKey(id);
+        return !Excluded.Contains(k) && (AutoAdd || Included.Contains(k));
+    }
 }
 
 /// <summary><see cref="F"/>: fingerprint of the login (to see when it changed); <see cref="S"/>: the sealed login.</summary>
@@ -65,6 +82,8 @@ public enum OxidizedFeedState
     Missing,
     /// <summary>Not sent: no host, or the leave-out tag.</summary>
     LeftOut,
+    /// <summary>Not sent: unticked in the device list (or new while new entries aren't added automatically).</summary>
+    Off,
 }
 
 /// <summary>One SSH entry as Oxidized will see it.</summary>
@@ -138,7 +157,7 @@ public static class OxidizedFeed
     /// list) tells which are already there; <paramref name="links"/> are the names saved for matched entries.
     /// </summary>
     public static IReadOnlyList<OxidizedFeedItem> Plan(IEnumerable<Entry> all, OxidizedFeedOptions options,
-        IReadOnlyDictionary<string, string>? links, OxidizedSnapshot? snapshot)
+        IReadOnlyDictionary<string, string>? links, OxidizedSnapshot? snapshot, OxidizedFeedChoice? choice = null)
     {
         var list = all.Where(e => !e.Deleted).ToList();
         var folders = list.Where(e => e.Kind == EntryKind.Folder).ToDictionary(e => e.Id);
@@ -180,6 +199,13 @@ public static class OxidizedFeed
                 name = e.Name.Trim().Length > 0 ? e.Name.Trim() : host;
                 group = options.Group == OxidizedFeedGroup.TopFolder ? TopFolder(e.ParentId) : null;
             }
+            if (choice is not null && !choice.IsChosen(e.Id))
+            {
+                var had = snapshot?.Matcher.Get(string.IsNullOrEmpty(group) ? name : $"{group}/{name}");
+                items.Add(new(e, name, group, host, port, model, OxidizedFeedState.Off, had,
+                    had is not null ? "Not ticked: leaves Oxidized on its next reload" : "Not ticked"));
+                continue;
+            }
             // Oxidized finds devices by name alone, so names are unique across groups.
             if (!seen.Add(name)) { name = $"{name}-{host}"; seen.Add(name); }
 
@@ -196,9 +222,11 @@ public static class OxidizedFeed
     /// <summary>Devices in Oxidized that no SSH entry will send: they drop out when Oxidized switches to RemoteMan's list, unless kept.</summary>
     public static IReadOnlyList<OxidizedNode> OnlyInOxidized(OxidizedSnapshot snapshot, IReadOnlyList<OxidizedFeedItem> plan, IEnumerable<OxidizedKeptNode> kept)
     {
-        var sent = new HashSet<string>(plan.Where(i => i.State != OxidizedFeedState.LeftOut).Select(i => i.Name), StringComparer.OrdinalIgnoreCase);
-        foreach (var k in kept) sent.Add(k.Name);
-        return snapshot.Nodes.Where(n => !sent.Contains(n.Name)).ToList();
+        // Devices that belong to an entry (sent or unticked) are listed with that entry, not here.
+        var sent = new HashSet<string>(plan.Where(i => i.Ip is not null).Select(i => i.Name), StringComparer.OrdinalIgnoreCase);
+        foreach (var i in plan) if (i.Node is not null) sent.Add(i.Node.Name);
+        var keptNames = new HashSet<string>(kept.Select(k => k.Name), StringComparer.OrdinalIgnoreCase);
+        return snapshot.Nodes.Where(n => !sent.Contains(n.Name) && !keptNames.Contains(n.Name)).ToList();
     }
 
     // ---------------- sealing logins for the server ----------------

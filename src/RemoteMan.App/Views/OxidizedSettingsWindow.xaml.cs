@@ -68,6 +68,7 @@ public partial class OxidizedSettingsWindow : Window
             FeedDefaultModel = _shared?.Oxidized.FeedDefaultModel,
             FeedExcludeTag = _shared?.Oxidized.FeedExcludeTag ?? OxidizedFeed.DefaultLeaveOutTag,
             FeedSendLogins = _shared?.Oxidized.FeedSendLogins ?? true,
+            FeedAutoAdd = _shared?.Oxidized.FeedAutoAdd ?? true,
         };
     }
 
