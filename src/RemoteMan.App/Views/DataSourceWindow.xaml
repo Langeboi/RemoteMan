@@ -42,7 +42,7 @@
                     <StackPanel x:Name="ConnectionPanel" Margin="12,10">
                         <Grid>
                             <Grid.ColumnDefinitions><ColumnDefinition Width="120" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
-                            <Grid.RowDefinitions><RowDefinition /><RowDefinition /><RowDefinition Height="Auto" /><RowDefinition /><RowDefinition /></Grid.RowDefinitions>
+                            <Grid.RowDefinitions><RowDefinition /><RowDefinition /><RowDefinition Height="Auto" /><RowDefinition /><RowDefinition /><RowDefinition /></Grid.RowDefinitions>
                             <TextBlock Text="Name" Style="{StaticResource MutedText}" VerticalAlignment="Center" />
                             <TextBox x:Name="NameBox" Grid.Column="1" Margin="0,2" />
                             <TextBlock Grid.Row="1" Text="Type" Style="{StaticResource MutedText}" VerticalAlignment="Center" />
@@ -54,6 +54,12 @@
                             <PasswordBox x:Name="VaultBox" Grid.Row="3" Grid.Column="1" Margin="0,2" ToolTip="Shared by everyone on this data source; encrypts passwords and keys" />
                             <CheckBox x:Name="SsoBox" Grid.Row="4" Grid.Column="1" Margin="0,6,0,2" Content="Use my Windows login (SSO)"
                                       ToolTip="Sign in to the database as the current Windows user (Kerberos/NTLM). User and password in the server lines are ignored." />
+                            <TextBlock Grid.Row="5" Text="Gateway site" Style="{StaticResource MutedText}" VerticalAlignment="Center" />
+                            <StackPanel Grid.Row="5" Grid.Column="1" Orientation="Horizontal" Margin="0,4,0,2">
+                                <TextBox x:Name="GatewayBox" Width="140" ToolTip="A site on your RemoteMan gateway relay (More > Gateway). Empty = always direct." />
+                                <CheckBox x:Name="GatewayAlwaysBox" Content="Always (skip the direct try)" Margin="10,0,0,0" VerticalAlignment="Center"
+                                          ToolTip="Off: each connection tries the servers directly first and uses the gateway only when they don't answer (off-site)." />
+                            </StackPanel>
                         </Grid>
                         <TextBlock x:Name="Hint" Style="{StaticResource MutedText}" TextWrapping="Wrap" Margin="120,8,0,0" FontSize="11" />
                     </StackPanel>

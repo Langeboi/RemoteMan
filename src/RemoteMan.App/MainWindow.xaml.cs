@@ -225,6 +225,7 @@ public partial class MainWindow : Window
         menu.Items.Add(Click("Templates…", (_, _) => _vm.TemplatesDialog?.Invoke()));
         menu.Items.Add(new Separator());
         menu.Items.Add(Click("Data sources…", OnDataSources));
+        menu.Items.Add(Click("Gateway…", (_, _) => Views.GatewayDialog.Show(this, _settings)));
         menu.Items.Add(Click("Import…", OnImport));
         menu.Items.Add(Click("Export and backup…", OnExportBackup));
         menu.Items.Add(Click("Restore from backup…", OnRestore));

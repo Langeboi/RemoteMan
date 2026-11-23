@@ -1,0 +1,19 @@
+# RemoteMan gateway connector: runs inside a remote network (school lab, a friend's homelab, behind CG-NAT).
+# It only connects out to the relay on 443, so no port forwarding is needed. `gateway site add <name>` on the
+# relay prints this file with the right RELAY_URL and SITE_TOKEN filled in.
+services:
+  connector:
+    image: ghcr.io/langeboi/remoteman-gateway:test
+    container_name: remoteman-connector
+    command: connector
+    restart: unless-stopped
+    environment:
+      RELAY_URL: https://remoteman.mydomain.dk
+      SITE_TOKEN: paste-the-site-token-here
+      NAME: school-1                        # shown on the relay; give a second connector for failover another name
+      # ALLOW: 10.20.0.0/16,192.168.1.10    # what it may open; default every private range. "*" = anything
+    volumes:
+      - connector-data:/data                # the connector's key; keep it so RemoteMan keeps trusting it
+
+volumes:
+  connector-data:

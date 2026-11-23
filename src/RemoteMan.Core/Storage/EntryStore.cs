@@ -436,6 +436,24 @@ public sealed class EntryStore : IAsyncDisposable
     }
 
     /// <summary>
+    /// The gateway site an entry goes through when its hosts don't answer directly, and whether it skips the
+    /// direct try. The entry's own setting wins; otherwise the nearest folder above it that sets one, so setting
+    /// a site on a folder covers everything in it. "" (None) on an entry or folder stops the search: direct only.
+    /// </summary>
+    public (string Site, bool Always)? GatewayFor(Entry entry)
+    {
+        var e = entry;
+        for (var hops = 0; hops < 64; hops++)
+        {
+            if (e.Connection?.GatewaySite is { } site)
+                return site.Length == 0 ? null : (site, e.Connection.GatewayAlways);
+            if (e.ParentId is not { } pid || Get(pid) is not { } parent) return null;
+            e = parent;
+        }
+        return null;
+    }
+
+    /// <summary>
     /// The entry as it connects: a copy with every section ticked "Folder" taken from the nearest parent
     /// folder that sets it itself (a folder can pass on what it inherits). No folder: the defaults.
     /// </summary>

@@ -364,6 +364,14 @@
                             <TextBlock Text="Run after" Width="110" Style="{StaticResource Label}" />
                             <TextBox x:Name="ConnAfter" FontFamily="{StaticResource MonoFont}" ToolTip="A command on this PC after the session closes" />
                         </DockPanel>
+                        <DockPanel Margin="0,8,0,2">
+                            <TextBlock Text="Gateway" Width="110" Style="{StaticResource Label}" />
+                            <StackPanel Orientation="Horizontal">
+                                <ComboBox x:Name="ConnGateway" Width="200" IsEditable="True" ToolTip="A site on your RemoteMan gateway relay (More > Gateway). Type a name or pick one." />
+                                <CheckBox x:Name="ConnGatewayAlways" Content="Always (skip the direct try)" Margin="10,0,0,0" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </DockPanel>
+                        <TextBlock Style="{StaticResource Hint}" Margin="110,0,0,4" Text="When no host answers directly, RemoteMan goes through that site's connector. Set it on a folder to cover everything in it." />
                     </StackPanel>
                 </local:SettingsSection>
 

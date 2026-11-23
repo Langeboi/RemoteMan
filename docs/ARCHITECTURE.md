@@ -18,6 +18,8 @@ src/RemoteMan.Core       model, EntryStore (in-memory mirror + sync), EndpointRe
 src/RemoteMan.Data       SQL data sources (one shared implementation, four dialects), failover wrapper
 src/RemoteMan.Protocols  SSH session, RDP control, external browsers, web auto-fill, VNC launcher
 src/RemoteMan.App        WPF shell, theme, views, dialogs
+src/RemoteMan.Gateway    gateway tunnel protocol, end-to-end crypto, client forwarders, connector, relay pairing
+src/RemoteMan.Gateway.Server  relay host (Kestrel) and connector as one CLI/Docker image (deploy/gateway)
 tests/RemoteMan.Tests    sync, conflict, presence, fallback, crypto tests (run on any OS)
 ```
 
@@ -171,6 +173,27 @@ Right-click an RDP or terminal entry > **Shared session…** (or a tab's menu > 
 - **Relay** (`deploy/relay/remoteman-relay.py`, installed with `remoteman-db relay install`): both sides
   connect out to it on TCP 47120 and it splices bytes; it can't read the TLS inside. RemoteMan looks for it
   on the database servers by itself (`ShareRelay` in settings overrides).
+
+## Gateway (reach other networks over 443)
+
+Twingate-style: a relay with a public address (Caddy + Let's Encrypt in front), a connector inside each remote
+network, both connecting out only. Setup in [deploy/gateway](../deploy/gateway/README.md).
+
+- **Pairing** (`Gateway/Relay.cs`): the connector holds a control WebSocket (`/v1/connector`, site token, its
+  static ECDSA P-256 public key in a header). RemoteMan opens `/v1/connect?site=x` (device token); the relay
+  asks the least busy connector for a tunnel (`open <id>` on the control socket), the connector opens
+  `/v1/accept/<id>`, and the relay copies messages between the two sockets. Errors (bad token, site not
+  allowed, offline, no answer) are HTTP statuses before the upgrade, so RemoteMan can say what's wrong.
+- **End to end** (`Gateway/SecureChannel.cs`): ephemeral ECDH P-256, the connector signs the transcript hash
+  with its static key, HKDF-SHA256 gives one AES-256-GCM key per direction, a 64-bit counter is the nonce.
+  RemoteMan accepts only connector keys the relay recorded for that site (`/v1/sites`).
+- **Inside a tunnel**: `{"targets":["10.0.0.5:3389","10.0.0.6:3389"]}` → the connector tries them in order
+  (only addresses its `ALLOW` list covers) and answers `{"ok":true,"target":…}`; then raw TCP bytes.
+- **In the app** (`Services/GatewayService.cs`): a site comes from the entry or the nearest folder that sets one
+  (`EntryStore.GatewayFor`). After the direct probe fails (or straight away with *Always*), RemoteMan probes
+  through the site, then points the session at a `LocalForwarder` on 127.0.0.1. Data sources route each
+  server through its own forwarder (`DataSourceFactory.RouteHosts`) that tries direct first and remembers the
+  choice for a minute. SSH host keys are saved under the real host.
 
 ## Known gaps / next steps
 

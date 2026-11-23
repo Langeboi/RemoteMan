@@ -22,4 +22,10 @@ public sealed class DataSourceConfig
     /// <summary>Shared sources encrypt secrets with a key derived from this vault passphrase
     /// (stored locally with DPAPI), so every member of the team can decrypt.</summary>
     public bool UseSharedVaultKey { get; set; }
+
+    /// <summary>RemoteMan gateway site the database servers are reached through when they don't answer directly
+    /// (off-site, behind CG-NAT). Null = direct only.</summary>
+    public string? GatewaySite { get; set; }
+    /// <summary>Always use the gateway, without trying the servers directly first.</summary>
+    public bool GatewayAlways { get; set; }
 }

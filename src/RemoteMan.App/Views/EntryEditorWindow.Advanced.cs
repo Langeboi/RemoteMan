@@ -203,6 +203,7 @@ public partial class EntryEditorWindow
         ConnWait.IsChecked = c.WaitUntilUp; ConnWaitSecs.Text = c.WaitSeconds.ToString();
         ConnReconnect.IsChecked = c.AutoReconnect;
         ConnBefore.Text = c.RunBefore; ConnBeforeWait.IsChecked = c.WaitForRunBefore; ConnAfter.Text = c.RunAfter;
+        LoadGateway(c, store);
 
         var r = entry.Rdp ?? new RdpSettings();
         Fill(RdpMonitorsBox, [new(RdpMonitors.One, "One monitor"), new(RdpMonitors.All, "All monitors"), new(RdpMonitors.Selected, "These monitors:")], r.Monitors);
@@ -275,6 +276,40 @@ public partial class EntryEditorWindow
         Show(RdpMonitorsHint, m != RdpMonitors.One);
     }
 
+    // ---------- Gateway site (Advanced > Connection) ----------
+
+    private const string GatewayInheritLabel = "From folder";
+    private const string GatewayNoneLabel = "None (direct only)";
+
+    private void LoadGateway(ConnectionSettings c, EntryStore store)
+    {
+        var names = new List<string> { GatewayInheritLabel, GatewayNoneLabel };
+        // Sites already used in this database, then the ones the relay offers this PC (filled in when it answers).
+        names.AddRange(store.Entries.Select(x => x.Connection?.GatewaySite).OfType<string>().Where(x => x.Length > 0)
+            .Distinct(StringComparer.OrdinalIgnoreCase).Order());
+        ConnGateway.ItemsSource = names;
+        ConnGateway.Text = c.GatewaySite switch { null => GatewayInheritLabel, "" => GatewayNoneLabel, var s => s };
+        ConnGatewayAlways.IsChecked = c.GatewayAlways;
+        _ = AddRelaySitesAsync(names);
+    }
+
+    private async Task AddRelaySitesAsync(List<string> names)
+    {
+        var sites = await Services.GatewayService.Instance.SitesAsync();
+        var extra = sites.Select(s => s.Name).Where(n => !names.Contains(n, StringComparer.OrdinalIgnoreCase)).ToList();
+        if (extra.Count == 0) return;
+        var text = ConnGateway.Text;
+        ConnGateway.ItemsSource = names.Concat(extra).ToList();
+        ConnGateway.Text = text;
+    }
+
+    /// <summary>Null = from folder, "" = none, otherwise the site name.</summary>
+    private string? GatewayValue()
+    {
+        var t = (ConnGateway.Text ?? "").Trim();
+        return t.Length == 0 || t == GatewayInheritLabel ? null : t == GatewayNoneLabel ? "" : t;
+    }
+
     // ---------- Advanced: save ----------
 
     private bool SaveSections()
@@ -289,8 +324,11 @@ public partial class EntryEditorWindow
             WakeOnLan = On(ConnWol), MacAddress = Text(ConnMac), WakeBroadcast = Text(ConnBroadcast),
             WaitUntilUp = On(ConnWait), WaitSeconds = int.TryParse(ConnWaitSecs.Text, out var ws) && ws > 0 ? Math.Min(ws, 3600) : 120,
             AutoReconnect = On(ConnReconnect), RunBefore = Text(ConnBefore), WaitForRunBefore = On(ConnBeforeWait), RunAfter = Text(ConnAfter),
+            GatewaySite = GatewayValue(), GatewayAlways = On(ConnGatewayAlways),
         };
-        var unchanged = !c.WakeOnLan && c.MacAddress is null && !c.WaitUntilUp && c.AutoReconnect && c.RunBefore is null && c.RunAfter is null;
+        if (c.GatewaySite is not { Length: > 0 }) c.GatewayAlways = false;
+        var unchanged = !c.WakeOnLan && c.MacAddress is null && !c.WaitUntilUp && c.AutoReconnect && c.RunBefore is null && c.RunAfter is null
+                        && c.GatewaySite is null;
         _e.Connection = unchanged ? null : c;
 
         var inherit = InheritSections.None;
@@ -446,7 +484,8 @@ public partial class EntryEditorWindow
             On(ConnWait) ? $"waits {ConnWaitSecs.Text.Trim()} s" : null,
             On(ConnReconnect) ? "reconnects" : "no reconnect",
             Text(ConnBefore) is not null ? "runs a command first" : null,
-            Text(ConnAfter) is not null ? "runs a command after" : null);
+            Text(ConnAfter) is not null ? "runs a command after" : null,
+            GatewayValue() switch { null => null, "" => "no gateway", var site => $"gateway {site}{(On(ConnGatewayAlways) ? " (always)" : "")}" });
         var mon = Val(RdpMonitorsBox, RdpMonitors.One);
         SecDisplay.Summary = Join(mon == RdpMonitors.One ? "one monitor" : mon == RdpMonitors.All ? "all monitors" : $"monitors {RdpMonitorList.Text.Trim()}",
             Val(RdpScale, 0) is > 0 and var sc ? $"{sc} %" : null, Val(RdpColors, 32) != 32 ? $"{Val(RdpColors, 32)} bit" : null,

@@ -26,6 +26,7 @@
     <ProjectReference Include="..\RemoteMan.Core\RemoteMan.Core.csproj" />
     <ProjectReference Include="..\RemoteMan.Data\RemoteMan.Data.csproj" />
     <ProjectReference Include="..\RemoteMan.Protocols\RemoteMan.Protocols.csproj" />
+    <ProjectReference Include="..\RemoteMan.Gateway\RemoteMan.Gateway.csproj" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />

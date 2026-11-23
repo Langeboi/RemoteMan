@@ -1,0 +1,113 @@
+# RemoteMan gateway
+
+Reach the database and the machines in other networks (school lab, a friend's homelab, a site behind CG-NAT) from
+anywhere, without a VPN client and without opening ports on those networks. It works like Twingate: every piece
+connects **out** on 443, and one small relay in the middle pairs them up.
+
+```
+RemoteMan (laptop, anywhere) ──443──►  relay (your home, remoteman.mydomain.dk)  ◄──443── connector (school, CG-NAT)
+                                                                                           └─► 10.20.0.0/16: RDP, SSH, web, PostgreSQL…
+```
+
+- **Relay**: the only public piece. Runs at home (or any box with a public IP) behind Caddy, which gets a
+  Let's Encrypt certificate by itself. It knows the sites and devices and splices tunnels. It never sees the
+  traffic: RemoteMan and the connector encrypt end to end (ECDH P-256 + AES-256-GCM, connector key pinned).
+- **Connector**: one per remote network, in Docker. Outbound only, reconnects by itself, and only opens what its
+  `ALLOW` list covers (all private ranges by default). Two connectors on one site share the load and take over
+  from each other.
+- **RemoteMan**: paste an invite once per PC (More > Gateway). Then a folder, an entry or the data source names a
+  site. RemoteMan tries the hosts directly first (you're on that network, or on a VPN) and goes through the gateway
+  only when they don't answer, unless you tick *Always*.
+
+The relay doesn't have to be where the database or the devices are: they just need a connector next to them.
+
+## 1. Relay (once)
+
+1. DNS: an A record, e.g. `remoteman.mydomain.dk`, pointing at your public IP.
+2. Router: forward TCP **443** (and 80, optional) to the machine that runs the relay.
+3. Save [`relay.compose.yaml`](relay.compose.yaml) there, change `remoteman.mydomain.dk` in both places, and run:
+
+```bash
+docker compose -f relay.compose.yaml up -d
+docker logs remoteman-relay-caddy     # "certificate obtained successfully"
+curl https://remoteman.mydomain.dk    # "RemoteMan gateway relay…"
+```
+
+No public IP of your own (your home is behind CG-NAT too)? Run the relay anywhere that has one (a small VPS), or
+publish it through a free Cloudflare Tunnel: drop the `caddy` service and point the tunnel at `http://relay:8080`.
+
+## 2. A site per remote network
+
+On the relay:
+
+```bash
+docker exec remoteman-relay gateway site add school
+```
+
+It prints a complete `compose.yaml` for the connector, with the relay address and the site's token filled in.
+Save it on any Docker host in that network (a VM, a Pi, the NAS) and run `docker compose up -d`. The connector shows
+up within seconds:
+
+```bash
+docker exec remoteman-relay gateway status
+#   school    school-1 (0 open)
+```
+
+Limit what it may open with `ALLOW` (comma-separated): `10.20.0.0/16`, `192.168.1.10`, `10.20.5.0/24:22|3389`
+(only those ports), `private` (the default: 10/8, 172.16/12, 192.168/16, 100.64/10, link-local, IPv6 ULA) or `*`.
+
+## 3. A device per PC
+
+```bash
+docker exec remoteman-relay gateway device add lange-laptop               # every site
+docker exec remoteman-relay gateway device add anna-pc --sites school     # only these
+```
+
+It prints an invite (`rmgw1.…`). In RemoteMan: **More > Gateway**, paste it, Save. The same window shows the sites
+the PC may use and whether their connectors are online.
+
+## 4. Use it
+
+- **Entries and folders**: Edit > Advanced > Connection > **Gateway**: pick the site. On a folder it covers everything
+  inside (an entry or sub-folder can say *None (direct only)* or another site). *Always* skips the direct try.
+- **The database**: Data sources > your source > **Gateway site**. Each server gets its own tunnel, so PostgreSQL
+  failover keeps working; with *Always* off, a PC on the same network as the database still connects directly.
+  Takes effect on the next start.
+
+What goes through the tunnel is a plain TCP connection, so RDP (certificate warnings still skipped), SSH (host keys
+are saved under the real host, not 127.0.0.1), SFTP, VNC, web entries and PostgreSQL / SQL Server / MySQL all work.
+Web entries open as `https://127.0.0.1:<port>`, so a site that needs its own host name (a reverse proxy with several
+sites on one address) shows its default site; give those entries their own IP or port.
+
+## Day to day
+
+| On the relay (`docker exec remoteman-relay …`) | |
+| --- | --- |
+| `gateway status` | Connectors online per site, tunnels open, traffic |
+| `gateway site list` | Sites and their connector key fingerprints |
+| `gateway site token <site>` | New token for a site (the old one stops working; update the connector) |
+| `gateway site reset-key <site>` | Forget the site's connector keys (after replacing a connector on purpose) |
+| `gateway site remove <site>` | |
+| `gateway device list` / `gateway device remove <name>` | A removed device is refused at once |
+
+Upgrade: `docker compose pull && docker compose up -d` on the relay and on each connector.
+
+## Security notes
+
+- Tokens are 256 random bits, stored on the relay only as SHA-256 hashes. A device token is kept in RemoteMan
+  under Windows DPAPI.
+- Each tunnel does its own key exchange; the connector signs it with its long-term key, and RemoteMan only accepts
+  keys the relay recorded for that site. A new connector key is logged on the relay and listed by `site list`.
+  The relay is the root of trust: someone who controls the relay could register their own connector, so keep that
+  box patched and its volume private.
+- The connector never opens anything outside `ALLOW`, and resolves names on its own network (so `nas.lan` works).
+
+## Build it yourself
+
+```bash
+docker build -f deploy/gateway/Dockerfile -t remoteman-gateway .     # from the repository root
+```
+
+GitHub Actions publishes it to `ghcr.io/langeboi/remoteman-gateway` (`:test` from the test branch, `:latest` from
+releases). A new package on GitHub starts private: make it public once under the repository's Packages, Package
+settings, or `docker login ghcr.io` on the relay and connector hosts.

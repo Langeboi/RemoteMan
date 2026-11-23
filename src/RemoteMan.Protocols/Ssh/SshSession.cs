@@ -118,6 +118,9 @@ public sealed class SshSession : RemoteMan.Protocols.Terminal.ITerminalChannel
 
     /// <summary>The endpoint the shell actually reached (the real host, also when tunnelled).</summary>
     public HostEndpoint? ConnectedEndpoint { get; private set; }
+    /// <summary>The real host when the target endpoint is a local tunnel (RemoteMan gateway): host keys are
+    /// checked and saved under this name instead of 127.0.0.1:(random port).</summary>
+    public HostEndpoint? KnownHostAs { get; set; }
 
     private async Task<(SshClient Client, HostEndpoint Endpoint, ConnectionInfo Info)> ConnectHopAsync(SshClient? via,
         IReadOnlyList<HostEndpoint> endpoints, ResolvedCredential cred, SshSettings settings, KnownHosts knownHosts, CancellationToken ct)
@@ -140,16 +143,17 @@ public sealed class SshSession : RemoteMan.Protocols.Terminal.ITerminalChannel
             var client = new SshClient(info);
             if (settings.KeepAliveSeconds > 0) client.KeepAliveInterval = TimeSpan.FromSeconds(settings.KeepAliveSeconds);
             // Host keys are checked against the real host name, not the loopback forward.
+            var keyAs = via is null && KnownHostAs is { } k ? k : ep;
             client.HostKeyReceived += (_, e) =>
             {
-                switch (knownHosts.Check(ep.Host, ep.Port, e.HostKeyName, e.FingerPrintSHA256))
+                switch (knownHosts.Check(keyAs.Host, keyAs.Port, e.HostKeyName, e.FingerPrintSHA256))
                 {
                     case HostKeyVerdict.New:
-                        Info?.Invoke($"Host key {e.HostKeyName} SHA256:{e.FingerPrintSHA256} for {ep} accepted automatically (first use, saved).");
+                        Info?.Invoke($"Host key {e.HostKeyName} SHA256:{e.FingerPrintSHA256} for {keyAs} accepted automatically (first use, saved).");
                         e.CanTrust = settings.AutoAcceptHostKey;
                         break;
                     case HostKeyVerdict.Changed:
-                        Info?.Invoke($"WARNING: host key for {ep} changed, now {e.HostKeyName} SHA256:{e.FingerPrintSHA256}.");
+                        Info?.Invoke($"WARNING: host key for {keyAs} changed, now {e.HostKeyName} SHA256:{e.FingerPrintSHA256}.");
                         e.CanTrust = settings.AutoAcceptHostKey;
                         break;
                     default:

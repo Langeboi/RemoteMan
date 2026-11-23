@@ -38,6 +38,8 @@ public partial class DataSourceWindow : Window
         ConnBox.Text = string.Join(Environment.NewLine, _current.ConnectionStrings);
         VaultBox.Password = Secrets.LoadVaultPassphrase(_current.Name) ?? "";
         SsoBox.IsChecked = _current.UseWindowsLogin;
+        GatewayBox.Text = _current.GatewaySite ?? "";
+        GatewayAlwaysBox.IsChecked = _current.GatewayAlways;
         if (UsersTab.IsChecked == true) _ = LoadUsersAsync();
     }
 
@@ -53,6 +55,8 @@ public partial class DataSourceWindow : Window
         _current.Kind = (DataSourceKind)(KindBox.SelectedItem ?? DataSourceKind.Sqlite);
         _current.ConnectionStrings = ConnBox.Text.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
         _current.UseWindowsLogin = SsoBox.IsChecked == true && _current.Kind != DataSourceKind.Sqlite;
+        _current.GatewaySite = _current.Kind == DataSourceKind.Sqlite || GatewayBox.Text.Trim().Length == 0 ? null : GatewayBox.Text.Trim();
+        _current.GatewayAlways = _current.GatewaySite is not null && GatewayAlwaysBox.IsChecked == true;
         _current.UseSharedVaultKey = _current.Kind != DataSourceKind.Sqlite || VaultBox.Password.Length > 0;
         if (VaultBox.Password.Length > 0) Secrets.SaveVaultPassphrase(_current.Name, VaultBox.Password);
     }
@@ -82,7 +86,7 @@ public partial class DataSourceWindow : Window
         TestResult.Text = "Testing…";
         try
         {
-            await using var src = DataSourceFactory.Create(_current);
+            await using var src = DataSourceFactory.Create(_current, Services.GatewayService.Instance.RouteFor(_current));
             var sw = System.Diagnostics.Stopwatch.StartNew();
             await src.InitializeAsync();
             var n = (await src.LoadAllAsync()).Count;
