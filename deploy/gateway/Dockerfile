@@ -8,7 +8,10 @@ COPY src/RemoteMan.Gateway src/RemoteMan.Gateway
 COPY src/RemoteMan.Gateway.Server src/RemoteMan.Gateway.Server
 ARG VERSION=dev
 # Framework-dependent IL runs on amd64 and arm64 alike, so one build serves both platforms.
-RUN dotnet publish src/RemoteMan.Gateway.Server -c Release -o /out -p:InformationalVersion=${VERSION}
+# MSBuild reads environment variables as properties, so the VERSION build arg would become the projects' $(Version)
+# ("test-abc1234" isn't a valid one and restore fails): hide it and pass it only as the informational version.
+# EnableWindowsTargeting (Directory.Build.props, for the WPF app) would fetch the Windows reference pack: not needed here.
+RUN env -u VERSION dotnet publish src/RemoteMan.Gateway.Server -c Release -o /out -p:InformationalVersion=${VERSION} -p:EnableWindowsTargeting=false -p:NuGetAudit=false
 
 FROM mcr.microsoft.com/dotnet/aspnet:10.0
 COPY --from=build /out /opt/remoteman-gateway
