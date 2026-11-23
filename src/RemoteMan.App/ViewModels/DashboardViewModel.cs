@@ -54,7 +54,27 @@ public sealed partial class DashboardViewModel : SessionViewModel
     public DashboardViewModel()
         : base(new Entry { Id = Guid.Empty, Kind = EntryKind.Folder, Name = "Dashboard" }, new HostEndpoint(""), RemoteMan.Protocols.ResolvedCredential.None, false)
     {
+        PropertyChanged += (_, e) => { if (e.PropertyName == nameof(IsActive)) SyncEntryInfo(); };
     }
+
+    /// <summary>The overview of the entry clicked in the tree, shown in place of the widgets; null shows the dashboard.</summary>
+    [ObservableProperty] [NotifyPropertyChangedFor(nameof(ShowingEntry))] private OverviewViewModel? _entryInfo;
+    public bool ShowingEntry => EntryInfo is not null;
+
+    partial void OnEntryInfoChanged(OverviewViewModel? oldValue, OverviewViewModel? newValue)
+    {
+        if (oldValue is not null && oldValue != newValue) oldValue.IsActive = false;
+        SyncEntryInfo();
+    }
+
+    /// <summary>The overview's 2FA countdown only runs while it is on screen.</summary>
+    private void SyncEntryInfo()
+    {
+        if (EntryInfo is { } o) o.IsActive = IsActive;
+    }
+
+    /// <summary>The "Dashboard" link above an entry's overview.</summary>
+    [RelayCommand] private void BackToDashboard() => EntryInfo = null;
 
     public override bool IsPinned => true;
     public override bool IsConnection => false;

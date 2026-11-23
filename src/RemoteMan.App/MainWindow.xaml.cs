@@ -67,7 +67,7 @@ public partial class MainWindow : Window
         DataContext = _vm;
         SetUpNotices();
 
-        // The Dashboard and Overview tabs aren't connections: the assistant sees no session while it's showing.
+        // The Dashboard tab (and the entry overview inside it) isn't a connection: the assistant sees no session while it's showing.
         _ai = new AiAssistantViewModel(settings, () => _vm.ActiveSession is { IsConnection: false } ? null : _vm.ActiveSession) { StatusMessage = m => _vm.Message = m };
         _vm.RevealRequested += (_, node) => Dispatcher.BeginInvoke(() => RevealInTree(node), System.Windows.Threading.DispatcherPriority.Loaded);
         _vm.PropertyChanged += (_, e) => { if (e.PropertyName == nameof(MainViewModel.PanelMode)) SyncRail(); };
@@ -568,9 +568,9 @@ public partial class MainWindow : Window
 
     private int _treeClickCount;
 
-    /// <summary>A plain click on an entry brings up its Overview tab (folders just open and close).
-    /// The release of a double-click is skipped: the first click already showed the Overview, and doing it
-    /// again would pull the Overview in front of the session the double-click just opened.</summary>
+    /// <summary>A plain click on an entry shows its overview in the Dashboard tab (folders just open and close).
+    /// The release of a double-click is skipped: the first click already showed the overview, and doing it
+    /// again would pull the Dashboard in front of the session the double-click just opened.</summary>
     private void OnTreeMouseUp(object sender, MouseButtonEventArgs e)
     {
         if (_clearMultiOnUp) { _clearMultiOnUp = false; _vm.ClearMultiSelection(); }
