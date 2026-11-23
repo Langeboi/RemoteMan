@@ -497,8 +497,14 @@ class Admin:
             count = len(oxidized.nodes())
         except Exception:  # noqa: BLE001
             count = None
+        def last(key):
+            try:
+                return json.loads(store.get(key) or "null")
+            except ValueError:
+                return None
         return {"ready": bool(tok), "url": f"https://{addr}:{C.ADMIN_PORT}/oxidized/nodes.json", "token": tok or "",
-                "devices": count, "config": oxidized.config_snippet(addr, tok or "<token>")}
+                "devices": count, "config": oxidized.config_snippet(addr, tok or "<token>"),
+                "last_read": last("oxidized_last_read"), "last_refused": last("oxidized_last_refused"), "server": self.cl.name}
 
     def session(self, token):
         s = self.sessions.get(token or "")
@@ -623,8 +629,9 @@ def make_handler(admin):
                     if not fn:
                         raise Http(404, "Not found.")
                     return self._send(200, fn(self._body() if method == "POST" else {}, q))
-                if path == "/oxidized/nodes.json" and method == "GET":
-                    return self._oxidized()
+                # Oxidized asks for one device as <url>/<name> when it reloads a single node.
+                if method == "GET" and (path == "/oxidized/nodes.json" or path.startswith("/oxidized/nodes.json/")):
+                    return self._oxidized(urllib.parse.unquote(path[len("/oxidized/nodes.json/"):]) if path.startswith("/oxidized/nodes.json/") else None)
                 if path.startswith("/api/"):
                     return self._api(method, path, q)
                 return self._static(path)
@@ -636,7 +643,7 @@ def make_handler(admin):
                 log.exception("request %s %s", method, path)
                 self._send(500, {"error": f"Something went wrong: {e}"})
 
-        def _oxidized(self):
+        def _oxidized(self, only=None):
             """Oxidized's http source: Authorization: Bearer <token> (or basic auth with the token as the password)."""
             ip = self.client_address[0]
             now = time.time()
@@ -655,8 +662,13 @@ def make_handler(admin):
                     given = ""
             if not oxidized.check_token(given):
                 recent.append(now)
+                store.put("oxidized_last_refused", json.dumps({"ts": now, "ip": ip, "why": "no token" if not given else "wrong token"}))
                 raise Http(401, "Wrong or missing token. Find it on the admin page under Servers > Oxidized.")
-            return self._send(200, oxidized.nodes())
+            nodes = oxidized.nodes()
+            store.put("oxidized_last_read", json.dumps({"ts": now, "ip": ip, "count": len(nodes), "one": only or ""}))
+            if only:
+                nodes = [n for n in nodes if n["name"].lower() == only.lower()]
+            return self._send(200, nodes)
 
         def _static(self, path):
             if path in ("/", "/overview", "/servers", "/users", "/logins"):
