@@ -117,7 +117,7 @@ public sealed partial class MainViewModel
             }
 
             // New or renamed devices: ask Oxidized to read the list again now instead of at its next reload.
-            var plan = OxidizedFeed.Plan(entries, cfg.FeedOptions, sync.Links, _oxSnapshot, sync.Choice(cfg.FeedAutoAdd));
+            var plan = OxidizedFeed.Plan(entries, cfg.FeedOptions, sync.Links, _oxSnapshot, sync.Choice(cfg.FeedAutoAdd), sync.Models);
             var stamp = string.Join("\n", plan.Where(i => i.State is OxidizedFeedState.InOxidized or OxidizedFeedState.Missing).Select(i => $"{i.FullName}|{i.Ip}|{i.Port}|{i.Model}"));
             if (_feedNamesStamp is not null && stamp != _feedNamesStamp && OxidizedActive)
             {
@@ -151,15 +151,19 @@ public sealed partial class MainViewModel
 
     /// <summary>
     /// Saves which entries go to Oxidized (unticked ones in <paramref name="excluded"/>, ticked ones in <paramref name="included"/>)
-    /// and which Oxidized-only devices stay in its list, then brings the logins up to date.
+    /// which Oxidized-only devices stay in its list, and the model picked for each entry (entry id to model).
     /// </summary>
-    public async Task SaveOxidizedChoiceAsync(IEnumerable<Guid> excluded, IEnumerable<Guid> included, IEnumerable<OxidizedKeptNode> kept)
+    public async Task SaveOxidizedChoiceAsync(IEnumerable<Guid> excluded, IEnumerable<Guid> included, IEnumerable<OxidizedKeptNode> kept,
+        IReadOnlyDictionary<string, string>? models = null)
     {
         if (_integrations is not { } ints) return;
         var sync = ReadOxidizedFeedSync();
         sync.Excluded = excluded.Select(OxidizedFeed.IdKey).Order(StringComparer.Ordinal).ToList();
         sync.Included = included.Select(OxidizedFeed.IdKey).Order(StringComparer.Ordinal).ToList();
         sync.Keep = kept.ToList();
+        if (models is not null)
+            sync.Models = models.Where(kv => !string.IsNullOrWhiteSpace(kv.Value))
+                .OrderBy(kv => kv.Key, StringComparer.Ordinal).ToDictionary(kv => kv.Key.ToLowerInvariant(), kv => kv.Value.Trim());
         var json = JsonSerializer.Serialize(sync, OxidizedFeed.Json);
         if (json != ints.OxidizedSyncRow?.Value) await ints.SaveOxidizedSyncAsync(json);
     }
