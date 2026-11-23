@@ -213,11 +213,17 @@ public partial class ImportWindow : Window
         if (_result is null || _main.Store is not { } store || _main.Protector is not { } protector) return;
         if (!store.IsOnline) { Summary.Text = "Offline: import needs the database. Try again when it's back."; return; }
         ImportButton.IsEnabled = false;
+        // Read everything the planner needs here, on the UI thread. The planner runs on a
+        // worker thread, and a WPF control (like the "skip existing" checkbox) can only be
+        // read from the thread that created it.
         var target = (TargetBox.SelectedItem as FolderChoice)?.Id;
+        var skipDupes = SkipDupes.IsChecked == true;
+        var items = _result.Items;
+        var existing = store.Entries.ToList();
         try
         {
-            var plan = await Task.Run(() => ImportPlanner.Plan(_result.Items, store.Entries.ToList(), protector, ImportMode.AddCopies, target, SkipDupes.IsChecked == true));
-            var wanted = _result.Items.Count(i => i.Include);
+            var plan = await Task.Run(() => ImportPlanner.Plan(items, existing, protector, ImportMode.AddCopies, target, skipDupes));
+            var wanted = items.Count(i => i.Include);
             var saved = await _main.SaveImportedAsync(plan, new Progress<int>(n => Summary.Text = $"Saving {n} of {plan.Count}…"));
             var skipped = wanted - saved;
             _main.Message = $"Imported {saved} entr{(saved == 1 ? "y" : "ies")}" + (skipped > 0 ? $", {skipped} already there" : "");
