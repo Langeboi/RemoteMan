@@ -37,6 +37,8 @@ public sealed partial class EntryNode : ObservableObject
     /// <summary>Tiny initials badge on the corner of the protocol icon: the first person on this entry, tooltip lists everyone.</summary>
     [ObservableProperty] private PresenceChip? _badge;
     [ObservableProperty] private bool _isDropTarget;
+    /// <summary>Picked with Ctrl+click or Shift+click as part of a multi-selection (moved together).</summary>
+    [ObservableProperty] private bool _isMultiSelected;
 
     /// <summary>Zabbix glyph on the right of the row: ok, warn, high, unreach, maint, or null for none.</summary>
     [ObservableProperty] private string? _health;

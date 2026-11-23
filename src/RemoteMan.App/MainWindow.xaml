@@ -473,7 +473,7 @@
                           VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling"
                           SelectedItemChanged="OnTreeSelectionChanged" PreviewMouseLeftButtonDown="OnTreeMouseDown" PreviewMouseLeftButtonUp="OnTreeMouseUp"
                           PreviewMouseMove="OnTreeMouseMove" AllowDrop="True" DragOver="OnTreeDragOver" DragLeave="OnTreeDragLeave" Drop="OnTreeDrop"
-                          MouseDoubleClick="OnTreeDoubleClick" KeyDown="OnTreeKeyDown"
+                          MouseDoubleClick="OnTreeDoubleClick" KeyDown="OnTreeKeyDown" PreviewKeyDown="OnTreePreviewKeyDown"
                           PreviewMouseRightButtonDown="OnTreeRightButtonDown" ContextMenuOpening="OnTreeContextMenuOpening">
                     <!-- Filled per entry when it opens (Views/EntryMenu.cs) -->
                     <TreeView.ContextMenu><ContextMenu /></TreeView.ContextMenu>

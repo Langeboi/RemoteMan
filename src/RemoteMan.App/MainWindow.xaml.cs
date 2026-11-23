@@ -525,19 +525,42 @@ public partial class MainWindow : Window
     private void OnTreeSelectionChanged(object sender, RoutedPropertyChangedEventArgs<object> e) =>
         _vm.Selected = e.NewValue is EntryNode { IsRoot: false } n ? n : null;
 
-    /// <summary>Ctrl+click a credential to link it to the selected connection, without changing the selection.</summary>
+    /// <summary>
+    /// Ctrl+click: on a credential while one connection is selected, links the credential to it (without changing
+    /// the selection), as before. Anywhere else, Ctrl+click adds or removes the entry from a multi-selection, and
+    /// Shift+click takes the range from the selected entry. A plain click goes back to a single selection.
+    /// </summary>
     private async void OnTreeMouseDown(object sender, MouseButtonEventArgs e)
     {
         _dragStart = e.GetPosition(Tree);
         _treeClickCount = e.ClickCount;
-        _dragNode = FindItem(e.OriginalSource as DependencyObject)?.DataContext as EntryNode;
-        if (_dragNode?.IsRoot == true) _dragNode = null;
-        if (Keyboard.Modifiers != ModifierKeys.Control) return;
-        if (FindItem(e.OriginalSource as DependencyObject)?.DataContext is not EntryNode clicked) return;
-        if (clicked.Entry.Kind != Core.Model.EntryKind.Credential) return;
-        e.Handled = true;
-        await _vm.TryCtrlClickLinkAsync(clicked);
+        _clearMultiOnUp = false;
+        var clicked = FindItem(e.OriginalSource as DependencyObject)?.DataContext as EntryNode;
+        _dragNode = clicked?.IsRoot == true ? null : clicked;
+        if (clicked is null) return;
+        var mods = Keyboard.Modifiers;
+        if (mods == ModifierKeys.Control)
+        {
+            e.Handled = true;
+            if (_vm.CanCtrlClickLink(clicked)) await _vm.TryCtrlClickLinkAsync(clicked);
+            else _vm.ToggleMultiSelect(clicked);
+            Tree.Focus();
+        }
+        else if (mods is ModifierKeys.Shift or (ModifierKeys.Shift | ModifierKeys.Control))
+        {
+            e.Handled = true;
+            _vm.RangeSelect(clicked, additive: mods.HasFlag(ModifierKeys.Control));
+            Tree.Focus();
+        }
+        else if (mods == ModifierKeys.None)
+        {
+            // Pressing on a picked entry keeps the set so it can be dragged; letting go without a drag narrows to that entry.
+            if (_vm.IsInMultiSelection(clicked)) _clearMultiOnUp = true;
+            else _vm.ClearMultiSelection();
+        }
     }
+
+    private bool _clearMultiOnUp;
 
     private int _treeClickCount;
 
@@ -546,6 +569,7 @@ public partial class MainWindow : Window
     /// again would pull the Overview in front of the session the double-click just opened.</summary>
     private void OnTreeMouseUp(object sender, MouseButtonEventArgs e)
     {
+        if (_clearMultiOnUp) { _clearMultiOnUp = false; _vm.ClearMultiSelection(); }
         if (Keyboard.Modifiers != ModifierKeys.None || _treeClickCount > 1) return;
         if (FindItem(e.OriginalSource as DependencyObject)?.DataContext is not EntryNode n || n != _vm.Selected) return;
         if (e.OriginalSource is DependencyObject d && FindAncestor<System.Windows.Controls.Primitives.ToggleButton>(d) is not null) return;
@@ -566,17 +590,31 @@ public partial class MainWindow : Window
 
     /// <summary>Right-click selects the entry under the mouse first, so the menu acts on it.</summary>
     private bool _rightClickOnEmpty;
+    private bool _rightClickOnMulti;
 
     private void OnTreeRightButtonDown(object sender, MouseButtonEventArgs e)
     {
         var item = FindItem(e.OriginalSource as DependencyObject);
         _rightClickOnEmpty = item is null;
+        // Right-click inside a multi-selection keeps it, so the menu can move them all.
+        _rightClickOnMulti = item?.DataContext is EntryNode n && _vm.IsInMultiSelection(n);
+        if (_rightClickOnMulti) return;
+        _vm.ClearMultiSelection();
         if (item is not null) { item.IsSelected = true; item.Focus(); }
     }
 
     private void OnTreeContextMenuOpening(object sender, ContextMenuEventArgs e)
     {
         if (Tree.ContextMenu is not { } menu) { e.Handled = true; return; }
+        // Several entries picked (right-clicked on one of them, or the menu key on the focused one): bulk actions.
+        var onMulti = _rightClickOnMulti || (!_rightClickOnEmpty && _vm.Selected is { } focused && _vm.IsInMultiSelection(focused));
+        _rightClickOnMulti = false;
+        if (onMulti && _vm.HasMultiSelection)
+        {
+            _rightClickOnEmpty = false;
+            EntryMenu.FillMulti(menu, _vm);
+            return;
+        }
         // Empty space (or the keyboard menu key with nothing selected): new, paste, expand, import.
         if (_rightClickOnEmpty || _vm.Selected is not { } node)
         {
@@ -602,8 +640,20 @@ public partial class MainWindow : Window
         if (Math.Abs(d.X) < SystemParameters.MinimumHorizontalDragDistance && Math.Abs(d.Y) < SystemParameters.MinimumVerticalDragDistance) return;
         var node = _dragNode;
         _dragNode = null;
-        DragDrop.DoDragDrop(Tree, new DataObject(DragFormat, node.Id.ToString()), DragDropEffects.Move);
+        _clearMultiOnUp = false;
+        // Dragging a picked entry drags the whole multi-selection.
+        var ids = string.Join(",", _vm.MoveSetFor(node));
+        DragDrop.DoDragDrop(Tree, new DataObject(DragFormat, ids), DragDropEffects.Move);
         SetDropHighlight(null);
+    }
+
+    private static List<Guid>? DraggedIds(DragEventArgs e)
+    {
+        if (e.Data.GetData(DragFormat) is not string s) return null;
+        var ids = new List<Guid>();
+        foreach (var part in s.Split(',', StringSplitOptions.RemoveEmptyEntries))
+            if (Guid.TryParse(part, out var g)) ids.Add(g);
+        return ids.Count > 0 ? ids : null;
     }
 
     /// <summary>Dropping on a folder moves into it; on an entry, into that entry's folder; on empty space, to the top level.</summary>
@@ -620,10 +670,10 @@ public partial class MainWindow : Window
     private void OnTreeDragOver(object sender, DragEventArgs e)
     {
         e.Effects = DragDropEffects.None;
-        if (e.Data.GetData(DragFormat) is string id && Guid.TryParse(id, out var moving))
+        if (DraggedIds(e) is { } moving)
         {
             var folder = DropFolder(e, out var highlight);
-            if (_vm.CanMove(moving, folder)) { e.Effects = DragDropEffects.Move; SetDropHighlight(highlight); }
+            if (_vm.CanMoveAny(moving, folder)) { e.Effects = DragDropEffects.Move; SetDropHighlight(highlight); }
             else SetDropHighlight(null);
         }
         e.Handled = true;
@@ -634,10 +684,10 @@ public partial class MainWindow : Window
     private async void OnTreeDrop(object sender, DragEventArgs e)
     {
         SetDropHighlight(null);
-        if (e.Data.GetData(DragFormat) is not string id || !Guid.TryParse(id, out var moving)) return;
+        if (DraggedIds(e) is not { } moving) return;
         var folder = DropFolder(e, out _);
         e.Handled = true;
-        await _vm.MoveAsync(moving, folder);
+        await _vm.MoveManyAsync(moving, folder);
     }
 
     private void SetDropHighlight(EntryNode? node)
@@ -655,6 +705,16 @@ public partial class MainWindow : Window
             _vm.ConnectCommand.Execute(n);
             e.Handled = true;
         }
+    }
+
+    /// <summary>Escape drops a multi-selection; moving with the arrow keys (without Shift) goes back to one entry.</summary>
+    private void OnTreePreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        if (!_vm.HasMultiSelection) return;
+        if (e.Key == Key.Escape) { _vm.ClearMultiSelection(); e.Handled = true; }
+        else if (e.Key is Key.Up or Key.Down or Key.Left or Key.Right or Key.Home or Key.End or Key.PageUp or Key.PageDown
+                 && !Keyboard.Modifiers.HasFlag(ModifierKeys.Shift))
+            _vm.ClearMultiSelection();
     }
 
     private void OnTreeKeyDown(object sender, KeyEventArgs e)
