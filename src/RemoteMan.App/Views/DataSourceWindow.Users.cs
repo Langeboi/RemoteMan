@@ -35,7 +35,7 @@ public partial class DataSourceWindow
         public Brush AccessBrush => Login.CanLogin ? AccessColor(Login.Access) : Res("Faint");
         public Brush NameBrush => Login.CanLogin ? Res("TextStrong") : Res("Faint");
         public Brush AvatarBrush => Login.CanLogin ? AvatarColor(Login.Name) : Res("FolderIcon");
-        public Brush OnlineBrush => Login.Connections > 0 ? Res("Ok") : new SolidColorBrush(Color.FromRgb(0x4A, 0x50, 0x58));
+        public Brush OnlineBrush => Login.Connections > 0 ? Res("Ok") : Res("Faint");
         public string OnlineText => Login.Connections > 0 ? (Login.Connections == 1 ? "yes" : $"yes ({Login.Connections})") : "no";
         public string LastChangeText => Login.LastChange is { } at ? at.ToLocalTime().ToString("dd MMM HH:mm") : "never";
     }

@@ -177,8 +177,8 @@
                 <Border DockPanel.Dock="Left" Width="44" Height="44" CornerRadius="8" Margin="0,0,14,0" VerticalAlignment="Top" BorderThickness="1" x:Name="BigIcon">
                     <Border.Style>
                         <Style TargetType="Border">
-                            <Setter Property="Background" Value="#18222E" />
-                            <Setter Property="BorderBrush" Value="#23344A" />
+                            <Setter Property="Background" Value="{StaticResource SelectRow}" />
+                            <Setter Property="BorderBrush" Value="{StaticResource AccentDim}" />
                             <Style.Triggers>
                                 <DataTrigger Binding="{Binding IsCredential}" Value="True"><Setter Property="Background" Value="#26241A" /><Setter Property="BorderBrush" Value="#3D3820" /></DataTrigger>
                                 <DataTrigger Binding="{Binding IsFolder}" Value="True"><Setter Property="Background" Value="{StaticResource Hover}" /><Setter Property="BorderBrush" Value="{StaticResource Border}" /></DataTrigger>

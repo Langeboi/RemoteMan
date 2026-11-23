@@ -121,7 +121,7 @@
                     <Setter TargetName="tag" Property="Visibility" Value="Collapsed" />
                     <Setter TargetName="dsIcon" Property="Visibility" Value="Visible" />
                     <Setter TargetName="name" Property="FontWeight" Value="SemiBold" />
-                    <Setter TargetName="name" Property="Foreground" Value="#7DB2F0" />
+                    <Setter TargetName="name" Property="Foreground" Value="{StaticResource Link}" />
                 </DataTrigger>
                 <DataTrigger Binding="{Binding ProblemCountHigh}" Value="True">
                     <Setter TargetName="pcount" Property="Background" Value="{StaticResource Bad}" />
