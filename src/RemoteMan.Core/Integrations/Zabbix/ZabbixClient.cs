@@ -116,7 +116,9 @@ public sealed class ZabbixClient : IDisposable
             ["object"] = 0,
             ["severities"] = sev,
             ["recent"] = false,
-            ["selectAcknowledges"] = new JsonArray("username", "name", "surname", "action", "clock"),
+            // Only fields every supported version accepts: Zabbix 7 rejects the user name fields here
+            // ("value must be one of ..."), so names are looked up with user.get below.
+            ["selectAcknowledges"] = new JsonArray("userid", "action", "clock"),
             ["sortfield"] = new JsonArray("eventid"),
             ["sortorder"] = "DESC",
         }, auth: true, ct);
@@ -137,17 +139,23 @@ public sealed class ZabbixClient : IDisposable
         foreach (var (tid, t) in triggers.AsObject())
             hostsByTrigger[tid] = t!["hosts"]?.AsArray().Select(h => Str(h!, "hostid")).ToList() ?? [];
 
+        // action bit 2 = acknowledged; take the most recent update on each problem that did.
+        var lastAck = new Dictionary<JsonNode, JsonNode>();
+        foreach (var p in list)
+            if (p!["acknowledges"]?.AsArray().Where(a => (Int(a!, "action") & 2) != 0).OrderByDescending(a => Int(a!, "clock")).FirstOrDefault() is { } a)
+                lastAck[p] = a;
+        var userNames = await GetUserNamesAsync(lastAck.Values.Select(a => Str(a, "userid")), ct);
+
         var result = new List<ZabbixProblem>();
         foreach (var p in list)
         {
-            var acks = p!["acknowledges"]?.AsArray();
             string? ackBy = null;
-            // action bit 2 = acknowledged; take the most recent one that did.
-            var ack = acks?.Where(a => (Int(a!, "action") & 2) != 0).OrderByDescending(a => Int(a!, "clock")).FirstOrDefault();
-            if (ack is not null)
+            if (lastAck.TryGetValue(p!, out var ack))
             {
+                // Older servers may still put names on the acknowledge itself; use them if user.get gave nothing.
                 var full = $"{Str(ack, "name")} {Str(ack, "surname")}".Trim();
-                ackBy = full.Length > 0 ? full : Str(ack, "username");
+                ackBy = userNames.TryGetValue(Str(ack, "userid"), out var n) ? n
+                    : full.Length > 0 ? full : Str(ack, "username");
             }
             if (!hostsByTrigger.TryGetValue(Str(p, "objectid"), out var hosts)) continue;
             foreach (var hostId in hosts)
@@ -161,6 +169,34 @@ public sealed class ZabbixClient : IDisposable
             }
         }
         return result;
+    }
+
+    /// <summary>
+    /// Display names ("Name Surname", else the login) for the given user ids. Best effort: a token
+    /// without rights to see other users gets fewer names back, and any failure gives an empty map.
+    /// </summary>
+    private async Task<Dictionary<string, string>> GetUserNamesAsync(IEnumerable<string> userIds, CancellationToken ct)
+    {
+        var names = new Dictionary<string, string>();
+        var ids = new JsonArray();
+        foreach (var id in userIds.Where(i => i.Length > 0 && i != "0").Distinct()) ids.Add(id);
+        if (ids.Count == 0) return names;
+        try
+        {
+            var users = await CallAsync("user.get", new JsonObject
+            {
+                ["output"] = new JsonArray("userid", "username", "name", "surname"),
+                ["userids"] = ids,
+            }, auth: true, ct);
+            foreach (var u in users.AsArray())
+            {
+                var full = $"{Str(u!, "name")} {Str(u!, "surname")}".Trim();
+                var name = full.Length > 0 ? full : Str(u!, "username");
+                if (name.Length > 0) names[Str(u!, "userid")] = name;
+            }
+        }
+        catch (ZabbixApiException) { }
+        return names;
     }
 
     /// <summary>The frontend page that lists a host's problems, or every problem when no host is given.</summary>
