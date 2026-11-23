@@ -1,0 +1,75 @@
+<UserControl x:Class="RemoteMan.App.Views.WhatsNewView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="clr-namespace:RemoteMan.App.ViewModels"
+             Background="{StaticResource Bg}">
+    <UserControl.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolVis" />
+
+        <Style TargetType="TextBlock" x:Key="SectionTitle">
+            <Setter Property="Foreground" Value="{StaticResource Muted}" />
+            <Setter Property="FontSize" Value="11" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Typography.Capitals" Value="AllSmallCaps" />
+            <Setter Property="Margin" Value="2,0,0,8" />
+        </Style>
+
+        <!-- One change: title, the points under it, then version and date -->
+        <DataTemplate x:Key="ChangeCard" DataType="{x:Type vm:WhatsNewRow}">
+            <Border Background="{StaticResource Depth.Card}" BorderBrush="{StaticResource Depth.CardBorder}" BorderThickness="{StaticResource Depth.CardBorderThickness}"
+                    CornerRadius="{StaticResource Radius}" Padding="14,10" Margin="0,0,0,8">
+                <StackPanel>
+                    <DockPanel>
+                        <Border DockPanel.Dock="Right" Background="{StaticResource AccentDim}" CornerRadius="3" Padding="6,1" Margin="10,0,0,0" VerticalAlignment="Top"
+                                Visibility="{Binding IsNew, Converter={StaticResource BoolVis}}">
+                            <TextBlock Text="New" Foreground="{StaticResource Accent}" FontSize="10.5" FontWeight="SemiBold" />
+                        </Border>
+                        <TextBlock Text="{Binding Title}" Foreground="{StaticResource TextStrong}" FontSize="13.5" FontWeight="SemiBold" TextWrapping="Wrap" />
+                    </DockPanel>
+                    <ItemsControl ItemsSource="{Binding Notes}" Margin="0,4,0,0" Focusable="False"
+                                  Visibility="{Binding HasNotes, Converter={StaticResource BoolVis}}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <DockPanel Margin="0,2,0,0">
+                                    <Ellipse DockPanel.Dock="Left" Width="4" Height="4" Fill="{StaticResource Faint}" Margin="2,7,9,0" VerticalAlignment="Top" />
+                                    <TextBlock Text="{Binding}" Foreground="{StaticResource Text}" FontSize="12.5" TextWrapping="Wrap" />
+                                </DockPanel>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                    <TextBlock Text="{Binding Meta}" Foreground="{StaticResource Faint}" FontSize="11" Margin="0,6,0,0" />
+                </StackPanel>
+            </Border>
+        </DataTemplate>
+    </UserControl.Resources>
+
+    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False">
+        <StackPanel Margin="28,22,28,20" MaxWidth="760" HorizontalAlignment="Left">
+            <DockPanel Margin="0,0,0,18">
+                <Path DockPanel.Dock="Left" Style="{StaticResource KindIcon}" Tag="NEWS" Margin="0,4,10,0" VerticalAlignment="Top">
+                    <Path.LayoutTransform><ScaleTransform ScaleX="1.5" ScaleY="1.5" /></Path.LayoutTransform>
+                </Path>
+                <StackPanel>
+                    <TextBlock Text="What's new" FontSize="20" FontWeight="SemiBold" Foreground="{StaticResource TextStrong}" />
+                    <TextBlock FontSize="12" Margin="0,2,0,0" TextWrapping="Wrap">
+                        <Run Text="{Binding Heading, Mode=OneWay}" Foreground="{StaticResource Muted}" /><Run Text=" · " Foreground="{StaticResource Faint}" /><Run Text="{Binding Subtitle, Mode=OneWay}" Foreground="{StaticResource Muted}" />
+                    </TextBlock>
+                </StackPanel>
+            </DockPanel>
+
+            <StackPanel Visibility="{Binding HasFresh, Converter={StaticResource BoolVis}}" Margin="0,0,0,14">
+                <TextBlock Text="New in this update" Style="{StaticResource SectionTitle}" />
+                <ItemsControl ItemsSource="{Binding Fresh}" ItemTemplate="{StaticResource ChangeCard}" Focusable="False" />
+            </StackPanel>
+
+            <StackPanel Visibility="{Binding HasEarlier, Converter={StaticResource BoolVis}}">
+                <TextBlock Text="{Binding EarlierTitle}" Style="{StaticResource SectionTitle}" />
+                <ItemsControl ItemsSource="{Binding Earlier}" ItemTemplate="{StaticResource ChangeCard}" Focusable="False" Opacity="0.85" />
+            </StackPanel>
+
+            <TextBlock Margin="2,8,0,0" FontSize="12">
+                <Hyperlink Command="{Binding OpenReleasesCommand}" Foreground="{StaticResource Link}" TextDecorations="{x:Null}"><Run Text="All releases on GitHub" /></Hyperlink>
+            </TextBlock>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

@@ -36,6 +36,10 @@
   <ItemGroup>
     <Content Include="Assets\terminal\**\*" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
+  <!-- The What's new list, written by CI (build/changelog.py) before it builds. Missing in local builds. -->
+  <ItemGroup>
+    <EmbeddedResource Include="changelog.json" LogicalName="RemoteMan.changelog.json" Condition="Exists('changelog.json')" />
+  </ItemGroup>
 
   <!-- xterm.js (MIT) for the SSH terminal, fetched once into Assets/terminal/vendor. -->
   <PropertyGroup>

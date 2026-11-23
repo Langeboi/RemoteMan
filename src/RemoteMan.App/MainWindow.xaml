@@ -26,6 +26,7 @@
         <DataTemplate DataType="{x:Type vm:DashboardViewModel}"><views:DashboardView /></DataTemplate>
         <DataTemplate DataType="{x:Type vm:OverviewViewModel}"><views:OverviewView /></DataTemplate>
         <DataTemplate DataType="{x:Type vm:ConfigBackupsSessionViewModel}"><views:ConfigBackupsView /></DataTemplate>
+        <DataTemplate DataType="{x:Type vm:WhatsNewViewModel}"><views:WhatsNewView /></DataTemplate>
 
         <HierarchicalDataTemplate DataType="{x:Type vm:EntryNode}" ItemsSource="{Binding Children}">
             <DockPanel LastChildFill="True">

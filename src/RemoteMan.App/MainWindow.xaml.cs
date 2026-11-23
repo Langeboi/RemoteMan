@@ -86,6 +86,8 @@ public partial class MainWindow : Window
             await _vm.InitializeAsync();
             // The first-run setup picked an import source: open the import window on it once the entries are loaded.
             if (ImportAfterLoad is { } source) { ImportAfterLoad = null; new ImportWindow(_vm, source) { Owner = this }.ShowDialog(); }
+            // First start after an update: show what changed since the version that ran before.
+            if (RemoteMan.App.Updates.WhatsNew.Pending.Count > 0) _vm.OpenWhatsNew();
         };
         Closing += async (_, _) => { _vm.FreezeOpenSessions(); await _vm.DisposeAsync(); };
         _vm.AskReopen = AskReopen;
@@ -257,6 +259,7 @@ public partial class MainWindow : Window
         channel.Items.Add(new MenuItem { Header = "Releases", IsCheckable = true, IsChecked = !updates.UsesTestBuilds, Command = updates.SetChannelCommand, CommandParameter = "stable" });
         channel.Items.Add(new MenuItem { Header = "Test builds (newest changes, may have bugs)", IsCheckable = true, IsChecked = updates.UsesTestBuilds, Command = updates.SetChannelCommand, CommandParameter = "test" });
         menu.Items.Add(channel);
+        menu.Items.Add(Click("What's new", (_, _) => _vm.OpenWhatsNew()));
         menu.Items.Add(new MenuItem { Header = "Release notes", Command = updates.OpenReleaseNotesCommand });
         menu.Items.Add(new MenuItem { Header = $"RemoteMan {updates.CurrentVersion}", IsEnabled = false });
         menu.Items.Add(new Separator());
