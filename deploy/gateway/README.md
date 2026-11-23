@@ -144,7 +144,8 @@ the PC may use and whether their connectors are online.
 
 - **Entries and folders**: Edit > Advanced > Connection > **Gateway**: pick the site. On a folder it covers everything
   inside (an entry or sub-folder can say *None (direct only)* or another site). *Always* skips the direct try.
-- **The database**: Data sources > your source > **Gateway site**. Each server gets its own tunnel, so PostgreSQL
+- **The database**: Data sources > your source > **Gateway site**. Entries in that data source then use the same site
+  too, unless a folder or entry picks another one or *None (direct only)*. Each server gets its own tunnel, so PostgreSQL
   failover keeps working; with *Always* off, a PC on the same network as the database still connects directly.
   Takes effect on the next start.
 

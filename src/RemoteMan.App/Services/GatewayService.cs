@@ -32,6 +32,7 @@ public sealed class GatewayService
         _watch = null;
         foreach (var f in _forwarders.Values) f.Dispose();
         _forwarders.Clear();
+        _paths.Clear();
         _client?.Dispose();
         _client = null;
         Device = null;
@@ -141,9 +142,23 @@ public sealed class GatewayService
         {
             var f = new LocalForwarder(Client, site, targets, directFirst);
             f.Failed += m => Problem?.Invoke(m);
+            f.Used += direct => RecordPath(site, direct);
             return f;
         });
     }
+
+    private readonly ConcurrentDictionary<string, (DateTime At, bool Direct)> _paths = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>A connection to something at <paramref name="site"/> just went directly (true) or through the gateway.</summary>
+    public void RecordPath(string site, bool direct) => _paths[site] = (DateTime.UtcNow, direct);
+
+    /// <summary>
+    /// True when the last connection to <paramref name="site"/> (the database's forwarder retries directly every
+    /// minute, so it keeps this fresh) needed the gateway in the last 10 minutes: this PC is off-site, so entries
+    /// skip the direct try and its timeout. Back on site, the next direct success flips it.
+    /// </summary>
+    public bool PreferGateway(string site) =>
+        _paths.TryGetValue(site, out var p) && !p.Direct && DateTime.UtcNow - p.At < TimeSpan.FromMinutes(10);
 
     /// <summary>
     /// For a data source that names a gateway site: each database server becomes a local forwarder that tries the

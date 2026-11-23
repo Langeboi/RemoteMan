@@ -93,6 +93,31 @@ public sealed class GatewayTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task An_offered_tunnel_carries_the_first_connection()
+    {
+        using var client = Client();
+        var tunnel = await client.OpenAsync("lab", [$"127.0.0.1:{EchoPort}"]);
+        using var fwd = new LocalForwarder(client, "lab", [$"127.0.0.1:{EchoPort}"]);
+        var paths = new List<bool>();
+        fwd.Used += d => { lock (paths) paths.Add(d); };
+        fwd.Offer(tunnel);
+        Assert.Equal("one"u8.ToArray(), await RoundTrip(fwd.Port, "one"u8.ToArray()));
+        Assert.Equal("two"u8.ToArray(), await RoundTrip(fwd.Port, "two"u8.ToArray()));   // a new tunnel
+        Assert.Equal([false, false], paths);
+    }
+
+    [Fact]
+    public async Task Many_connections_at_once_all_get_through()
+    {
+        // Four people with a few sessions each: tunnels are independent, so they open side by side.
+        using var client = Client();
+        using var fwd = new LocalForwarder(client, "lab", [$"127.0.0.1:{EchoPort}"]);
+        var payloads = Enumerable.Range(0, 16).Select(_ => RandomNumberGenerator.GetBytes(50_000)).ToList();
+        var results = await Task.WhenAll(payloads.Select(p => RoundTrip(fwd.Port, p)));
+        for (var i = 0; i < payloads.Count; i++) Assert.Equal(payloads[i], results[i]);
+    }
+
+    [Fact]
     public async Task Bytes_go_through_the_relay_and_come_back_unchanged()
     {
         using var client = Client();

@@ -32,6 +32,10 @@ public class GatewayRoutingTests : IDisposable
         Assert.Equal(("home", true), store.GatewayFor(store.Get(own.Id)!));
         Assert.Null(store.GatewayFor(store.Get(pi.Id)!));     // "None" on a folder stops the search
         Assert.Null(store.GatewayFor(store.Get(loose.Id)!));
+        // The data source's site covers what no folder sets, but not what says None.
+        Assert.Equal(("school", false), store.GatewayFor(store.Get(loose.Id)!, "school"));
+        Assert.Equal(("home", true), store.GatewayFor(store.Get(own.Id)!, "school"));
+        Assert.Null(store.GatewayFor(store.Get(pi.Id)!, "school"));
     }
 
     private static (string, int) Fwd(string host, int port) => ("127.0.0.1", port + 10000);
