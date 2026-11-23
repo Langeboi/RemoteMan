@@ -320,6 +320,14 @@ public sealed class EntryStore : IAsyncDisposable
     public IEnumerable<Presence> ConnectedTo(Guid entryId) =>
         PresenceFor(entryId).Where(p => p.State == PresenceState.Connected);
 
+    /// <summary>Every session teammates have open right now, on any entry: one per user, machine and entry.</summary>
+    public IReadOnlyList<Presence> TeamSessions()
+    {
+        var now = DateTimeOffset.UtcNow;
+        return _presence.Where(p => p.State == PresenceState.Connected && p.IsAlive(now) && !(p.User == User && p.Machine == Machine))
+            .DistinctBy(p => (p.User, p.Machine, p.EntryId)).ToList();
+    }
+
     /// <summary>Tell others what this user is doing. Null means nothing in particular: you still show as online.</summary>
     public Task SetMyPresenceAsync(Guid? entryId, PresenceState state = PresenceState.Viewing)
     {

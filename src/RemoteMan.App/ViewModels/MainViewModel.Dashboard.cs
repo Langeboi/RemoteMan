@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using RemoteMan.Core.Integrations.Zabbix;
 using RemoteMan.Core.Model;
+using RemoteMan.Core.Storage;
 using RemoteMan.App.Views;
 
 namespace RemoteMan.App.ViewModels;
@@ -123,9 +124,19 @@ public sealed partial class MainViewModel
         d.Tiles.Add(new DashTile("Entries", s.Entries.ToString("N0"), s.AddedThisWeek > 0 ? $"+{s.AddedThisWeek} this week" : "none added this week"));
         d.Tiles.Add(new DashTile("Folders", s.Folders.ToString("N0"), s.MaxFolderDepth > 0 ? $"deepest {s.MaxFolderDepth} level{(s.MaxFolderDepth == 1 ? "" : "s")}" : "no folders yet"));
         d.Tiles.Add(new DashTile("Credentials", s.Credentials.ToString("N0"), $"{s.UsingSavedCredential} entr{(s.UsingSavedCredential == 1 ? "y uses" : "ies use")} one"));
+        // Active sessions: yours, plus teammates' on a shared data source (their presence says what they have open)
         var open = Sessions.Where(x => x.IsConnection).ToList();
-        var openKinds = string.Join(", ", open.GroupBy(x => x.KindTag).Select(g => $"{g.Count()} {g.Key}"));
-        d.Tiles.Add(new DashTile("Open tabs", open.Count.ToString(), open.Count == 0 ? "nothing connected" : openKinds));
+        IReadOnlyList<Presence> team = _store.Source.SupportsPresence && _store.Source.Kind != DataSourceKind.Sqlite ? _store.TeamSessions() : [];
+        var active = open.Count + team.Count;
+        string activeSub;
+        if (team.Count == 0)
+            activeSub = open.Count == 0 ? "nothing connected" : string.Join(", ", open.GroupBy(x => x.KindTag).Select(g => $"{g.Count()} {g.Key}"));
+        else
+        {
+            var people = team.Select(p => p.User).Distinct().Count();
+            activeSub = $"{open.Count} yours, {team.Count} by {people} teammate{(people == 1 ? "" : "s")}";
+        }
+        d.Tiles.Add(new DashTile("Active sessions", active.ToString("N0"), activeSub));
         if (snap is not null)
         {
             var linked = entries.Count(e => !e.Deleted && e.IsConnectable && snap.HealthFor(e).IsLinked);
