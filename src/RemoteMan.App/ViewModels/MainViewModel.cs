@@ -214,6 +214,7 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
         var users = _store.Presence.Where(p => p.IsAlive(DateTimeOffset.UtcNow)).Select(p => p.User).Append(_store.User).Distinct().Count();
         OnlineText = _store.Source.SupportsPresence && _store.Source.Kind != DataSourceKind.Sqlite ? $"{users} user{(users == 1 ? "" : "s")} online" : "";
         RefreshProperties();
+        RefreshDashboard();   // the Active sessions tile counts teammates' sessions
     }
 
     private bool _refreshingProperties;
