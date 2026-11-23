@@ -421,7 +421,11 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
         // A gateway site (on the entry or a folder above it): try the hosts directly first unless it says
         // "always", then go through the site's connector, which tries them in the same order.
         var gateway = _store?.GatewayFor(e, GatewayService.Instance.IsConfigured ? _settings.Active.GatewaySite : null);
-        var result = gateway is { Always: true } ? new ResolveResult(null, []) : await resolver.ResolveAsync(probe);
+        // Off-site (the last connection to this site needed the gateway, the database's included): skip the
+        // direct try and its timeout.
+        var skipDirect = gateway is { } g0 && (g0.Always || GatewayService.Instance.PreferGateway(g0.Site));
+        var result = skipDirect ? new ResolveResult(null, []) : await resolver.ResolveAsync(probe);
+        if (result.Success && gateway is { } g1) GatewayService.Instance.RecordPath(g1.Site, direct: true);
         string? via = null;
         HostEndpoint? realHost = null;
         if (!result.Success && gateway is { } gw)
@@ -558,10 +562,15 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
         Message = $"Connecting to {e.Name} through the gateway ({site})…";
         try
         {
-            var reached = await gw.Client.ProbeAsync(site, targets);
+            // The tunnel that finds which host the connector reaches is kept and handed to the session's first
+            // connection, so connecting costs one tunnel setup, not two.
+            var tunnel = await gw.Client.OpenAsync(site, targets);
+            var reached = tunnel.Target;
             // The host the connector reached goes first, so new connections don't wait on a dead primary.
             var ordered = targets.Where(t => t == reached).Concat(targets.Where(t => t != reached)).ToList();
             var fwd = gw.Forwarder(site, ordered, directFirst: false);
+            fwd.Offer(tunnel);
+            gw.RecordPath(site, direct: false);
             var real = GatewayProtocol.ParseTarget(reached) is var (h, p) ? new HostEndpoint(h, p) : new HostEndpoint(reached, 0);
             return (new HostEndpoint("127.0.0.1", fwd.Port), $"{reached} via gateway {site}", real);
         }

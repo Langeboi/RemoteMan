@@ -181,6 +181,38 @@ public sealed class LocalForwarder : IDisposable
     public string? LastPath { get; private set; }
     /// <summary>A connection that couldn't be forwarded (the local program sees it close).</summary>
     public event Action<string>? Failed;
+    /// <summary>A connection went through: true when directly, false through the gateway.</summary>
+    public event Action<bool>? Used;
+
+    /// <summary>
+    /// A tunnel that's already open (from checking that the site reaches the host): the next connection uses it
+    /// instead of opening another, which saves a full round of relay and connector setup on the first connect.
+    /// </summary>
+    public void Offer(GatewayTunnel tunnel)
+    {
+        var box = new ReadyBox(tunnel, DateTime.UtcNow);
+        Interlocked.Exchange(ref _readyBox, box)?.Tunnel.Dispose();
+        // Unused (the session never connected): close it so the connector lets go of the host.
+        _ = Task.Delay(ReadyFor).ContinueWith(_ =>
+        {
+            if (Interlocked.CompareExchange(ref _readyBox, null, box) == box) box.Tunnel.Dispose();
+        }, TaskScheduler.Default);
+    }
+
+    /// <summary>How long an offered tunnel waits for the first connection.</summary>
+    public static TimeSpan ReadyFor { get; } = TimeSpan.FromSeconds(20);
+
+    private sealed record ReadyBox(GatewayTunnel Tunnel, DateTime At);
+    private ReadyBox? _readyBox;
+
+    private GatewayTunnel? TakeReady()
+    {
+        var box = Interlocked.Exchange(ref _readyBox, null);
+        if (box is null) return null;
+        if (DateTime.UtcNow - box.At < ReadyFor) return box.Tunnel;
+        box.Tunnel.Dispose();
+        return null;
+    }
 
     private async Task AcceptLoopAsync()
     {
@@ -201,6 +233,17 @@ public sealed class LocalForwarder : IDisposable
             var ct = _cts.Token;
             try
             {
+                // A tunnel opened just before (the entry's check) goes to the first connection.
+                if (TakeReady() is { } ready)
+                {
+                    using (ready)
+                    {
+                        LastPath = $"{ready.Target} via {Site}";
+                        Used?.Invoke(false);
+                        await ready.PumpAsync(local.GetStream(), ct);
+                    }
+                    return;
+                }
                 var tryDirect = DirectFirst && (_path is not { } p || p.Direct || DateTime.UtcNow - p.At > TimeSpan.FromMinutes(1));
                 if (tryDirect)
                 {
@@ -208,6 +251,7 @@ public sealed class LocalForwarder : IDisposable
                     {
                         _path = (DateTime.UtcNow, true);
                         LastPath = target;
+                        Used?.Invoke(true);
                         using (tcp) await BridgeAsync(local.GetStream(), tcp.GetStream(), ct);
                         return;
                     }
@@ -215,6 +259,7 @@ public sealed class LocalForwarder : IDisposable
                 using var tunnel = await _client.OpenAsync(Site, Targets, ct);
                 if (DirectFirst) _path = (DateTime.UtcNow, false);
                 LastPath = $"{tunnel.Target} via {Site}";
+                Used?.Invoke(false);
                 await tunnel.PumpAsync(local.GetStream(), ct);
             }
             catch (Exception ex) when (!ct.IsCancellationRequested)
@@ -257,5 +302,6 @@ public sealed class LocalForwarder : IDisposable
     {
         _cts.Cancel();
         _listener.Stop();
+        Interlocked.Exchange(ref _readyBox, null)?.Tunnel.Dispose();
     }
 }
