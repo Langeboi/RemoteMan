@@ -157,6 +157,16 @@ public class ZabbixTests
     }
 
     [Fact]
+    public async Task Problems_on_disabled_triggers_are_left_out()
+    {
+        var handler = new FakeZabbix("7.0.5", "hostgroups");
+        using var c = new ZabbixClient("https://z", "TOKEN", handler: handler);
+        var p = Assert.Single(await c.GetProblemsAsync(ZabbixSeverity.Warning));
+        Assert.Equal("901", p.EventId);
+        Assert.Contains(handler.Requests, r => r.Method == "trigger.get" && r.Params?["monitored"]?.GetValue<bool>() == true);
+    }
+
+    [Fact]
     public async Task Client_reports_api_errors_readably()
     {
         var handler = new FakeZabbix("7.0.0", "hostgroups") { FailAuth = true };
@@ -201,9 +211,11 @@ public class ZabbixTests
                 "host.get" => JsonNode.Parse($$"""[{"hostid":"10512","host":"DC01","name":"DC01","status":"0","maintenance_status":"0","interfaces":[{"ip":"10.0.20.5","dns":"","useip":"1","port":"10050","type":"1","main":"1","available":"2"}],"{{groupsKey}}":[{"groupid":"5","name":"Homelab"}],"parentTemplates":[{"templateid":"1","name":"Windows by Zabbix agent"}]}]""")!,
                 "problem.get" when !body["params"]!["selectAcknowledges"]!.AsArray().All(f => AckFields.Contains(f!.GetValue<string>())) =>
                     throw new InvalidOperationException("Invalid parameter \"/selectAcknowledges\": unknown field"),
-                "problem.get" => JsonNode.Parse("""[{"eventid":"901","objectid":"77","name":"Disk full","severity":"4","clock":"1795150000","acknowledged":"1","suppressed":"0","acknowledges":[{"userid":"3","action":"6","clock":"1795150100"}]}]""")!,
+                "problem.get" => JsonNode.Parse("""[{"eventid":"901","objectid":"77","name":"Disk full","severity":"4","clock":"1795150000","acknowledged":"1","suppressed":"0","acknowledges":[{"userid":"3","action":"6","clock":"1795150100"}]},{"eventid":"902","objectid":"78","name":"Interface down","severity":"5","clock":"1795150200","acknowledged":"0","suppressed":"0","acknowledges":[]}]""")!,
                 "user.get" when NoUserRights => throw new InvalidOperationException("No permissions"),
                 "user.get" => JsonNode.Parse("""[{"userid":"3","username":"mads","name":"Mads","surname":"J"}]""")!,
+                // Trigger 78 is disabled: Zabbix only returns it when "monitored" isn't asked for.
+                "trigger.get" when body["params"]!["monitored"] is null => JsonNode.Parse("""{"77":{"triggerid":"77","hosts":[{"hostid":"10512"}]},"78":{"triggerid":"78","hosts":[{"hostid":"10512"}]}}""")!,
                 "trigger.get" => JsonNode.Parse("""{"77":{"triggerid":"77","hosts":[{"hostid":"10512"}]}}""")!,
                 _ => JsonValue.Create("?")!,
             };

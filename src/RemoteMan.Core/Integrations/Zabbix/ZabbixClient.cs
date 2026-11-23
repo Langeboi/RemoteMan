@@ -103,7 +103,10 @@ public sealed class ZabbixClient : IDisposable
         return res.AsArray().Select(h => ParseHost(h!, v62)).ToList();
     }
 
-    /// <summary>Open problems from the given severity up, with the host each one belongs to.</summary>
+    /// <summary>
+    /// Open problems from the given severity up, with the host each one belongs to. Problems on disabled
+    /// triggers, disabled items or unmonitored hosts are left out.
+    /// </summary>
     public async Task<IReadOnlyList<ZabbixProblem>> GetProblemsAsync(ZabbixSeverity minimum, CancellationToken ct = default)
     {
         if (_version is null) await ConnectAsync(ct);
@@ -125,13 +128,17 @@ public sealed class ZabbixClient : IDisposable
         var list = problems.AsArray();
         if (list.Count == 0) return [];
 
-        // problem.get doesn't say which host a problem is on; its trigger does.
+        // problem.get doesn't say which host a problem is on; its trigger does. It also keeps returning
+        // problems whose trigger, item or host has since been disabled, which the Zabbix frontend hides.
+        // "monitored" asks only for enabled triggers on enabled items on monitored hosts, so problems
+        // from anything disabled find no trigger below and are left out the same way.
         var triggerIds = new JsonArray();
         foreach (var t in list.Select(p => Str(p!, "objectid")).Distinct()) triggerIds.Add(t);
         var triggers = await CallAsync("trigger.get", new JsonObject
         {
             ["output"] = new JsonArray("triggerid"),
             ["triggerids"] = triggerIds,
+            ["monitored"] = true,
             ["selectHosts"] = new JsonArray("hostid"),
             ["preservekeys"] = true,
         }, auth: true, ct);
