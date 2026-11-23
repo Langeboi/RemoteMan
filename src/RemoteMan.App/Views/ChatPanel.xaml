@@ -126,7 +126,7 @@
 
         <!-- Message blocks: text with inline chips, or a card for a link on its own line -->
         <DataTemplate DataType="{x:Type vm:ChatTextBlock}">
-            <TextBlock views:ChatInlines.Parts="{Binding Parts}" TextWrapping="Wrap" LineHeight="20" Foreground="{StaticResource Text}" />
+            <views:ChatRichText Parts="{Binding Parts}" />
         </DataTemplate>
         <DataTemplate DataType="{x:Type vm:ChatCardBlock}">
             <Border Margin="0,4,0,2" Background="{StaticResource Depth.Card}" BorderBrush="{StaticResource Depth.CardBorder}" BorderThickness="{StaticResource Depth.CardBorderThickness}"
@@ -152,6 +152,47 @@
                 </Grid>
             </Border>
         </DataTemplate>
+        <!-- Code, config, logs or shell output: mono, ten lines high until "Show all", scrolls sideways, one-click Copy -->
+        <DataTemplate DataType="{x:Type vm:ChatCodeBlock}">
+            <Border Margin="0,4,0,2" Background="{StaticResource Work}" BorderBrush="{StaticResource BorderSoft}" BorderThickness="1" CornerRadius="4">
+                <DockPanel>
+                    <Border DockPanel.Dock="Top" BorderBrush="{StaticResource BorderSoft}" BorderThickness="0,0,0,1" Padding="8,0,2,0" Height="26">
+                        <DockPanel>
+                            <Button DockPanel.Dock="Right" Style="{StaticResource FlatButton}" Padding="6,0" MinHeight="20" Command="{Binding CopyCommand}"
+                                    ToolTip="Copy the code" AutomationProperties.Name="Copy code">
+                                <StackPanel Orientation="Horizontal">
+                                    <Path Data="M2,4 H9 V12 H2 Z M5,4 V2 H12 V10 H9" Stroke="{StaticResource Link}" StrokeThickness="1.2" Margin="0,0,5,0" VerticalAlignment="Center" />
+                                    <TextBlock Text="{Binding CopyText}" Foreground="{StaticResource Link}" VerticalAlignment="Center" />
+                                </StackPanel>
+                            </Button>
+                            <Button DockPanel.Dock="Right" Style="{StaticResource FlatButton}" Padding="6,0" MinHeight="20" Command="{Binding ToggleCommand}"
+                                    Content="{Binding ToggleText}" Foreground="{StaticResource Link}" Visibility="{Binding IsLong, Converter={StaticResource BoolVis}}" />
+                            <TextBlock Text="{Binding Title}" Foreground="{StaticResource Faint}" FontFamily="{StaticResource MonoFont}" FontSize="11" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                        </DockPanel>
+                    </Border>
+                    <TextBox x:Name="code" Tag="chat-code" Text="{Binding Text, Mode=OneWay}" IsReadOnly="True" IsReadOnlyCaretVisible="False" TextWrapping="NoWrap"
+                             FontFamily="{StaticResource MonoFont}" FontSize="11.5" Foreground="{StaticResource Text}" Background="Transparent" BorderThickness="0"
+                             Padding="8,6" VerticalContentAlignment="Top" MaxHeight="168" AcceptsReturn="True" AcceptsTab="True"
+                             HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Hidden" AutomationProperties.Name="Code">
+                        <TextBox.Template>
+                            <!-- The input template hides its scroll bars; code needs the sideways one -->
+                            <ControlTemplate TargetType="TextBox">
+                                <ScrollViewer x:Name="PART_ContentHost" Focusable="False" Padding="{TemplateBinding Padding}"
+                                              HorizontalScrollBarVisibility="{TemplateBinding HorizontalScrollBarVisibility}"
+                                              VerticalScrollBarVisibility="{TemplateBinding VerticalScrollBarVisibility}" />
+                            </ControlTemplate>
+                        </TextBox.Template>
+                    </TextBox>
+                </DockPanel>
+            </Border>
+            <DataTemplate.Triggers>
+                <DataTrigger Binding="{Binding IsExpanded}" Value="True">
+                    <Setter TargetName="code" Property="MaxHeight" Value="440" />
+                    <Setter TargetName="code" Property="VerticalScrollBarVisibility" Value="Auto" />
+                </DataTrigger>
+            </DataTemplate.Triggers>
+        </DataTemplate>
+
         <!-- Shared-session invite: Join opens the session in a tab (checked for expiry on click) -->
         <DataTemplate DataType="{x:Type vm:ChatInviteBlock}">
             <Border Margin="0,4,0,2" Background="{StaticResource Depth.Card}" BorderBrush="{StaticResource Warn}" BorderThickness="1"
@@ -274,7 +315,7 @@
                     </Grid>
                     <DockPanel Margin="0,6,0,0">
                         <Button DockPanel.Dock="Right" Content="Send" Style="{StaticResource PrimaryButton}" MinHeight="22" Command="{Binding SendCommand}" />
-                        <TextBlock Text="#  link     Enter  send     Shift+Enter  new line" Foreground="{StaticResource Faint}" FontSize="11" VerticalAlignment="Center" />
+                        <TextBlock Text="#  link     ```  code     Enter  send     Shift+Enter  new line" Foreground="{StaticResource Faint}" FontSize="11" VerticalAlignment="Center" />
                     </DockPanel>
                 </StackPanel>
             </Border>
@@ -321,7 +362,7 @@
             </Popup>
 
             <Grid>
-                <ScrollViewer x:Name="MessagesScroll" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                <ScrollViewer x:Name="MessagesScroll" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" PreviewMouseWheel="OnMessagesWheel">
                     <ItemsControl ItemsSource="{Binding Messages}" Margin="10,6,10,10" Focusable="False">
                         <ItemsControl.ItemTemplate>
                             <DataTemplate DataType="{x:Type vm:ChatMessageItem}">

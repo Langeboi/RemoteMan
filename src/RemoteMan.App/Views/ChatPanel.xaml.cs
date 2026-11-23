@@ -104,6 +104,8 @@ public partial class ChatPanel : UserControl
                 case Key.Escape: _vm.IsPickerOpen = false; e.Handled = true; return;
             }
         }
+        // Inside an open ``` block, Enter is a new line; closing the block makes Enter send again.
+        if (e.Key == Key.Enter && Keyboard.Modifiers == ModifierKeys.None && InOpenFence()) return;
         if (e.Key == Key.Enter && Keyboard.Modifiers == ModifierKeys.None)
         {
             _vm.SendCommand.Execute(null);
@@ -114,6 +116,56 @@ public partial class ChatPanel : UserControl
             _vm.BackCommand.Execute(null);
             e.Handled = true;
         }
+    }
+
+    private bool InOpenFence()
+    {
+        var before = Input.Text[..Math.Min(Input.CaretIndex, Input.Text.Length)];
+        var n = 0;
+        foreach (var line in before.Split('\n'))
+            if (line.TrimStart().StartsWith("```") && line.Split("```").Length == 2) n++;
+        return n % 2 == 1;
+    }
+
+    /// <summary>
+    /// The wheel scrolls the conversation, even over message text or a code block. Only an expanded
+    /// code block that can still scroll that way keeps it (Shift+wheel scrolls code sideways).
+    /// </summary>
+    private void OnMessagesWheel(object sender, MouseWheelEventArgs e)
+    {
+        if (FindCodeBox(e.OriginalSource as DependencyObject) is { } box)
+        {
+            var sv = FindChild<ScrollViewer>(box);
+            if (Keyboard.Modifiers == ModifierKeys.Shift && sv is { ScrollableWidth: > 0 })
+            {
+                sv.ScrollToHorizontalOffset(sv.HorizontalOffset - e.Delta);
+                e.Handled = true;
+                return;
+            }
+            if (box.VerticalScrollBarVisibility == ScrollBarVisibility.Auto && sv is not null &&
+                ((e.Delta < 0 && sv.VerticalOffset < sv.ScrollableHeight) || (e.Delta > 0 && sv.VerticalOffset > 0)))
+                return;
+        }
+        MessagesScroll.ScrollToVerticalOffset(MessagesScroll.VerticalOffset - e.Delta / 2.0);
+        e.Handled = true;
+    }
+
+    private static TextBox? FindCodeBox(DependencyObject? d)
+    {
+        for (; d is not null && d is not ScrollViewer { Name: "MessagesScroll" }; d = d is System.Windows.Media.Visual ? System.Windows.Media.VisualTreeHelper.GetParent(d) : LogicalTreeHelper.GetParent(d))
+            if (d is TextBox { Tag: "chat-code" } t) return t;
+        return null;
+    }
+
+    private static T? FindChild<T>(DependencyObject d) where T : DependencyObject
+    {
+        for (var i = 0; i < System.Windows.Media.VisualTreeHelper.GetChildrenCount(d); i++)
+        {
+            var c = System.Windows.Media.VisualTreeHelper.GetChild(d, i);
+            if (c is T t) return t;
+            if (FindChild<T>(c) is { } deeper) return deeper;
+        }
+        return null;
     }
 
     private void OnInputTextChanged(object sender, TextChangedEventArgs e) => UpdateQuery();
