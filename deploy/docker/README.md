@@ -48,6 +48,30 @@ The Zabbix and Oxidized settings live in the database too, so the whole team get
 only admins can change them (in RemoteMan, More > Zabbix settings / Oxidized settings). The image sets this up
 on start, so an existing server only needs the usual upgrade below.
 
+## Oxidized: back up every SSH entry
+
+Oxidized can't be told about new devices; it reads its whole device list from a *source*. The server offers one:
+every SSH entry in RemoteMan, at `https://<server>:4433/oxidized/nodes.json`. Point Oxidized at it once and
+anything added in RemoteMan is backed up without touching `router.db`.
+
+1. On the admin page: **Servers > Oxidized > Set up Oxidized** (or `docker exec remoteman remoteman-db oxidized`).
+   It shows the token and a ready `source:` section.
+2. Replace the `source:` section of Oxidized's config (`~/.config/oxidized/config`) with it and restart Oxidized.
+3. In RemoteMan, **More > Oxidized device list** shows which entries Oxidized already has and which are missing,
+   and devices that are only in Oxidized (keep them there with **Keep them**, before switching, or they drop out).
+
+What Oxidized gets per entry: the name (devices it already had keep their old name and group, so the history
+carries on), the first host and port, the model and the login. The model comes from a custom field
+`Oxidized model`, else a tag naming a model (`procurve`, `dnos`, `edgeos`, `aoscx`…), else the vendor icon
+(Aruba `aoscx`, FortiGate `fortios`, MikroTik `routeros`, Cisco `ios`), else the default set in that window.
+A secret field `Enable` becomes the enable password. Entries tagged `no-oxidized` are left out.
+
+Logins are encrypted with the team vault passphrase, which the server never has. An admin's RemoteMan therefore
+seals each entry's login for the server (RSA-OAEP + AES-GCM, with a key pair only the server can read) and keeps
+them current. Entries without a login use the `username`/`password` at the top of Oxidized's config. The token gives
+access to those logins: keep it in Oxidized's config only, and make a new one on the admin page if it leaks.
+Oxidized picks up new entries when it reloads its list; RemoteMan asks it to reload when entries are added.
+
 ## Day to day
 
 | Where | What |

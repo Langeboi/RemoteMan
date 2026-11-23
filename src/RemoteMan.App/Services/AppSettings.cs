@@ -145,7 +145,21 @@ public sealed class OxidizedConfig
     public bool MatchByName { get; set; } = true;
     public bool IgnoreBracketSuffix { get; set; } = true;
 
+    // --- Oxidized's device list from the RemoteMan server (read by rmserver/oxidized.py too) ---
+    /// <summary>"None" or "TopFolder": the Oxidized group of entries that aren't in Oxidized yet.</summary>
+    public string FeedGroup { get; set; } = nameof(OxidizedFeedGroup.None);
+    /// <summary>Oxidized model for entries no tag, icon or "Oxidized model" field gives one; empty = Oxidized's own default.</summary>
+    public string? FeedDefaultModel { get; set; }
+    /// <summary>SSH entries with this tag aren't sent.</summary>
+    public string? FeedExcludeTag { get; set; } = OxidizedFeed.DefaultLeaveOutTag;
+    /// <summary>Send each entry's login (sealed for the server) so Oxidized logs in with it.</summary>
+    public bool FeedSendLogins { get; set; } = true;
+
     public bool IsConfigured => Enabled && Url.Length > 0;
+
+    public OxidizedFeedOptions FeedOptions => new(
+        Enum.TryParse<OxidizedFeedGroup>(FeedGroup, true, out var g) ? g : OxidizedFeedGroup.None,
+        FeedDefaultModel, FeedExcludeTag, FeedSendLogins);
 
     public OxidizedMatchOptions MatchOptions => new() { ByAddress = MatchByAddress, ByName = MatchByName, IgnoreBracketSuffix = IgnoreBracketSuffix };
 }

@@ -1,4 +1,5 @@
 """The admin page and its API (HTTPS, port 4433), plus the internal API the servers use to talk to each other."""
+import base64
 import collections
 import csv
 import hmac
@@ -16,6 +17,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import psycopg2
 
 from . import common as C
+from . import oxidized
 from . import store
 from .common import log
 
@@ -57,6 +59,7 @@ class Admin:
             ("POST", "/internal/remove-server"): lambda b, q: self.cl.remove_server(b.get("name", "")) or {"ok": True},
             ("POST", "/internal/settings"): lambda b, q: self.cl.save_settings(b) or {"ok": True},
             ("POST", "/internal/backup"): lambda b, q: {"file": self.cl.backups.run()},
+            ("POST", "/internal/oxidized-token"): lambda b, q: {"token": oxidized.new_token()},
         }
         for key, fn in on_primary.items():
             local[key] = self._primary_only(key, fn)
@@ -479,6 +482,16 @@ class Admin:
         self.sessions[token] = {"user": login, "password": password, "access": access, "created": time.time(), "seen": time.time()}
         return token
 
+    def oxidized_info(self):
+        tok = oxidized.token()
+        addr = self.cl.address
+        try:
+            count = len(oxidized.nodes())
+        except Exception:  # noqa: BLE001
+            count = None
+        return {"ready": bool(tok), "url": f"https://{addr}:{C.ADMIN_PORT}/oxidized/nodes.json", "token": tok or "",
+                "devices": count, "config": oxidized.config_snippet(addr, tok or "<token>")}
+
     def session(self, token):
         s = self.sessions.get(token or "")
         if not s:
@@ -602,6 +615,8 @@ def make_handler(admin):
                     if not fn:
                         raise Http(404, "Not found.")
                     return self._send(200, fn(self._body() if method == "POST" else {}, q))
+                if path == "/oxidized/nodes.json" and method == "GET":
+                    return self._oxidized()
                 if path.startswith("/api/"):
                     return self._api(method, path, q)
                 return self._static(path)
@@ -612,6 +627,28 @@ def make_handler(admin):
             except Exception as e:  # noqa: BLE001
                 log.exception("request %s %s", method, path)
                 self._send(500, {"error": f"Something went wrong: {e}"})
+
+        def _oxidized(self):
+            """Oxidized's http source: Authorization: Bearer <token> (or basic auth with the token as the password)."""
+            ip = self.client_address[0]
+            now = time.time()
+            recent = [t for t in admin.fails[("oxidized", ip)] if now - t < 300]
+            admin.fails[("oxidized", ip)] = recent
+            if len(recent) >= 10:
+                raise Http(429, "Too many wrong tokens. Wait a few minutes.")
+            auth = self.headers.get("Authorization") or ""
+            given = ""
+            if auth.lower().startswith("bearer "):
+                given = auth[7:].strip()
+            elif auth.lower().startswith("basic "):
+                try:
+                    given = base64.b64decode(auth[6:].strip()).decode().partition(":")[2]
+                except ValueError:
+                    given = ""
+            if not oxidized.check_token(given):
+                recent.append(now)
+                raise Http(401, "Wrong or missing token. Find it on the admin page under Servers > Oxidized.")
+            return self._send(200, oxidized.nodes())
 
         def _static(self, path):
             if path in ("/", "/overview", "/servers", "/users", "/logins"):
@@ -674,6 +711,8 @@ def make_handler(admin):
                     return self._send(200, buf.getvalue().encode(), "text/csv; charset=utf-8",
                                       {"Content-Disposition": "attachment; filename=remoteman-logins.csv"})
                 return self._send(200, rows[:2000])
+            if path == "/api/oxidized" and method == "GET":
+                return self._send(200, admin.oxidized_info())
             if path == "/api/logs":
                 return self._send(200, admin.on(q.get("server", cl.name), "GET", "/internal/logs", query={"lines": 300}))
             if method == "POST":
@@ -691,6 +730,10 @@ def make_handler(admin):
                     return self._send(200, admin.on(cl.name, "POST", "/internal/remove-server", b))
                 if path == "/api/settings":
                     return self._send(200, admin.on(cl.name, "POST", "/internal/settings", b))
+                if path == "/api/oxidized/token":
+                    admin.on(cl.name, "POST", "/internal/oxidized-token", {})
+                    store.add_event("server", f"{user} made a new Oxidized token")
+                    return self._send(200, admin.oxidized_info())
                 if path == "/api/backup":
                     return self._send(200, admin.on(cl.name, "POST", "/internal/backup", {}, timeout=600))
             raise Http(404, "Not found.")

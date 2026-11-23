@@ -92,6 +92,7 @@ USAGE = """remoteman-db: manage this RemoteMan server (run with: docker exec rem
   backup                     back up the database now (on the primary)
   password <login> [pw]      new password for a login (on the primary); prints the connection string
   logs                       the last lines of this server's PostgreSQL log
+  oxidized [new-token]       Oxidized config for reading its device list from RemoteMan (new-token: replace the token)
 """
 
 
@@ -169,6 +170,16 @@ def cli(args):
         C.q(sql.SQL("ALTER ROLE {} LOGIN PASSWORD %s").format(sql.Identifier(name)).as_string(C.local_conn()), (pw,))
         hosts = ",".join(f"{s['address']}:{s['pg_port']}" for s in st.get("servers", []) if s["state"] == "joined")
         print(f"New password for {name}: {pw}\n\nHost={hosts};Database={C.DB_NAME};Username={name};Password={pw};Target Session Attributes=primary")
+    elif cmd == "oxidized":
+        from . import oxidized
+        if rest and rest[0] == "new-token":
+            call("POST", "/internal/oxidized-token", {})
+        tok = oxidized.token()
+        if not tok:
+            sys.exit("The Oxidized token isn't made yet. It's created when the primary starts.")
+        print("Put this in Oxidized's config in place of its source: section, then restart Oxidized:\n")
+        print(oxidized.config_snippet(C.detect_address(), tok))
+        print(f"Devices now: {len(oxidized.nodes())}")
     elif cmd == "logs":
         for e in reversed(call("GET", "/internal/logs?lines=60")):
             print(e.get("ts"), e.get("level"), e.get("message"))

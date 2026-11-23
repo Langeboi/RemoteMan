@@ -5,7 +5,7 @@ ARG PG_MAJOR=17
 FROM postgres:${PG_MAJOR}-bookworm
 
 RUN apt-get update \
- && apt-get install -y --no-install-recommends python3 python3-psycopg2 iputils-ping openssl \
+ && apt-get install -y --no-install-recommends python3 python3-psycopg2 python3-cryptography iputils-ping openssl \
  && rm -rf /var/lib/apt/lists/* \
  && mkdir -p /var/lib/remoteman /opt/remoteman \
  && chown postgres:postgres /var/lib/remoteman && chmod 700 /var/lib/remoteman
