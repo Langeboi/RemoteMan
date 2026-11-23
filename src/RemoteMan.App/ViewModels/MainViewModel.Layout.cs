@@ -77,6 +77,7 @@ public sealed partial class MainViewModel
         if (_rearranging) return;
         if (newValue is not null)
         {
+            newValue.LastActivated = Environment.TickCount64;
             SetPaneActive(newValue.Pane, newValue);
             FocusedPane = newValue.Pane;
             if (_store is not null && newValue.Entry.Revision > 0 && newValue is not ConfigBackupsSessionViewModel)
