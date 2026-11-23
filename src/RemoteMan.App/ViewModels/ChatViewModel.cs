@@ -60,10 +60,12 @@ public sealed partial class ChatViewModel : ObservableObject
 
     public async Task StartAsync(EntryStore store, ChatHub hub)
     {
+        if (_hub is not null && !ReferenceEquals(_hub, hub)) await StopAsync();
+        if (ReferenceEquals(_hub, hub)) return;   // already listening: a second subscription would pop every message up twice
         _store = store;
         _hub = hub;
-        hub.Changed += (_, _) => OnUi(Refresh);
-        hub.MessageArrived += (_, m) => OnUi(() => Arrived(m));
+        hub.Changed += OnHubChanged;
+        hub.MessageArrived += OnHubMessage;
         await hub.StartAsync();
         IsAvailable = true;
         Refresh();
@@ -72,9 +74,17 @@ public sealed partial class ChatViewModel : ObservableObject
     public async Task StopAsync()
     {
         IsAvailable = false;
-        if (_hub is not null) await _hub.DisposeAsync();
+        if (_hub is not null)
+        {
+            _hub.Changed -= OnHubChanged;
+            _hub.MessageArrived -= OnHubMessage;
+            await _hub.DisposeAsync();
+        }
         _hub = null;
     }
+
+    private void OnHubChanged(object? sender, EventArgs e) => OnUi(Refresh);
+    private void OnHubMessage(object? sender, ChatMessage m) => OnUi(() => Arrived(m));
 
     private static void OnUi(Action a)
     {
@@ -533,9 +543,16 @@ public sealed partial class ChatViewModel : ObservableObject
 
     // ---------------- notifications ----------------
 
+    private readonly HashSet<Guid> _toasted = new();
+
     private void Arrived(ChatMessage m)
     {
         if (_hub?.Room(m.RoomId) is not { } room) return;
+        // One pop-up per message, however many times it is reported.
+        if (!_toasted.Add(m.Id)) return;
+        if (_toasted.Count > 500) _toasted.Clear();
+        // A shared-session invite already pops up on its own, with Join and Not now.
+        if (ChatLink.Parse(m.Body).Any(p => p.Link?.Kind == ChatLink.Invite)) return;
         var looking = IsOpen && Current?.Room.Id == m.RoomId && _main.IsWindowActive;
         if (looking) return;
         // Pop up for direct messages, groups, and Everyone messages that name you; the rest is the badge.
