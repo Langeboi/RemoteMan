@@ -226,3 +226,14 @@ public class GatewayUnitTests
     public void Allow_list_rejects_host_names() =>
         Assert.Throws<FormatException>(() => new AllowList("nas.local"));
 }
+
+public class GatewayUrlTests
+{
+    [Theory]
+    [InlineData("https://remoteman.example.dk", "wss://remoteman.example.dk/v1/connect?site=lab")]
+    [InlineData("https://remoteman.example.dk:8443", "wss://remoteman.example.dk:8443/v1/connect?site=lab")]
+    [InlineData("http://10.0.0.5:47200", "ws://10.0.0.5:47200/v1/connect?site=lab")]
+    [InlineData("https://example.dk/remoteman/", "wss://example.dk/remoteman/v1/connect?site=lab")]
+    public void Relay_url_keeps_its_port_and_path(string relay, string expected) =>
+        Assert.Equal(expected, GatewayProtocol.WebSocketUri(new Uri(relay), "/v1/connect?site=lab").AbsoluteUri);
+}

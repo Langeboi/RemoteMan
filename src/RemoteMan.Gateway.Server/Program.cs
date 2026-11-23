@@ -176,8 +176,8 @@ int Device(string[] a)
 
 async Task<int> StatusAsync()
 {
-    using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
-    var scheme = env("TLS_CERT", null) is null ? "http" : "https";
+    using var http = LocalHttp(TimeSpan.FromSeconds(5));
+    var scheme = LocalScheme();
     JsonElement json;
     try { json = await http.GetFromJsonAsync<JsonElement>($"{scheme}://127.0.0.1:{port}{GatewayProtocol.StatusPath}"); }
     catch (HttpRequestException)
@@ -196,11 +196,17 @@ async Task<int> StatusAsync()
 
 async Task<int> HealthAsync()
 {
-    if (File.Exists(healthFile)) return File.ReadAllText(healthFile).Trim() == "online" ? 0 : 1;
-    using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(3) };
-    try { return (await http.GetAsync($"http://127.0.0.1:{port}/healthz")).IsSuccessStatusCode ? 0 : 1; }
+    // A connector (RELAY_URL set) is healthy while it's connected to the relay; a relay while it answers.
+    if (env("RELAY_URL", null) is not null) return File.Exists(healthFile) && File.ReadAllText(healthFile).Trim() == "online" ? 0 : 1;
+    using var http = LocalHttp(TimeSpan.FromSeconds(3));
+    try { return (await http.GetAsync($"{LocalScheme()}://127.0.0.1:{port}/healthz")).IsSuccessStatusCode ? 0 : 1; }
     catch { return 1; }
 }
+
+string LocalScheme() => env("TLS_CERT", null) is null ? "http" : "https";
+
+// Status and health talk to the relay in the same container; with TLS on, its certificate names the public host, not 127.0.0.1.
+static HttpClient LocalHttp(TimeSpan timeout) => new(new HttpClientHandler { ServerCertificateCustomValidationCallback = (_, _, _, _) => true }) { Timeout = timeout };
 
 static string Version() =>
     Environment.GetEnvironmentVariable("REMOTEMAN_GATEWAY_VERSION") is { Length: > 0 } v && v != "dev" ? v

@@ -1,0 +1,24 @@
+# RemoteMan gateway relay behind your own reverse proxy (Nginx Proxy Manager, Nginx, Traefik, HAProxy, a NAT rule…).
+# No Caddy and no Let's Encrypt here: the proxy has the certificate and forwards plain HTTP + WebSocket to the relay.
+#
+#   docker compose -f relay-behind-proxy.compose.yaml up -d
+#   then point the proxy at http://<this VM>:47200 (examples in README.md, "Behind your own proxy")
+services:
+  relay:
+    image: ghcr.io/langeboi/remoteman-gateway:test
+    container_name: remoteman-relay
+    command: relay
+    restart: unless-stopped
+    environment:
+      # The address RemoteMan and connectors use: your proxy's public name. Add a port if it isn't 443,
+      # e.g. https://remoteman.mydomain.dk:8443, and a path if the proxy serves it under one.
+      PUBLIC_URL: https://remoteman.mydomain.dk
+      PORT: 47200                  # what the relay listens on inside the container (plain HTTP)
+      TZ: Europe/Copenhagen
+    ports:
+      - "47200:47200"              # host port : PORT. Bind to one address if only the proxy should reach it: "10.0.0.20:47200:47200"
+    volumes:
+      - relay-data:/data
+
+volumes:
+  relay-data:

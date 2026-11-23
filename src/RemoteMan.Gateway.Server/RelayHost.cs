@@ -22,6 +22,7 @@ public static class RelayHost
         if (certPem is not null && keyPem is not null)
         {
             var cert = System.Security.Cryptography.X509Certificates.X509Certificate2.CreateFromPemFile(certPem, keyPem);
+            builder.WebHost.UseKestrelHttpsConfiguration();
             builder.WebHost.ConfigureKestrel(k => k.ConfigureHttpsDefaults(h => h.ServerCertificate = cert));
         }
         var app = builder.Build();
