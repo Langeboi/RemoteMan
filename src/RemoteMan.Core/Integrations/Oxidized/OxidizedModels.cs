@@ -20,6 +20,19 @@ public sealed record OxidizedNode(
     /// <summary>The last run didn't get a config (no connection, wrong login, timeout).</summary>
     public bool IsFailing => !IsOk && !NeverRan;
 
+    /// <summary>
+    /// ok, stale (the last run worked but is older than <paramref name="staleAfter"/>, so Oxidized has stopped
+    /// polling it), fail or never. Drives the backup glyph on entries and the dashboard widget.
+    /// </summary>
+    public string StateAt(DateTimeOffset now, TimeSpan? staleAfter = null) =>
+        IsFailing ? "fail"
+        : NeverRan ? "never"
+        : LastRun is { } t && now - t > (staleAfter ?? OxidizedNode.StaleAfter) ? "stale"
+        : "ok";
+
+    /// <summary>No backup in this long counts as stale: a day plus an hour of slack for Oxidized's own interval.</summary>
+    public static readonly TimeSpan StaleAfter = TimeSpan.FromHours(25);
+
     public string StatusText => Status.ToLowerInvariant() switch
     {
         "success" => "OK",

@@ -17,7 +17,6 @@
         <Geometry x:Key="G.Play">M4.5,2.5 L13,8 L4.5,13.5 Z</Geometry>
         <Geometry x:Key="G.Edit">M10.5,2.5 L13.5,5.5 L5.5,13.5 H2.5 V10.5 Z M9,4 L12,7</Geometry>
         <Geometry x:Key="G.Star">M8,0.8 L10.1,5.2 L14.9,5.8 L11.4,9.1 L12.3,13.9 L8,11.5 L3.7,13.9 L4.6,9.1 L1.1,5.8 L5.9,5.2 Z</Geometry>
-        <Geometry x:Key="G.Backup">M2,3.5 h12 v3 h-12 z M2,9.5 h12 v3 h-12 z M4.5,5 h0.01 M4.5,11 h0.01</Geometry>
 
         <!-- Card: panel with a small caps title row -->
         <Style TargetType="Border" x:Key="Card">
@@ -222,7 +221,7 @@
                     <Button Height="28" Padding="11,0" Margin="0,0,6,0" Command="{Binding Main.OpenConfigBackupsCommand}" ToolTip="Saved configs from Oxidized"
                             Visibility="{Binding CanBackups, Converter={StaticResource BoolVis}}">
                         <StackPanel Orientation="Horizontal">
-                            <Path Style="{StaticResource Glyph}" Data="{StaticResource G.Backup}" Margin="0,0,6,0" />
+                            <Path Style="{StaticResource Glyph}" Data="{StaticResource Icon.Ox.backup}" Margin="0,0,6,0" />
                             <TextBlock Text="Config backups" VerticalAlignment="Center" />
                         </StackPanel>
                     </Button>
@@ -268,6 +267,10 @@
                                 Background="{StaticResource Panel}" BorderBrush="{StaticResource Border}" BorderThickness="1">
                             <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                                 <Ellipse x:Name="dot" Width="8" Height="8" Margin="0,0,7,0" Fill="{StaticResource Faint}" VerticalAlignment="Center" />
+                                <!-- Oxidized: the archive glyph instead of a dot, coloured by backup state -->
+                                <Border x:Name="backup" Margin="-2,0,5,0" Visibility="Collapsed" VerticalAlignment="Center">
+                                    <Path Style="{StaticResource BackupGlyph}" Tag="{Binding Tag}" />
+                                </Border>
                                 <Border x:Name="avatar" Width="18" Height="18" CornerRadius="9" Margin="0,0,7,0" Visibility="Collapsed" Background="{Binding Color}">
                                     <TextBlock Text="{Binding Initials}" FontSize="9" FontWeight="Bold" Foreground="#111" HorizontalAlignment="Center" VerticalAlignment="Center" />
                                 </Border>
@@ -287,6 +290,10 @@
                                 <Setter TargetName="chip" Property="BorderBrush" Value="#4A2725" />
                             </DataTrigger>
                             <DataTrigger Binding="{Binding Tag}" Value="unreach"><Setter TargetName="dot" Property="Fill" Value="#9AA3AD" /></DataTrigger>
+                            <DataTrigger Binding="{Binding Kind}" Value="oxidized">
+                                <Setter TargetName="dot" Property="Visibility" Value="Collapsed" />
+                                <Setter TargetName="backup" Property="Visibility" Value="Visible" />
+                            </DataTrigger>
                             <DataTrigger Binding="{Binding Kind}" Value="presence">
                                 <Setter TargetName="dot" Property="Visibility" Value="Collapsed" />
                                 <Setter TargetName="avatar" Property="Visibility" Value="Visible" />

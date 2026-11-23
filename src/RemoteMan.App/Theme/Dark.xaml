@@ -189,6 +189,34 @@
         </Style.Triggers>
     </Style>
 
+    <!-- Oxidized backup glyph (16x16, stroke only, drawn a little smaller than the Zabbix glyphs so it stays quiet):
+         an archive box. Only shows when something is wrong with the backups; colour says what. -->
+    <Geometry x:Key="Icon.Ox.backup">M2.5,3.5 H13.5 V6.5 H2.5 Z M3.5,6.5 V12.5 H12.5 V6.5 M6.5,9 H9.5</Geometry>
+    <!-- The same box with a small cross in place of the handle: the last run failed -->
+    <Geometry x:Key="Icon.Ox.fail">M2.5,3.5 H13.5 V6.5 H2.5 Z M3.5,6.5 V12.5 H12.5 V6.5 M6.6,8.3 L9.4,11.1 M9.4,8.3 L6.6,11.1</Geometry>
+
+    <!-- Tag = fail | stale (on entries); ok | never are added for the dashboard and overview, where every device is listed -->
+    <Style TargetType="Path" x:Key="BackupGlyph">
+        <Setter Property="Width" Value="16" />
+        <Setter Property="Height" Value="16" />
+        <Setter Property="Stretch" Value="None" />
+        <Setter Property="StrokeThickness" Value="1.3" />
+        <Setter Property="StrokeLineJoin" Value="Round" />
+        <Setter Property="StrokeStartLineCap" Value="Round" />
+        <Setter Property="StrokeEndLineCap" Value="Round" />
+        <Setter Property="SnapsToDevicePixels" Value="True" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+        <Setter Property="Visibility" Value="Collapsed" />
+        <Setter Property="Data" Value="{StaticResource Icon.Ox.backup}" />
+        <Style.Triggers>
+            <Trigger Property="Tag" Value="fail"><Setter Property="Visibility" Value="Visible" /><Setter Property="Data" Value="{StaticResource Icon.Ox.fail}" /><Setter Property="Stroke" Value="{StaticResource Warn}" /></Trigger>
+            <Trigger Property="Tag" Value="stale"><Setter Property="Visibility" Value="Visible" /><Setter Property="Stroke" Value="{StaticResource Muted}" /></Trigger>
+            <Trigger Property="Tag" Value="ok"><Setter Property="Visibility" Value="Visible" /><Setter Property="Stroke" Value="{StaticResource Ok}" /></Trigger>
+            <Trigger Property="Tag" Value="never"><Setter Property="Visibility" Value="Visible" /><Setter Property="Stroke" Value="{StaticResource Faint}" /><Setter Property="Opacity" Value="0.6" /></Trigger>
+            <Trigger Property="Tag" Value="changed"><Setter Property="Visibility" Value="Visible" /><Setter Property="Stroke" Value="{StaticResource Accent}" /></Trigger>
+        </Style.Triggers>
+    </Style>
+
     <!-- One corner radius for the whole app: just enough that nothing has a hard corner -->
     <CornerRadius x:Key="Radius">3</CornerRadius>
     <CornerRadius x:Key="TopRadius">3,3,0,0</CornerRadius>

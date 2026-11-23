@@ -198,4 +198,23 @@ public class OxidizedTests
         e.OxidizedNode = "lab/sw";
         Assert.Equal("lab/sw", RemoteMan.Core.Storage.EntryStore.Clone(e).OxidizedNode);
     }
+
+    // ---------------- backup state ----------------
+
+    [Fact]
+    public void Backup_state_tells_ok_stale_failing_and_never_apart()
+    {
+        var now = new DateTimeOffset(2026, 11, 23, 12, 0, 0, TimeSpan.Zero);
+        OxidizedNode N(string status, double hoursAgo) => new("n", null, "10.0.0.1", "ios", status, now.AddHours(-hoursAgo), null);
+        Assert.Equal("ok", N("success", 2).StateAt(now));
+        Assert.Equal("stale", N("success", 30).StateAt(now));
+        Assert.Equal("fail", N("no_connection", 1).StateAt(now));
+        Assert.Equal("fail", N("fail", 100).StateAt(now));
+        Assert.Equal("never", N("never", 0).StateAt(now));
+        Assert.Equal("never", new OxidizedNode("n", null, null, null, "", null, null).StateAt(now));
+
+        var snap = new OxidizedSnapshot([N("success", 1), N("success", 2), N("success", 48), N("fail", 1)], new OxidizedMatchOptions(), now);
+        var c = snap.CountByState(now);
+        Assert.Equal((2, 1, 1, 0), (c["ok"], c["stale"], c["fail"], c["never"]));
+    }
 }

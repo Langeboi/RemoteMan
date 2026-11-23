@@ -122,6 +122,14 @@ public sealed class OxidizedSnapshot(IReadOnlyList<OxidizedNode> nodes, Oxidized
 
     public int FailingCount => Nodes.Count(n => n.IsFailing);
 
+    /// <summary>How many devices are in each state (ok, stale, fail, never) at <paramref name="now"/>.</summary>
+    public IReadOnlyDictionary<string, int> CountByState(DateTimeOffset now)
+    {
+        var counts = new Dictionary<string, int> { ["ok"] = 0, ["stale"] = 0, ["fail"] = 0, ["never"] = 0 };
+        foreach (var n in Nodes) counts[n.StateAt(now)]++;
+        return counts;
+    }
+
     /// <summary>"2 h ago", "yesterday", "3 days ago".</summary>
     public static string Age(DateTimeOffset when, DateTimeOffset now)
     {

@@ -18,6 +18,9 @@ public sealed partial class MainViewModel
             ConnectAction = id => { if (_store?.Get(id) is { IsConnectable: true } e) _ = ConnectEntryAsync(e); },
             RevealAction = RevealEntry,
             OpenZabbixAction = OpenZabbixHome,
+            OpenBackupAction = OpenDashboardBackup,
+            OpenOxidizedAction = OpenOxidizedHome,
+            RefreshBackupsAction = () => _ = RefreshOxidizedAsync(_oxCts?.Token ?? default),
         };
         foreach (var (key, _) in d.Widgets) d.SetShown(key, !_settings.DashboardHidden.Contains(key));
         d.WidgetToggled = (key, on) =>
@@ -235,41 +238,117 @@ public sealed partial class MainViewModel
         d.HasZabbixTrend = trend.Count >= 2;
     }
 
-    /// <summary>Oxidized: device counts, failing backups and configs that changed lately, with the entry each belongs to.</summary>
+    /// <summary>
+    /// Oxidized: the state donut (ok, stale, failing, never), devices that need a look, configs that changed this week,
+    /// and every device with its last backup. Each device is paired with the entry that matches it, when there is one.
+    /// </summary>
     private void RefreshDashboardBackups(List<Entry> entries, DateTimeOffset now)
     {
         var d = Dashboard;
         d.BackupsOn = OxidizedActive;
-        d.BackupRows.Clear();
+        d.BackupAttention.Clear();
+        d.BackupChanges.Clear();
+        d.BackupAll.Clear();
         if (OxidizedSnapshot is not { } ox)
         {
-            d.BackupsMeta = OxidizedActive ? "waiting for Oxidized…" : "";
-            d.BackupDevices = d.BackupsToday = d.BackupsFailing = d.BackupsChanged = 0;
-            d.NoBackupRows = true;
+            d.BackupsHasData = false;
+            d.BackupsWaiting = OxidizedStatusText.Length > 0 && !OxidizedStatusText.EndsWith("connecting…") ? OxidizedStatusText : "Waiting for Oxidized to answer…";
+            d.BackupsMeta = "";
+            d.BackupSlices = [];
+            d.BackupDevices = d.BackupsOk = d.BackupsStale = d.BackupsFailing = d.BackupsNever = d.BackupsChanged = d.BackupsUnlinked = 0;
             return;
         }
-        var entryFor = new Dictionary<string, Entry>();
+        d.BackupsHasData = true;
+
+        var entryFor = new Dictionary<string, Entry>(StringComparer.OrdinalIgnoreCase);
         foreach (var e in entries.Where(e => !e.Deleted && e.IsConnectable))
             if (ox.Matcher.Match(e) is { } m) entryFor.TryAdd(m.Node.FullName, e);
 
+        var counts = ox.CountByState(now);
+        var week = now - TimeSpan.FromDays(7);
         d.BackupDevices = ox.Nodes.Count;
-        d.BackupsToday = ox.Nodes.Count(n => n.IsOk && n.LastRun is { } t && t >= now - TimeSpan.FromHours(24));
-        d.BackupsFailing = ox.FailingCount;
-        d.BackupsChanged = ox.Nodes.Count(n => n.LastChanged is { } c && c >= now - TimeSpan.FromDays(7));
-        d.BackupsMeta = $"{ZabbixLessHost(OxidizedCfg.Url)} · {ox.FetchedAt.ToLocalTime():HH:mm}";
+        d.BackupsOk = counts["ok"];
+        d.BackupsStale = counts["stale"];
+        d.BackupsFailing = counts["fail"];
+        d.BackupsNever = counts["never"];
+        d.BackupsChanged = ox.Nodes.Count(n => n.LastChanged is { } c && c >= week);
+        d.BackupsUnlinked = ox.Nodes.Count(n => !entryFor.ContainsKey(n.FullName));
+        var failedFetch = OxidizedStatusText.Contains("(showing data from") ? " · unreachable, last data" : "";
+        d.BackupsMeta = $"{ZabbixLessHost(OxidizedCfg.Url)} · {ox.FetchedAt.ToLocalTime():HH:mm}{failedFetch}";
+        d.BackupSlices =
+        [
+            new ChartSlice("Backed up", d.BackupsOk, RemoteMan.App.Services.Themes.GetBrush("Ok")),
+            new ChartSlice("Over a day old", d.BackupsStale, RemoteMan.App.Services.Themes.GetBrush("Muted"), "The last run worked, but Oxidized hasn't backed it up for more than a day"),
+            new ChartSlice("Failing", d.BackupsFailing, RemoteMan.App.Services.Themes.GetBrush("Warn"), "The last run couldn't fetch the config (no connection, login or timeout)"),
+            new ChartSlice("Not backed up yet", d.BackupsNever, DashChart.Other),
+        ];
 
-        DashEntry Row(RemoteMan.Core.Integrations.Oxidized.OxidizedNode n, string side, string? health)
+        DashBackup Row(RemoteMan.Core.Integrations.Oxidized.OxidizedNode n, string side, string state)
         {
             entryFor.TryGetValue(n.FullName, out var e);
-            return new DashEntry(e?.Id ?? Guid.Empty, e?.Name ?? n.Name, e is null ? "DIR" : EntryNode.KindTagFor(e.Kind),
-                e is null ? "no entry" : FolderName(e), side, health);
+            var where = e is null
+                ? string.Join(" · ", new[] { "no entry", n.Group, n.Model }.Where(x => !string.IsNullOrEmpty(x)))
+                : string.Join(" · ", new[] { FolderName(e), n.Model }.Where(x => !string.IsNullOrEmpty(x)));
+            var hover = $"{n.FullName}{(n.Ip is { Length: > 0 } ip ? $" ({ip})" : "")}\n" +
+                $"Last run: {n.StatusText}{(n.LastRun is { } r ? $", {r.ToLocalTime():d MMM yyyy HH:mm}" : "")}" +
+                (n.LastChanged is { } c ? $"\nConfig last changed {c.ToLocalTime():d MMM yyyy HH:mm}" : "") +
+                (e is null ? "\nDouble-click to open it in Oxidized" : "\nClick to select the entry, double-click for its config backups");
+            return new DashBackup(e?.Id, n.FullName, e?.Name ?? n.Name, where, side, state, hover);
         }
-        foreach (var n in ox.Nodes.Where(n => n.IsFailing).OrderByDescending(n => n.LastRun).Take(5))
-            d.BackupRows.Add(Row(n, $"{n.StatusText}{(n.LastRun is { } t ? " · " + When(t, now) : "")}", "high"));
-        foreach (var n in ox.Nodes.Where(n => !n.IsFailing && n.LastChanged is { } c && c >= now - TimeSpan.FromDays(7))
-                     .OrderByDescending(n => n.LastChanged).Take(Math.Max(0, 7 - d.BackupRows.Count)))
-            d.BackupRows.Add(Row(n, $"changed {When(n.LastChanged!.Value, now)}", null));
-        d.NoBackupRows = d.BackupRows.Count == 0;
+        string LastRun(RemoteMan.Core.Integrations.Oxidized.OxidizedNode n) => n.LastRun is { } t ? RemoteMan.Core.Integrations.Oxidized.OxidizedSnapshot.Age(t, now) : "";
+
+        // Needs a look: failing (newest first), then stale (oldest first), then never backed up.
+        var attention = ox.Nodes.Select(n => (Node: n, State: n.StateAt(now))).Where(x => x.State != "ok")
+            .OrderBy(x => x.State switch { "fail" => 0, "stale" => 1, _ => 2 })
+            .ThenBy(x => x.State == "fail" ? -(x.Node.LastRun?.ToUnixTimeSeconds() ?? 0) : x.Node.LastRun?.ToUnixTimeSeconds() ?? 0)
+            .ThenBy(x => x.Node.Name, StringComparer.OrdinalIgnoreCase).ToList();
+        const int shown = 6;
+        foreach (var (n, state) in attention.Take(shown))
+        {
+            var side = state switch
+            {
+                "fail" => n.StatusText + (n.LastRun is not null ? " · " + LastRun(n) : ""),
+                "stale" => "last " + LastRun(n),
+                _ => "never",
+            };
+            d.BackupAttention.Add(Row(n, side, state));
+        }
+        d.BackupAttentionMore = attention.Count > shown ? $"and {attention.Count - shown} more" : "";
+        d.NoBackupAttention = attention.Count == 0;
+
+        var changes = ox.Nodes.Where(n => n.LastChanged is { } c && c >= week).OrderByDescending(n => n.LastChanged).ToList();
+        foreach (var n in changes.Take(shown))
+            d.BackupChanges.Add(Row(n, When(n.LastChanged!.Value, now), "changed"));
+        d.BackupChangesMore = changes.Count > shown ? $"and {changes.Count - shown} more" : "";
+        d.NoBackupChanges = changes.Count == 0;
+
+        // Every device: problems on top, then by name.
+        foreach (var n in ox.Nodes.OrderBy(n => n.StateAt(now) switch { "fail" => 0, "stale" => 1, "never" => 2, _ => 3 })
+                     .ThenBy(n => n.FullName, StringComparer.OrdinalIgnoreCase))
+        {
+            var state = n.StateAt(now);
+            d.BackupAll.Add(Row(n, state == "never" ? "never" : state == "fail" ? $"{n.StatusText} · {LastRun(n)}" : LastRun(n), state));
+        }
+    }
+
+    /// <summary>Dashboard: double-click on a device opens the Config backups tab of its entry, or its page in Oxidized.</summary>
+    private void OpenDashboardBackup(DashBackup b)
+    {
+        if (b.EntryId is { } id && _store?.Get(id) is not null)
+        {
+            RevealEntry(id);
+            _ = OpenConfigBackupsCommand.ExecuteAsync(null);
+            return;
+        }
+        if (OxidizedSnapshot?.Nodes.FirstOrDefault(n => n.FullName == b.NodeName) is not { } node) return;
+        try { Process.Start(new ProcessStartInfo(RemoteMan.Core.Integrations.Oxidized.OxidizedClient.NodePageUrl(OxidizedCfg.Url, node)) { UseShellExecute = true }); }
+        catch (Exception ex) { Message = ex.Message; }
+    }
+
+    private void OpenOxidizedHome()
+    {
+        try { Process.Start(new ProcessStartInfo(RemoteMan.Core.Integrations.Oxidized.OxidizedClient.BaseUri(OxidizedCfg.Url).ToString()) { UseShellExecute = true }); }
+        catch (Exception ex) { Message = ex.Message; }
     }
 
     private static string ZabbixLessHost(string url) =>
