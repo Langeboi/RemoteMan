@@ -4,7 +4,7 @@
         Title="Export and backup" Width="660" Height="560" MinWidth="560" MinHeight="460"
         Style="{StaticResource RemoteManWindow}" WindowStartupLocation="CenterOwner" ShowInTaskbar="False">
     <Window.Resources>
-        <Style TargetType="GroupBox">
+        <Style TargetType="GroupBox" BasedOn="{StaticResource {x:Type GroupBox}}">
             <Setter Property="BorderBrush" Value="{StaticResource Border}" />
             <Setter Property="Foreground" Value="{StaticResource Muted}" />
             <Setter Property="Padding" Value="6" />
@@ -15,7 +15,7 @@
             <Setter Property="Margin" Value="0,3,8,3" />
         </Style>
         <Style TargetType="ListBoxItem" x:Key="SectionTab">
-            <Setter Property="Foreground" Value="#B8BCC3" />
+            <Setter Property="Foreground" Value="{StaticResource Soft}" />
             <Setter Property="FocusVisualStyle" Value="{x:Null}" />
             <Setter Property="Template">
                 <Setter.Value>

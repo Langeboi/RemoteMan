@@ -16,8 +16,8 @@
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="b" Property="Background" Value="{StaticResource Hover}" /></Trigger>
                             <Trigger Property="IsChecked" Value="True">
-                                <Setter TargetName="b" Property="Background" Value="#26313C" />
-                                <Setter TargetName="b" Property="BorderBrush" Value="#50667D" />
+                                <Setter TargetName="b" Property="Background" Value="{StaticResource SelectRow}" />
+                                <Setter TargetName="b" Property="BorderBrush" Value="{StaticResource Accent}" />
                             </Trigger>
                             <Trigger Property="IsKeyboardFocused" Value="True"><Setter TargetName="b" Property="BorderBrush" Value="{StaticResource Accent}" /></Trigger>
                         </ControlTemplate.Triggers>

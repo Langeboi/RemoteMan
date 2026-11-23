@@ -41,7 +41,7 @@
                     <ControlTemplate TargetType="ListBoxItem">
                         <Border x:Name="b" Background="Transparent">
                             <StackPanel Orientation="Horizontal">
-                                <TextBlock x:Name="no" Text="{Binding No}" Width="46" TextAlignment="Right" Padding="0,0,12,0" Foreground="#4B535B" />
+                                <TextBlock x:Name="no" Text="{Binding No}" Width="46" TextAlignment="Right" Padding="0,0,12,0" Foreground="{StaticResource Faint}" />
                                 <TextBlock x:Name="mark" Text="{Binding Mark}" Width="14" Foreground="{StaticResource Faint}" />
                                 <TextBlock x:Name="text" Text="{Binding Text}" Padding="0,0,16,0" />
                             </StackPanel>
@@ -66,7 +66,7 @@
                                 <Setter TargetName="text" Property="Background" Value="#5A4A1A" />
                                 <Setter TargetName="text" Property="Foreground" Value="{StaticResource TextStrong}" />
                             </DataTrigger>
-                            <Trigger Property="IsSelected" Value="True"><Setter TargetName="b" Property="Background" Value="#26313A" /></Trigger>
+                            <Trigger Property="IsSelected" Value="True"><Setter TargetName="b" Property="Background" Value="{StaticResource SelectRow}" /></Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
                 </Setter.Value>

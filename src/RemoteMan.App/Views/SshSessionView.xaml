@@ -107,7 +107,7 @@
                 <DockPanel Margin="6,0,2,0">
                     <Button DockPanel.Dock="Right" Style="{StaticResource FlatButton}" Content="⋯" ToolTip="More" AutomationProperties.Name="More snippet actions" Click="OnSnippetMore" />
                     <Button DockPanel.Dock="Right" Style="{StaticResource FlatButton}" ToolTip="New snippet" AutomationProperties.Name="New snippet" Click="OnNewSnippet">
-                        <Path Data="M5,0 V10 M0,5 H10" Stroke="#B8BCC3" StrokeThickness="1.5" />
+                        <Path Data="M5,0 V10 M0,5 H10" Stroke="{StaticResource Soft}" StrokeThickness="1.5" />
                     </Button>
                     <Grid>
                         <TextBox x:Name="SnippetFilter" BorderThickness="0" Background="Transparent" TextChanged="OnSnippetFilterChanged"
@@ -142,8 +142,8 @@
                                             <Setter Property="BorderBrush" Value="{StaticResource InputBorder}" />
                                             <Style.Triggers>
                                                 <DataTrigger Binding="{Binding IsChecked}" Value="True">
-                                                    <Setter Property="BorderBrush" Value="#50667D" />
-                                                    <Setter Property="Background" Value="#26313C" />
+                                                    <Setter Property="BorderBrush" Value="{StaticResource Accent}" />
+                                                    <Setter Property="Background" Value="{StaticResource SelectRow}" />
                                                 </DataTrigger>
                                             </Style.Triggers>
                                         </Style>

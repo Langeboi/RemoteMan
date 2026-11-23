@@ -6,9 +6,9 @@
              DataContext="{x:Static u:UpdateService.Instance}">
     <UserControl.Resources>
         <BooleanToVisibilityConverter x:Key="BoolVis" />
-        <SolidColorBrush x:Key="InfoBg" Color="#22303D" />
-        <SolidColorBrush x:Key="InfoBorder" Color="#3A4E63" />
-        <SolidColorBrush x:Key="InfoText" Color="#9FB4CC" />
+        <SolidColorBrush x:Key="InfoBg" Color="{StaticResource C.SelectRow}" />
+        <SolidColorBrush x:Key="InfoBorder" Color="{StaticResource C.AccentDim}" />
+        <SolidColorBrush x:Key="InfoText" Color="{StaticResource C.Link}" />
         <SolidColorBrush x:Key="OkBg" Color="#24302A" />
         <SolidColorBrush x:Key="OkBorder" Color="#4F6B4F" />
         <SolidColorBrush x:Key="OkText" Color="#9CC29C" />

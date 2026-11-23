@@ -83,7 +83,7 @@ public static class Themes
         ("Hover", "#1C2024"), ("Accent", "#3FB8A4"), ("InputBorder", "#2E343A"), ("Button", "#1D2125"), ("ButtonBorder", "#353B42"),
         ("Rail", "#121417"), ("EntryIcon", "#5B9BEA"), ("FolderIcon", "#7D8A99"),
         ("ButtonHover", "#262B30"), ("AccentDim", "#1F5E55"), ("OnAccent", "#0F1113"), ("SelectRow", "#262D33"), ("RailChecked", "#1F2327"),
-        ("MenuHover", "#2A3036"), ("TabLine", "#4A525B"), ("Thumb", "#3A4048"), ("ThumbHover", "#4A525B"), ("Link", "#7FD3C4"), ("Inset", "#1A1E22"));
+        ("MenuHover", "#2A3036"), ("TabLine", "#4A525B"), ("Thumb", "#3A4048"), ("ThumbHover", "#4A525B"), ("Link", "#7FD3C4"), ("Inset", "#1A1E22"), ("Soft", "#B7BEC6"));
 
     /// <summary>Keys whose brush has a different name from the colour (C.Button is the ButtonBg brush).</summary>
     private static readonly Dictionary<string, string> BrushNames = new() { ["Button"] = "ButtonBg" };
@@ -114,6 +114,7 @@ public static class Themes
         c["TabLine"] = Or("TabLine", () => c["ThumbHover"]);
         c["Link"] = Or("Link", () => Mix(c["Accent"], Colors.White, 0.35));
         c["Inset"] = Or("Inset", () => Mix(c["Panel"], c["Text"], 0.03));
+        c["Soft"] = Or("Soft", () => Mix(c["Muted"], c["Text"], 0.45));
         return c;
     }
 
@@ -134,7 +135,54 @@ public static class Themes
         // Menus share the button colours.
         target["MenuBg"] = target["ButtonBg"];
         target["MenuBorder"] = target["ButtonBorder"];
-        ApplyShading(target, theme.Resolve(), shading);
+        var colors = theme.Resolve();
+        ApplySystemColors(target, colors);
+        ApplyShading(target, colors, shading);
+    }
+
+    /// <summary>
+    /// Points the Windows system colours at the theme. Stock WPF control templates (and anything a control builds
+    /// for itself, like a TextBox's edit menu or a TreeView's selected row) draw with these; left alone they are the
+    /// light Windows palette, which is where stray white panels, black text and pale-blue selections came from.
+    /// </summary>
+    private static void ApplySystemColors(ResourceDictionary target, IReadOnlyDictionary<string, Color> c)
+    {
+        void Set(ResourceKey brushKey, ResourceKey? colorKey, string name)
+        {
+            var brush = new SolidColorBrush(c[name]);
+            brush.Freeze();
+            target[brushKey] = brush;
+            if (colorKey is not null) target[colorKey] = c[name];
+        }
+        Set(SystemColors.WindowBrushKey, SystemColors.WindowColorKey, "Bg");
+        Set(SystemColors.WindowTextBrushKey, SystemColors.WindowTextColorKey, "Text");
+        Set(SystemColors.ControlBrushKey, SystemColors.ControlColorKey, "Panel");
+        Set(SystemColors.ControlTextBrushKey, SystemColors.ControlTextColorKey, "Text");
+        Set(SystemColors.ControlLightBrushKey, SystemColors.ControlLightColorKey, "Border");
+        Set(SystemColors.ControlLightLightBrushKey, SystemColors.ControlLightLightColorKey, "Panel2");
+        Set(SystemColors.ControlDarkBrushKey, SystemColors.ControlDarkColorKey, "Border");
+        Set(SystemColors.ControlDarkDarkBrushKey, SystemColors.ControlDarkDarkColorKey, "Bg");
+        Set(SystemColors.HighlightBrushKey, SystemColors.HighlightColorKey, "SelectRow");
+        Set(SystemColors.HighlightTextBrushKey, SystemColors.HighlightTextColorKey, "TextStrong");
+        Set(SystemColors.InactiveSelectionHighlightBrushKey, null, "SelectRow");
+        Set(SystemColors.InactiveSelectionHighlightTextBrushKey, null, "TextStrong");
+        Set(SystemColors.MenuBrushKey, SystemColors.MenuColorKey, "Button");
+        Set(SystemColors.MenuBarBrushKey, SystemColors.MenuBarColorKey, "Button");
+        Set(SystemColors.MenuTextBrushKey, SystemColors.MenuTextColorKey, "TextStrong");
+        Set(SystemColors.MenuHighlightBrushKey, SystemColors.MenuHighlightColorKey, "MenuHover");
+        Set(SystemColors.InfoBrushKey, SystemColors.InfoColorKey, "Button");
+        Set(SystemColors.InfoTextBrushKey, SystemColors.InfoTextColorKey, "TextStrong");
+        Set(SystemColors.GrayTextBrushKey, SystemColors.GrayTextColorKey, "Faint");
+        Set(SystemColors.HotTrackBrushKey, SystemColors.HotTrackColorKey, "Link");
+        Set(SystemColors.ActiveBorderBrushKey, SystemColors.ActiveBorderColorKey, "Border");
+        Set(SystemColors.InactiveBorderBrushKey, SystemColors.InactiveBorderColorKey, "Border");
+        Set(SystemColors.WindowFrameBrushKey, SystemColors.WindowFrameColorKey, "Border");
+        Set(SystemColors.AppWorkspaceBrushKey, SystemColors.AppWorkspaceColorKey, "Work");
+        Set(SystemColors.ScrollBarBrushKey, SystemColors.ScrollBarColorKey, "Panel");
+        Set(SystemColors.ActiveCaptionBrushKey, SystemColors.ActiveCaptionColorKey, "Header");
+        Set(SystemColors.InactiveCaptionBrushKey, SystemColors.InactiveCaptionColorKey, "Header");
+        Set(SystemColors.ActiveCaptionTextBrushKey, SystemColors.ActiveCaptionTextColorKey, "Text");
+        Set(SystemColors.InactiveCaptionTextBrushKey, SystemColors.InactiveCaptionTextColorKey, "Muted");
     }
 
     /// <summary>The shading that was applied at startup.</summary>
