@@ -620,6 +620,7 @@ function dlgOxidized() {
   const d = dialog({ title: "Oxidized device list", wide: true, body: `<p class="faint">Loading…</p>`, actions: [{ label: "New token", run: renew }, { label: "Close", primary: true }] });
   function show(o) {
     d.el.querySelector(".db").innerHTML = `
+      <p style="font-size:13px"><b>${o.last_read ? `Oxidized last read the list from this server ${esc(fmtAgo(o.last_read.ts))} (${esc(o.last_read.ip)}, ${o.last_read.count} devices).` : "Oxidized hasn't read the list from this server yet."}</b>${o.last_refused && (!o.last_read || o.last_refused.ts > o.last_read.ts) ? ` <span class="badc">Refused ${esc(o.last_refused.ip)} ${esc(fmtAgo(o.last_refused.ts))}: ${esc(o.last_refused.why)}.</span>` : ""} <span class="faint">Each server only knows about requests it answered itself.</span></p>
       <p style="font-size:13px">Put this in Oxidized's config (usually <span class="mono">~/.config/oxidized/config</span>) in place of its <span class="mono">source:</span> section, then restart Oxidized. It then backs up every SSH entry in RemoteMan${o.devices == null ? "" : ` (${o.devices} now)`}, and picks up new ones each time it reloads its list.</p>
       <div class="field"><label>Config</label><pre class="code" id="oxCfg">${esc(o.config)}</pre><div><button class="btn sm" data-copy="oxCfg">Copy</button></div></div>
       <div class="field"><label>Address</label><pre class="code wrap">${esc(o.url)}</pre></div>
