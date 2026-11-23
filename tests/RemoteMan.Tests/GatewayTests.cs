@@ -98,8 +98,12 @@ public sealed class GatewayTests : IAsyncLifetime
         using var client = Client();
         using var fwd = new LocalForwarder(client, "lab", [$"127.0.0.1:{EchoPort}"]);
         var payload = RandomNumberGenerator.GetBytes(300_000);   // several frames
+        long sent = GatewayActivity.BytesOut, received = GatewayActivity.BytesIn;
         Assert.Equal(payload, await RoundTrip(fwd.Port, payload));
         Assert.Equal($"127.0.0.1:{EchoPort} via lab", fwd.LastPath);
+        // RemoteMan's side counts the traffic for the status box (the connector, in the same process here, doesn't double it).
+        Assert.InRange(GatewayActivity.BytesOut - sent, payload.Length, payload.Length * 3L / 2);
+        Assert.True(GatewayActivity.BytesIn - received >= payload.Length);
         // A second connection through the same forwarder.
         Assert.Equal("hello"u8.ToArray(), await RoundTrip(fwd.Port, "hello"u8.ToArray()));
     }

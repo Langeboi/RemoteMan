@@ -130,7 +130,7 @@ public sealed record GatewayInvite(string Url, string Token, string? Device = nu
 internal static class Pump
 {
     /// <summary>Copies a TCP stream and a secure channel into each other until either side ends.</summary>
-    public static async Task RunAsync(Stream tcp, SecureChannel channel, CancellationToken ct)
+    public static async Task RunAsync(Stream tcp, SecureChannel channel, CancellationToken ct, bool count = false)
     {
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
         var up = Task.Run(async () =>
@@ -140,7 +140,10 @@ internal static class Pump
             {
                 int n;
                 while ((n = await tcp.ReadAsync(buf, cts.Token)) > 0)
+                {
                     await channel.SendAsync(buf.AsMemory(0, n), cts.Token);
+                    if (count) GatewayActivity.Sent(n);
+                }
             }
             catch (Exception ex) when (ex is IOException or SocketException or OperationCanceledException or ObjectDisposedException or System.Net.WebSockets.WebSocketException) { }
             await channel.CloseAsync();
@@ -150,7 +153,11 @@ internal static class Pump
             try
             {
                 while (await channel.ReceiveAsync(cts.Token) is { } data)
-                    if (data.Length > 0) await tcp.WriteAsync(data, cts.Token);
+                {
+                    if (data.Length == 0) continue;
+                    await tcp.WriteAsync(data, cts.Token);
+                    if (count) GatewayActivity.Received(data.Length);
+                }
             }
             catch (Exception ex) when (ex is IOException or SocketException or OperationCanceledException or ObjectDisposedException
                                            or System.Net.WebSockets.WebSocketException or GatewayException) { }

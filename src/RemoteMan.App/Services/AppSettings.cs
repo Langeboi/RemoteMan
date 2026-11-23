@@ -29,7 +29,7 @@ public sealed class AppSettings
     /// <summary>Data sources that already got the built-in snippets, so deleted ones stay deleted.</summary>
     public List<string> SnippetsSeeded { get; set; } = new();
     public BackupSettings Backup { get; set; } = new();
-    /// <summary>This PC's RemoteMan gateway enrollment (More > Gateway). Null = not set up.</summary>
+    /// <summary>This PC's RemoteMan gateway enrollment (More > Gateway settings). Null = not set up.</summary>
     public GatewayConfig? Gateway { get; set; }
 
     // Per-user UI state (not shared through the data source).

@@ -94,6 +94,7 @@ public partial class MainWindow : Window
         _vm.AskMove = AskMove;
         PreviewKeyDown += OnWindowKeyDown;
         SetUpChat();
+        SetUpGatewayPill();
         StateChanged += (_, _) => MaxGlyph.Data = Geometry.Parse(WindowState == WindowState.Maximized
             ? "M2.5,0.5 H9.5 V7.5 M0.5,2.5 H7.5 V9.5 H0.5 Z" : "M0.5,0.5 H9.5 V9.5 H0.5 Z");
     }
@@ -225,7 +226,6 @@ public partial class MainWindow : Window
         menu.Items.Add(Click("Templates…", (_, _) => _vm.TemplatesDialog?.Invoke()));
         menu.Items.Add(new Separator());
         menu.Items.Add(Click("Data sources…", OnDataSources));
-        menu.Items.Add(Click("Gateway…", (_, _) => Views.GatewayDialog.Show(this, _settings)));
         menu.Items.Add(Click("Import…", OnImport));
         menu.Items.Add(Click("Export and backup…", OnExportBackup));
         menu.Items.Add(Click("Restore from backup…", OnRestore));
@@ -233,6 +233,7 @@ public partial class MainWindow : Window
         if (_vm.ZabbixActive) menu.Items.Add(Cmd("Import from Zabbix…", _vm.ImportFromZabbixCommand));
         menu.Items.Add(Cmd("Oxidized settings…", _vm.OxidizedSettingsCommand));
         menu.Items.Add(Cmd("Oxidized device list…", _vm.OxidizedDevicesCommand));
+        menu.Items.Add(Click("Gateway settings…", (_, _) => OpenGatewaySettings()));
         var startup = new MenuItem { Header = "On startup, reopen last sessions" };
         foreach (var (mode, label) in new[] { (ReopenMode.Ask, "Ask"), (ReopenMode.Always, "Always"), (ReopenMode.Never, "Never") })
         {
@@ -492,6 +493,64 @@ public partial class MainWindow : Window
 
     private void OnQPopupClosed(object? sender, EventArgs e) => QButton.IsChecked = false;
     private void OnZPopupClosed(object? sender, EventArgs e) => ZButton.IsChecked = false;
+
+    // ── Gateway pill (bottom left): shown only with a gateway set up on this PC ──────────────────────────────────
+    private Views.GatewayStatusBox? _gwBox;
+    private string? _gwLed;
+
+    private void SetUpGatewayPill()
+    {
+        var gw = Services.GatewayService.Instance;
+        gw.Changed += () => Dispatcher.BeginInvoke(SyncGatewayPill);
+        SyncGatewayPill();
+    }
+
+    private void SyncGatewayPill()
+    {
+        var gw = Services.GatewayService.Instance;
+        GwPill.Visibility = gw.IsConfigured ? Visibility.Visible : Visibility.Collapsed;
+        if (!gw.IsConfigured) { GwButton.IsChecked = false; return; }
+        var site = gw.LiveSites.FirstOrDefault(s => string.Equals(s.Name, gw.ActiveSite, StringComparison.OrdinalIgnoreCase));
+        var (led, tip) = gw.State switch
+        {
+            Services.GatewayState.Down => ("Bad", $"Gateway: can't reach the relay {gw.RelayHost}"),
+            Services.GatewayState.Connecting => ("Accent", $"Gateway: connecting to {gw.RelayHost}"),
+            _ when site is { Online: false } => ("Warn", $"Gateway: {site.Name} is offline"),
+            _ => ("Ok", $"Gateway: connected to {gw.RelayHost}{(gw.Latency is { } l ? $" ({l.TotalMilliseconds:0} ms)" : "")}"),
+        };
+        GwButton.ToolTip = tip;
+        if (led == _gwLed) return;
+        _gwLed = led;
+        GwLed.SetResourceReference(System.Windows.Shapes.Shape.FillProperty, led);
+        GwHalo.SetResourceReference(System.Windows.Shapes.Shape.FillProperty, led);
+        // A slow ripple from the LED while it's up (or connecting); none when something's wrong.
+        var ripple = led is "Ok" or "Accent";
+        var span = TimeSpan.FromSeconds(led == "Accent" ? 1.1 : 2.4);
+        GwHalo.BeginAnimation(OpacityProperty, ripple ? new System.Windows.Media.Animation.DoubleAnimation(0.55, 0, span) { RepeatBehavior = System.Windows.Media.Animation.RepeatBehavior.Forever } : null);
+        foreach (var dp in new[] { ScaleTransform.ScaleXProperty, ScaleTransform.ScaleYProperty })
+            GwHaloScale.BeginAnimation(dp, ripple ? new System.Windows.Media.Animation.DoubleAnimation(0.7, 1.9, span) { RepeatBehavior = System.Windows.Media.Animation.RepeatBehavior.Forever } : null);
+        if (!ripple) GwHalo.Opacity = 0;
+    }
+
+    private void OnGwPopupOpened(object? sender, EventArgs e)
+    {
+        if (_gwBox is null)
+        {
+            _gwBox = new Views.GatewayStatusBox();
+            _gwBox.SettingsRequested += () => { GwButton.IsChecked = false; OpenGatewaySettings(); };
+            GwPopup.Child = _gwBox;
+        }
+        // While open, a click on the pill itself should close the box, not close and reopen it.
+        GwButton.IsHitTestVisible = false;
+    }
+
+    private void OnGwPopupClosed(object? sender, EventArgs e)
+    {
+        GwButton.IsChecked = false;
+        Dispatcher.BeginInvoke(() => GwButton.IsHitTestVisible = true, System.Windows.Threading.DispatcherPriority.Input);
+    }
+
+    private void OpenGatewaySettings() => Views.GatewayDialog.Show(this, _settings);
     private void OnZPopupButton(object sender, RoutedEventArgs e) => ZButton.IsChecked = false;
 
     private void OnWindowKeyDown(object sender, KeyEventArgs e)

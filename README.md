@@ -128,8 +128,9 @@ the script for servers without Docker is still in [deploy/postgres](deploy/postg
 Reach the database and the machines at school, in a friend's homelab or behind CG-NAT over 443, with no port
 forwarding on their side. A relay runs at home (or anywhere with a public IP) and a connector runs in each remote
 network; both only connect out, and RemoteMan's traffic is encrypted end to end through them. Paste your invite
-under **More > Gateway**, then pick a site on a folder, an entry or the data source. Setup in
-[deploy/gateway](deploy/gateway/README.md).
+under **More > Gateway settings**, then pick a site on a folder, an entry or the data source. Once it's set up, a **Gateway** pill appears at the
+bottom left; its light shows the relay's state, and clicking it opens a live status box (relay latency, open
+tunnels, traffic, sites). Setup in [deploy/gateway](deploy/gateway/README.md).
 
 ## Install
 

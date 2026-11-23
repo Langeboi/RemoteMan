@@ -367,7 +367,7 @@
                         <DockPanel Margin="0,8,0,2">
                             <TextBlock Text="Gateway" Width="110" Style="{StaticResource Label}" />
                             <StackPanel Orientation="Horizontal">
-                                <ComboBox x:Name="ConnGateway" Width="200" IsEditable="True" ToolTip="A site on your RemoteMan gateway relay (More > Gateway). Type a name or pick one." />
+                                <ComboBox x:Name="ConnGateway" Width="200" IsEditable="True" ToolTip="A site on your RemoteMan gateway relay (More > Gateway settings). Type a name or pick one." />
                                 <CheckBox x:Name="ConnGatewayAlways" Content="Always (skip the direct try)" Margin="10,0,0,0" VerticalAlignment="Center" />
                             </StackPanel>
                         </DockPanel>

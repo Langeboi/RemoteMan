@@ -15,7 +15,7 @@ RemoteMan (laptop, anywhere) ──443──►  relay (your home, remoteman.myd
 - **Connector**: one per remote network, in Docker. Outbound only, reconnects by itself, and only opens what its
   `ALLOW` list covers (all private ranges by default). Two connectors on one site share the load and take over
   from each other.
-- **RemoteMan**: paste an invite once per PC (More > Gateway). Then a folder, an entry or the data source names a
+- **RemoteMan**: paste an invite once per PC (More > Gateway settings). Then a folder, an entry or the data source names a
   site. RemoteMan tries the hosts directly first (you're on that network, or on a VPN) and goes through the gateway
   only when they don't answer, unless you tick *Always*.
 
@@ -125,7 +125,7 @@ docker exec remoteman-relay gateway device add lange-laptop               # ever
 docker exec remoteman-relay gateway device add anna-pc --sites school     # only these
 ```
 
-It prints an invite (`rmgw1.…`). In RemoteMan: **More > Gateway**, paste it, Save. The same window shows the sites
+It prints an invite (`rmgw1.…`). In RemoteMan: **More > Gateway settings**, paste it, Save. The same window shows the sites
 the PC may use and whether their connectors are online.
 
 ## 4. Use it
