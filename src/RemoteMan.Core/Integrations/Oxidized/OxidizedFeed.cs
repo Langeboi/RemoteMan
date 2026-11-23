@@ -44,6 +44,8 @@ public sealed class OxidizedFeedSync
     public List<string> Excluded { get; set; } = new();
     /// <summary>Entry ids ticked in the device list: sent even when new entries aren't added automatically.</summary>
     public List<string> Included { get; set; } = new();
+    /// <summary>Entry id (lower case) to the Oxidized model picked in the device list; wins over everything else.</summary>
+    public Dictionary<string, string> Models { get; set; } = new();
 
     public OxidizedFeedChoice Choice(bool autoAdd) => new(new HashSet<string>(Excluded, StringComparer.OrdinalIgnoreCase),
         new HashSet<string>(Included, StringComparer.OrdinalIgnoreCase), autoAdd);
@@ -135,8 +137,25 @@ public static class OxidizedFeed
     public static IEnumerable<string> Tags(string? tags) =>
         (tags ?? "").Split([',', ';'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Select(t => t.ToLowerInvariant());
 
-    /// <summary>Custom field "Oxidized model", then a tag naming a model, then the vendor icon, then the default.</summary>
-    public static string? ModelFor(Entry e, string? defaultModel)
+    /// <summary>Words in an entry's name that give the model away (HH-ROS-LEAF1, RD-CHR-02, PVE-ROSKILDE).</summary>
+    public static readonly IReadOnlyDictionary<string, string> NameModels = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+    {
+        ["ros"] = "routeros", ["chr"] = "routeros", ["routeros"] = "routeros", ["mikrotik"] = "routeros", ["crs"] = "routeros", ["ccr"] = "routeros",
+        ["fgt"] = "fortios", ["fortigate"] = "fortios", ["pve"] = "linuxgeneric", ["proxmox"] = "linuxgeneric",
+    };
+
+    /// <summary>
+    /// The model picked in the device list, then custom field "Oxidized model", then a tag naming a model, then the vendor
+    /// icon, then a word in the name, then the default.
+    /// </summary>
+    public static string? ModelFor(Entry e, string? defaultModel, string? chosen = null)
+    {
+        if (!string.IsNullOrWhiteSpace(chosen)) return chosen.Trim();
+        return InferModel(e) ?? (string.IsNullOrWhiteSpace(defaultModel) ? null : defaultModel.Trim());
+    }
+
+    /// <summary>The model RemoteMan works out by itself, or null.</summary>
+    public static string? InferModel(Entry e)
     {
         foreach (var f in e.Fields ?? [])
             if (!f.Secret && ModelFieldNames.Contains(f.Name.Trim(), StringComparer.OrdinalIgnoreCase) && !string.IsNullOrWhiteSpace(f.Value))
@@ -147,8 +166,17 @@ public static class OxidizedFeed
             if (TagAliases.TryGetValue(t, out var m)) return m;
         }
         if (e.Icon is { } icon && IconModels.TryGetValue(icon.Trim(), out var byIcon)) return byIcon;
-        return string.IsNullOrWhiteSpace(defaultModel) ? null : defaultModel.Trim();
+        foreach (var w in System.Text.RegularExpressions.Regex.Split(e.Name, "[^A-Za-z0-9]+"))
+            if (w.Length > 0 && NameModels.TryGetValue(w, out var byName)) return byName;
+        return null;
     }
+
+    /// <summary>Common Oxidized models for the picker in the device list.</summary>
+    public static readonly string[] CommonModels =
+    [
+        "routeros", "fortios", "procurve", "aoscx", "aosw", "ios", "iosxe", "nxos", "asa", "ftos", "dnos", "os10", "powerconnect",
+        "edgeos", "edgeswitch", "airos", "junos", "eos", "comware", "vyos", "pfsense", "opnsense", "panos", "linuxgeneric",
+    ];
 
     public static string IdKey(Guid id) => id.ToString().ToLowerInvariant();
 
@@ -157,7 +185,8 @@ public static class OxidizedFeed
     /// list) tells which are already there; <paramref name="links"/> are the names saved for matched entries.
     /// </summary>
     public static IReadOnlyList<OxidizedFeedItem> Plan(IEnumerable<Entry> all, OxidizedFeedOptions options,
-        IReadOnlyDictionary<string, string>? links, OxidizedSnapshot? snapshot, OxidizedFeedChoice? choice = null)
+        IReadOnlyDictionary<string, string>? links, OxidizedSnapshot? snapshot, OxidizedFeedChoice? choice = null,
+        IReadOnlyDictionary<string, string>? models = null)
     {
         var list = all.Where(e => !e.Deleted).ToList();
         var folders = list.Where(e => e.Kind == EntryKind.Folder).ToDictionary(e => e.Id);
@@ -172,7 +201,7 @@ public static class OxidizedFeed
         var items = new List<OxidizedFeedItem>();
         foreach (var e in list.Where(e => e.Kind == EntryKind.Ssh).OrderBy(e => IdKey(e.Id), StringComparer.Ordinal))
         {
-            var model = ModelFor(e, options.DefaultModel);
+            var model = ModelFor(e, options.DefaultModel, models?.GetValueOrDefault(IdKey(e.Id)));
             if (leaveOut is not null && Tags(e.Tags).Contains(leaveOut))
             {
                 items.Add(new(e, e.Name, null, null, 0, model, OxidizedFeedState.LeftOut, null, $"Tagged {leaveOut}"));

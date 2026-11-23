@@ -140,8 +140,17 @@ def split_tags(tags):
     return [t.strip().lower() for t in re.split(r"[,;]", tags or "") if t.strip()]
 
 
-def model_for(payload, default_model):
-    """Custom field "Oxidized model", then a tag naming a model, then the vendor icon, then the default."""
+NAME_MODELS = {
+    "ros": "routeros", "chr": "routeros", "routeros": "routeros", "mikrotik": "routeros", "crs": "routeros", "ccr": "routeros",
+    "fgt": "fortios", "fortigate": "fortios", "pve": "linuxgeneric", "proxmox": "linuxgeneric",
+}
+
+
+def model_for(payload, default_model, name="", chosen=None):
+    """Picked in the device list, then custom field "Oxidized model", a tag naming a model, the vendor icon,
+    a word in the name, then the default."""
+    if chosen and str(chosen).strip():
+        return str(chosen).strip()
     for f in payload.get("Fields") or []:
         if (f.get("Name") or "").strip().lower() in MODEL_FIELD_NAMES and not f.get("Secret") and (f.get("Value") or "").strip():
             return f["Value"].strip()
@@ -153,6 +162,9 @@ def model_for(payload, default_model):
     icon = (payload.get("Icon") or "").strip().lower()
     if icon in ICON_MODELS:
         return ICON_MODELS[icon]
+    for w in re.split(r"[^A-Za-z0-9]+", name or ""):
+        if w.lower() in NAME_MODELS:
+            return NAME_MODELS[w.lower()]
     return default_model or None
 
 
@@ -166,6 +178,7 @@ def build_nodes(rows, config, sync, open_login=None):
     excluded = {str(x).lower() for x in sync.get("Excluded") or []}
     included = {str(x).lower() for x in sync.get("Included") or []}
     links = sync.get("Links") or {}
+    models = {str(k).lower(): v for k, v in (sync.get("Models") or {}).items()}
     logins = sync.get("Logins") or {}
 
     folders = {}
@@ -203,7 +216,8 @@ def build_nodes(rows, config, sync, open_login=None):
         if name.lower() in seen:
             name = f"{name}-{host}"
         seen.add(name.lower())
-        node = {"name": name, "ip": host, "model": model_for(p, default_model), "group": group, "remoteman_id": eid}
+        model = model_for(p, default_model, r[3] or "", models.get(eid))
+        node = {"name": name, "ip": host, "model": model, "group": group, "remoteman_id": eid}
         if port != 22:
             node["ssh_port"] = port
         sealed = (logins.get(eid) or logins.get(str(r[0])) or {}).get("S")

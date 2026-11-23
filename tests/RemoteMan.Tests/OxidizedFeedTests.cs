@@ -147,4 +147,29 @@ public class OxidizedFeedTests
         Assert.Contains("\"Logins\":{\"abc\":{\"F\":\"f\",\"S\":\"s\"}}", json);
         Assert.Contains("\"Keep\":[{\"Name\":\"x\",\"Ip\":\"1.1.1.1\"}]", json);
     }
+
+    [Fact]
+    public void Model_comes_from_a_word_in_the_name_before_the_default()
+    {
+        Assert.Equal("routeros", OxidizedFeed.ModelFor(Ssh("HH-ROS-LEAF1", "10.0.0.1"), "fortios"));
+        Assert.Equal("routeros", OxidizedFeed.ModelFor(Ssh("rd chr 02", "10.0.0.2"), null));
+        Assert.Equal("fortios", OxidizedFeed.ModelFor(Ssh("VIB-FGT-01", "10.0.0.3"), null));
+        Assert.Equal("linuxgeneric", OxidizedFeed.ModelFor(Ssh("PVE-ROSKILDE", "10.0.0.4"), null));
+        Assert.Equal("ios", OxidizedFeed.ModelFor(Ssh("ROSKILDE-SW1", "10.0.0.5"), "ios")); // part of a word doesn't count
+        Assert.Equal("aoscx", OxidizedFeed.ModelFor(Ssh("HH-ROS-LEAF1", "10.0.0.1", icon: "aruba"), null)); // the icon wins
+    }
+
+    [Fact]
+    public void Model_picked_in_the_list_wins_and_reaches_the_plan()
+    {
+        var e = Ssh("HH-ROS-LEAF1", "10.0.0.1", icon: "aruba");
+        Assert.Equal("procurve", OxidizedFeed.ModelFor(e, "ios", " procurve "));
+        Assert.Equal("aoscx", OxidizedFeed.ModelFor(e, "ios", " "));
+        var models = new Dictionary<string, string> { [OxidizedFeed.IdKey(e.Id)] = "ftos" };
+        var plan = OxidizedFeed.Plan([e], new OxidizedFeedOptions(), null, null, null, models);
+        Assert.Equal("ftos", Assert.Single(plan).Model);
+
+        var sync = new OxidizedFeedSync { Models = { ["abc"] = "routeros" } };
+        Assert.Contains("\"Models\":{\"abc\":\"routeros\"}", JsonSerializer.Serialize(sync, OxidizedFeed.Json));
+    }
 }

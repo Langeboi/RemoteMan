@@ -50,6 +50,33 @@ public partial class OxidizedFeedWindow : Window
             : "Only in Oxidized, no entry in RemoteMan";
         public bool HasSub => Sub.Length > 0;
         public string Address => Item is { Ip: { } ip } i ? (i.Port == 22 ? ip : $"{ip}:{i.Port}") : Only?.Ip ?? Kept?.Ip ?? "";
+        private string Id => Item is null ? "" : OxidizedFeed.IdKey(Item.Entry.Id);
+        public bool CanPickModel => Item is { State: not OxidizedFeedState.LeftOut } && _w._canChange;
+        public bool ShowModelText => !CanPickModel;
+        private string AutoModel => OxidizedFeed.ModelFor(Item!.Entry, _w.Options.DefaultModel) ?? "Oxidized's default";
+        public string AutoLabel => $"auto: {AutoModel}";
+        public IReadOnlyList<string> ModelChoices => [AutoLabel, .. OxidizedFeed.CommonModels];
+        public string ModelTip => _w._models.ContainsKey(Id)
+            ? "Picked here. Choose the auto line to let RemoteMan work it out again."
+            : $"Worked out by RemoteMan ({AutoModel}). Pick or type another Oxidized model to change it.";
+
+        /// <summary>The model picked for this entry, or the auto line.</summary>
+        public string ModelPick
+        {
+            get => Item is null ? "" : _w._models.TryGetValue(Id, out var m) ? m : AutoLabel;
+            set
+            {
+                if (Item is null) return;
+                var v = (value ?? "").Trim().ToLowerInvariant();
+                var auto = v.Length == 0 || v.StartsWith("auto", StringComparison.Ordinal);
+                var had = _w._models.TryGetValue(Id, out var old) ? old : null;
+                if (auto) _w._models.Remove(Id); else _w._models[Id] = v;
+                if ((auto ? null : v) != had) _w.OnModelPicked();
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(ModelTip));
+            }
+        }
+
         public string Model => Item is { } it ? it.Model ?? (it.State == OxidizedFeedState.LeftOut ? "" : "default") : Only?.Model ?? Kept?.Model ?? "";
         public string Login => Item is null ? "Oxidized's" : Item.State == OxidizedFeedState.LeftOut ? "" : _w.HasLogin(Item) ? "Entry's" : "Oxidized's";
         public string Tip => Item is { State: OxidizedFeedState.LeftOut } i ? $"{i.Why}: not sent to Oxidized" : Login == "Oxidized's" && Item is not null
@@ -81,6 +108,8 @@ public partial class OxidizedFeedWindow : Window
     private bool _bulk;
     private List<Row> _rows = [];
     private OxidizedFeedSync _sync = new();
+    /// <summary>Entry id to the model picked in this window (saved with Save).</summary>
+    private Dictionary<string, string> _models = new();
 
     public OxidizedFeedWindow(MainViewModel vm)
     {
@@ -97,7 +126,9 @@ public partial class OxidizedFeedWindow : Window
         TagBox.Text = cfg.FeedExcludeTag ?? "";
         LoginsBox.IsChecked = cfg.FeedSendLogins;
         AutoAddBox.IsChecked = cfg.FeedAutoAdd;
-        foreach (var c in new FrameworkElement[] { GroupBox, ModelBox, TagBox, LoginsBox, AutoAddBox, TickAllButton, TickNoneButton, HeaderTick }) c.IsEnabled = _canChange;
+        foreach (var c in new FrameworkElement[] { GroupBox, ModelBox, TagBox, LoginsBox, AutoAddBox, TickAllButton, TickNoneButton, HeaderTick, BulkModelBox, BulkModelButton }) c.IsEnabled = _canChange;
+        BulkModelBox.ItemsSource = new[] { "auto" }.Concat(OxidizedFeed.CommonModels).ToList();
+        _models = new(vm.ReadOxidizedFeedSync().Models, StringComparer.OrdinalIgnoreCase);
 
         var shows = new List<Choice<Show>>
         {
@@ -164,7 +195,7 @@ public partial class OxidizedFeedWindow : Window
 
         // Ticks the person changed but hasn't saved survive a change of options.
         var ticks = keepTicks ? _rows.ToDictionary(r => r.Item?.Entry.Id.ToString() ?? "dev:" + r.Name, r => r.IsChecked) : null;
-        var plan = OxidizedFeed.Plan(store.Entries, Options, _sync.Links, snap, _sync.Choice(AutoAddBox.IsChecked == true));
+        var plan = OxidizedFeed.Plan(store.Entries, Options, _sync.Links, snap, _sync.Choice(AutoAddBox.IsChecked == true), _models);
         var rows = new List<Row>();
         foreach (var i in plan)
         {
@@ -239,6 +270,24 @@ public partial class OxidizedFeedWindow : Window
         Status.Text = "Not saved yet";
     }
 
+    internal void OnModelPicked()
+    {
+        if (_loading || _bulk) return;
+        Status.Text = "Not saved yet";
+    }
+
+    private void OnBulkModel(object sender, RoutedEventArgs e)
+    {
+        var v = BulkModelBox.Text.Trim();
+        if (v.Length == 0) { Status.Text = "Pick a model first"; return; }
+        var rows = Shown().Where(r => r.CanPickModel && r.IsChecked).ToList();
+        _bulk = true;
+        try { foreach (var r in rows) r.ModelPick = v; }
+        finally { _bulk = false; }
+        var shown = v.StartsWith("auto", StringComparison.OrdinalIgnoreCase) ? "auto" : v.ToLowerInvariant();
+        Status.Text = rows.Count == 0 ? "No ticked entries shown" : $"Model {shown} set on {rows.Count} entr{(rows.Count == 1 ? "y" : "ies")}. Not saved yet";
+    }
+
     private void OnTickAll(object sender, RoutedEventArgs e) => TickShown(true);
     private void OnTickNone(object sender, RoutedEventArgs e) => TickShown(false);
     private void OnHeaderTick(object sender, RoutedEventArgs e) => TickShown(HeaderTick.IsChecked == true);
@@ -273,7 +322,9 @@ public partial class OxidizedFeedWindow : Window
             await _vm.SaveOxidizedChoiceAsync(
                 entries.Where(r => !r.IsChecked).Select(r => r.Item!.Entry.Id),
                 entries.Where(r => r.IsChecked).Select(r => r.Item!.Entry.Id),
-                kept);
+                kept,
+                _models.Where(kv => _rows.Any(r => r.Item is { } i && OxidizedFeed.IdKey(i.Entry.Id) == kv.Key)).ToDictionary(kv => kv.Key, kv => kv.Value));
+            _models = new(_vm.ReadOxidizedFeedSync().Models, StringComparer.OrdinalIgnoreCase);
             var note = await _vm.SyncOxidizedFeedAsync();
             Status.Text = note is null || note == "Oxidized device list updated" ? "Saved. Oxidized picks it up on its next reload." : note;
             Rebuild(keepTicks: false);
