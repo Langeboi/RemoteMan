@@ -93,7 +93,7 @@ public sealed partial class MainViewModel
         }
         catch (Exception ex)
         {
-            Notify(new ConnectionProblem("Couldn't start sharing", ShareError(ex), "Check that Windows Firewall allows RemoteMan, then try again.", ex.ToString()), s.Entry);
+            Notify(new ConnectionProblem("Couldn't start sharing", ShareError(ex), s is RdpSessionViewModel ? "Sharing the RDP screen uses Windows Desktop Sharing. Use Details to copy the error and send it over." : "Check that Windows Firewall allows RemoteMan, then try again.", ex.ToString()), s.Entry);
         }
     }
 

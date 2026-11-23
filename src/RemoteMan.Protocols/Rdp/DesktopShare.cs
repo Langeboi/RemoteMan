@@ -64,8 +64,29 @@ public sealed class DesktopShare : IDisposable
         s.Open();
         // No area yet (the session is still connecting or hidden): show nothing until there is one.
         if (area.Width < 16 || area.Height < 16) SetPaused(true);
-        var invitation = s.Invitations.CreateInvitation(null, "remoteman", Password, 16);
-        ConnectionString = (string)invitation.ConnectionString;
+        ConnectionString = CreateInvitation(s);
+    }
+
+    /// <summary>
+    /// CreateInvitation(authString, group, password, attendeeLimit). Late binding can't pass a null BSTR
+    /// (it goes out as VT_EMPTY and Windows answers E_INVALIDARG), so the auth string is always a real,
+    /// unique string. If this Windows still refuses the arguments, retry with the most conservative ones.
+    /// </summary>
+    private string CreateInvitation(dynamic s)
+    {
+        var auth = "rm-" + Guid.NewGuid().ToString("N");
+        var attempts = new (string Auth, string Group, int Limit)[] { (auth, "RemoteMan", 16), (auth, "RemoteMan", 5), ("", "RemoteMan", 5) };
+        ArgumentException? last = null;
+        foreach (var (a, g, limit) in attempts)
+        {
+            try
+            {
+                var invitation = s.Invitations.CreateInvitation(a, g, Password, limit);
+                return (string)invitation.ConnectionString;
+            }
+            catch (ArgumentException ex) { last = ex; }
+        }
+        throw new InvalidOperationException("Windows Desktop Sharing refused to create an invitation: " + last?.Message, last);
     }
 
     /// <summary>Follows the RDP tab when the window moves or resizes.</summary>
