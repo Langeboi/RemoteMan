@@ -295,7 +295,7 @@ public sealed partial class MainViewModel
                 (e is null ? "\nDouble-click to open it in Oxidized" : "\nClick to select the entry, double-click for its config backups");
             return new DashBackup(e?.Id, n.FullName, e?.Name ?? n.Name, where, side, state, hover);
         }
-        string LastRun(RemoteMan.Core.Integrations.Oxidized.OxidizedNode n) => n.LastRun is { } t ? OxidizedSnapshot.Age(t, now) : "";
+        string LastRun(RemoteMan.Core.Integrations.Oxidized.OxidizedNode n) => n.LastRun is { } t ? RemoteMan.Core.Integrations.Oxidized.OxidizedSnapshot.Age(t, now) : "";
 
         // Needs a look: failing (newest first), then stale (oldest first), then never backed up.
         var attention = ox.Nodes.Select(n => (Node: n, State: n.StateAt(now))).Where(x => x.State != "ok")
