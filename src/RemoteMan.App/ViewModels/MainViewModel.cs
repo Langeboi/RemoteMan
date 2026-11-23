@@ -170,6 +170,7 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
 
         if (selectedId is { } id && _nodes.TryGetValue(id, out var sel)) { sel.IsSelected = true; Selected = sel; }
         else Selected = null;
+        ReapplyMultiSelection();
         ApplyPresence();
         ApplyZabbix();
         ApplyOxidized();
@@ -232,13 +233,7 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
 
     /// <summary>True when <paramref name="id"/> can go into <paramref name="folder"/> (null = top level):
     /// not into itself or anything below it, and not where it already is.</summary>
-    public bool CanMove(Guid id, Guid? folder)
-    {
-        if (_store?.Get(id) is not { } e || e.ParentId == folder) return false;
-        for (var f = folder; f is { } fid; f = _store.Get(fid)?.ParentId)
-            if (fid == id) return false;
-        return folder is null || _store.Get(folder.Value)?.Kind == EntryKind.Folder;
-    }
+    public bool CanMove(Guid id, Guid? folder) => _store?.CanMove(id, folder) == true;
 
     public async Task MoveAsync(Guid id, Guid? folder)
     {
@@ -255,6 +250,11 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
         }
         catch (Exception ex) { Message = ex.Message; }
     }
+
+    /// <summary>True when Ctrl+click on <paramref name="clicked"/> means "link this credential to the selected connection"
+    /// rather than "add it to the multi-selection": a credential, one connection selected, nothing else picked.</summary>
+    public bool CanCtrlClickLink(EntryNode clicked) =>
+        _store is not null && !HasMultiSelection && Selected is { } sel && sel.Entry.IsConnectable && clicked.Entry.Kind == EntryKind.Credential;
 
     /// <summary>Ctrl+click on a credential while a connection is selected.</summary>
     public async Task<bool> TryCtrlClickLinkAsync(EntryNode clicked)

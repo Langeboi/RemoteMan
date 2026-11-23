@@ -405,6 +405,11 @@
                             <Setter TargetName="row" Property="Background" Value="#1F1E17" />
                             <Setter TargetName="row" Property="BorderBrush" Value="{StaticResource KeyIcon}" />
                         </DataTrigger>
+                        <DataTrigger Binding="{Binding IsMultiSelected}" Value="True">
+                            <Setter TargetName="row" Property="Background" Value="{StaticResource SelectRow}" />
+                            <Setter TargetName="row" Property="BorderBrush" Value="{StaticResource Accent}" />
+                            <Setter Property="Foreground" Value="{StaticResource TextStrong}" />
+                        </DataTrigger>
                         <DataTrigger Binding="{Binding IsDropTarget}" Value="True">
                             <Setter TargetName="row" Property="Background" Value="{StaticResource Select}" />
                             <Setter TargetName="row" Property="BorderBrush" Value="{StaticResource Accent}" />

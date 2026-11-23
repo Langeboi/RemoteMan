@@ -51,6 +51,32 @@ public static class EntryMenu
 
     private static Geometry G(string data) { var g = Geometry.Parse(data); g.Freeze(); return g; }
 
+    /// <summary>The menu for several picked entries (Ctrl+click / Shift+click): move them all at once.</summary>
+    public static void FillMulti(ContextMenu menu, MainViewModel vm)
+    {
+        menu.Items.Clear();
+        var ids = vm.MultiSelection.ToList();
+        var count = ids.Count;
+        menu.Items.Add(new MenuItem { Header = $"{count} entries selected", IsEnabled = false });
+        menu.Items.Add(new Separator());
+        menu.Items.Add(MoveSubmenu(vm, $"Move {count} entries to", ids));
+        menu.Items.Add(new Separator());
+        menu.Items.Add(Item("Clear selection", null, vm.ClearMultiSelection, "Esc"));
+    }
+
+    /// <summary>"Move to" with the top level and every folder by its path; folders nothing can go into are greyed out.</summary>
+    private static MenuItem MoveSubmenu(MainViewModel vm, string header, IReadOnlyList<Guid> ids)
+    {
+        var move = Item(header, "move");
+        move.Items.Add(Item("(top level)", null, () => _ = vm.MoveManyAsync(ids, null), enabled: vm.CanMoveAny(ids, null)));
+        foreach (var f in vm.Folders.Select(f => (f, path: vm.FolderPath(f))).OrderBy(x => x.path, StringComparer.OrdinalIgnoreCase))
+        {
+            var fid = f.f.Id;
+            move.Items.Add(Item(f.path, null, () => _ = vm.MoveManyAsync(ids, fid), enabled: vm.CanMoveAny(ids, fid)));
+        }
+        return move;
+    }
+
     public static void Fill(ContextMenu menu, EntryNode node, MainViewModel vm, Window owner)
     {
         menu.Items.Clear();
@@ -113,14 +139,7 @@ public static class EntryMenu
         menu.Items.Add(Item("Copy", "copy", () => vm.CopyEntry(e), "Ctrl+C"));
         if (!isFolder) menu.Items.Add(Item("Duplicate…", "duplicate", () => vm.DuplicateCommand.Execute(null), "Ctrl+D"));
         if (e.IsConnectable) menu.Items.Add(Item("Save as template…", "new", () => vm.SaveAsTemplateDialog?.Invoke(e)));
-        var move = Item("Move to", "move");
-        move.Items.Add(Item("(top level)", null, () => _ = vm.MoveAsync(e.Id, null), enabled: vm.CanMove(e.Id, null)));
-        foreach (var f in vm.Folders.Select(f => (f, path: vm.FolderPath(f))).OrderBy(x => x.path, StringComparer.OrdinalIgnoreCase))
-        {
-            var fid = f.f.Id;
-            move.Items.Add(Item(f.path, null, () => _ = vm.MoveAsync(e.Id, fid), enabled: vm.CanMove(e.Id, fid)));
-        }
-        menu.Items.Add(move);
+        menu.Items.Add(MoveSubmenu(vm, "Move to", new[] { e.Id }));
         if (!isFolder) menu.Items.Add(Item(vm.IsFavorite(e) ? "Remove from favorites" : "Add to favorites", "star", () => vm.ToggleFavoriteCommand.Execute(null)));
         if (vm.Chat.IsAvailable) menu.Items.Add(Item("Send in chat", "chat", () => vm.Chat.ShareEntry(e)));
 

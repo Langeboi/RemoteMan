@@ -71,6 +71,35 @@ public sealed class EntryStore : IAsyncDisposable
 
     public Entry? Get(Guid id) => _entries.TryGetValue(id, out var e) && !e.Deleted ? e : null;
 
+    /// <summary>True when <paramref name="id"/> can go into <paramref name="folder"/> (null = top level):
+    /// not into itself or anything below it, not where it already is, and only into a folder.</summary>
+    public bool CanMove(Guid id, Guid? folder)
+    {
+        if (Get(id) is not { } e || e.ParentId == folder) return false;
+        for (var f = folder; f is { } fid; f = Get(fid)?.ParentId)
+            if (fid == id) return false;
+        return folder is null || Get(folder.Value)?.Kind == EntryKind.Folder;
+    }
+
+    /// <summary>
+    /// The entries a multi-selection move should actually save: anything whose folder is also selected
+    /// is left out (it travels with that folder), and so is anything that can't go into <paramref name="folder"/>.
+    /// </summary>
+    public IReadOnlyList<Entry> MovableForMove(IEnumerable<Guid> ids, Guid? folder)
+    {
+        var set = ids.ToHashSet();
+        bool AncestorSelected(Entry e)
+        {
+            var seen = new HashSet<Guid>();
+            for (var p = e.ParentId; p is { } pid && seen.Add(pid); p = Get(pid)?.ParentId)
+                if (set.Contains(pid)) return true;
+            return false;
+        }
+        return set.Select(Get).OfType<Entry>()
+            .Where(e => !AncestorSelected(e) && CanMove(e.Id, folder))
+            .ToList();
+    }
+
     /// <summary>
     /// Connects and loads everything. If the server can't be reached the store opens
     /// offline instead (from the cache when there is one) and keeps retrying; only
