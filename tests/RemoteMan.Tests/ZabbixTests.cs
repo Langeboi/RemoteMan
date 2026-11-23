@@ -147,6 +147,16 @@ public class ZabbixTests
     }
 
     [Fact]
+    public async Task Problems_still_load_when_the_token_cannot_read_users()
+    {
+        var handler = new FakeZabbix("7.4.0", "hostgroups") { NoUserRights = true };
+        using var c = new ZabbixClient("https://z", "TOKEN", handler: handler);
+        var p = Assert.Single(await c.GetProblemsAsync(ZabbixSeverity.Warning));
+        Assert.True(p.Acknowledged);
+        Assert.Null(p.AcknowledgedBy);
+    }
+
+    [Fact]
     public async Task Client_reports_api_errors_readably()
     {
         var handler = new FakeZabbix("7.0.0", "hostgroups") { FailAuth = true };
@@ -157,7 +167,11 @@ public class ZabbixTests
 
     private sealed class FakeZabbix(string version, string groupsKey) : HttpMessageHandler
     {
+        // What Zabbix 7.x accepts in problem.get's selectAcknowledges.
+        private static readonly HashSet<string> AckFields = ["acknowledgeid", "userid", "clock", "message", "action", "old_severity",
+            "new_severity", "suppress_until", "taskid", "maintenanceid", "details", "cep_ruleid"];
         public bool FailAuth { get; init; }
+        public bool NoUserRights { get; init; }
         public List<(string Method, string? Bearer, string? AuthField, JsonNode? Params)> Requests { get; } = new();
 
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
@@ -165,19 +179,34 @@ public class ZabbixTests
             var body = JsonNode.Parse(await request.Content!.ReadAsStringAsync(ct))!;
             var method = body["method"]!.GetValue<string>();
             Requests.Add((method, request.Headers.Authorization?.Parameter, body["auth"]?.GetValue<string>(), body["params"]));
-            JsonNode result = method switch
+            JsonNode result;
+            try { result = Result(method, body); }
+            catch (InvalidOperationException ex)
             {
-                "apiinfo.version" => JsonValue.Create(version)!,
-                "host.get" when body["params"]!["countOutput"] is not null => JsonValue.Create("1")!,
-                "host.get" => JsonNode.Parse($$"""[{"hostid":"10512","host":"DC01","name":"DC01","status":"0","maintenance_status":"0","interfaces":[{"ip":"10.0.20.5","dns":"","useip":"1","port":"10050","type":"1","main":"1","available":"2"}],"{{groupsKey}}":[{"groupid":"5","name":"Homelab"}],"parentTemplates":[{"templateid":"1","name":"Windows by Zabbix agent"}]}]""")!,
-                "problem.get" => JsonNode.Parse("""[{"eventid":"901","objectid":"77","name":"Disk full","severity":"4","clock":"1795150000","acknowledged":"1","suppressed":"0","acknowledges":[{"username":"mads","name":"Mads","surname":"J","action":"6","clock":"1795150100"}]}]""")!,
-                "trigger.get" => JsonNode.Parse("""{"77":{"triggerid":"77","hosts":[{"hostid":"10512"}]}}""")!,
-                _ => JsonValue.Create("?")!,
-            };
+                var e = new JsonObject { ["jsonrpc"] = "2.0", ["error"] = new JsonObject { ["code"] = -32602, ["message"] = "Invalid params.", ["data"] = ex.Message }, ["id"] = 1 };
+                return new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(e.ToJsonString(), Encoding.UTF8, "application/json") };
+            }
             var resp = FailAuth && method != "apiinfo.version"
                 ? new JsonObject { ["jsonrpc"] = "2.0", ["error"] = new JsonObject { ["code"] = -32602, ["message"] = "Invalid params.", ["data"] = "Not authorized." }, ["id"] = 1 }
                 : new JsonObject { ["jsonrpc"] = "2.0", ["result"] = result, ["id"] = 1 };
             return new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(resp.ToJsonString(), Encoding.UTF8, "application/json") };
+        }
+
+        private JsonNode Result(string method, JsonNode body)
+        {
+            return method switch
+            {
+                "apiinfo.version" => JsonValue.Create(version)!,
+                "host.get" when body["params"]!["countOutput"] is not null => JsonValue.Create("1")!,
+                "host.get" => JsonNode.Parse($$"""[{"hostid":"10512","host":"DC01","name":"DC01","status":"0","maintenance_status":"0","interfaces":[{"ip":"10.0.20.5","dns":"","useip":"1","port":"10050","type":"1","main":"1","available":"2"}],"{{groupsKey}}":[{"groupid":"5","name":"Homelab"}],"parentTemplates":[{"templateid":"1","name":"Windows by Zabbix agent"}]}]""")!,
+                "problem.get" when !body["params"]!["selectAcknowledges"]!.AsArray().All(f => AckFields.Contains(f!.GetValue<string>())) =>
+                    throw new InvalidOperationException("Invalid parameter \"/selectAcknowledges\": unknown field"),
+                "problem.get" => JsonNode.Parse("""[{"eventid":"901","objectid":"77","name":"Disk full","severity":"4","clock":"1795150000","acknowledged":"1","suppressed":"0","acknowledges":[{"userid":"3","action":"6","clock":"1795150100"}]}]""")!,
+                "user.get" when NoUserRights => throw new InvalidOperationException("No permissions"),
+                "user.get" => JsonNode.Parse("""[{"userid":"3","username":"mads","name":"Mads","surname":"J"}]""")!,
+                "trigger.get" => JsonNode.Parse("""{"77":{"triggerid":"77","hosts":[{"hostid":"10512"}]}}""")!,
+                _ => JsonValue.Create("?")!,
+            };
         }
     }
 }
