@@ -203,7 +203,16 @@ public sealed partial class MainViewModel
         TrySaveSettings();
         Message = removed ? $"Removed {e.Name} from favorites" : $"Added {e.Name} to favorites";
         if (PanelMode == "fav") RebuildTree();
+        else ApplyFavorites();
         RefreshDashboard();
+    }
+
+    /// <summary>Stars the tree rows of entries in your Favorites.</summary>
+    private void ApplyFavorites()
+    {
+        var favs = _settings.Favorites.ToHashSet();
+        foreach (var n in _nodes.Values)
+            n.IsFavorite = !n.IsFolder && !n.IsRoot && favs.Contains(n.Id);
     }
 
     private void RememberRecent(Entry e)
