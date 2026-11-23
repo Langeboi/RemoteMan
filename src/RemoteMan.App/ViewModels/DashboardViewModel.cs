@@ -22,6 +22,15 @@ public sealed record DashEntry(Guid Id, string Name, string Tag, string Detail, 
 /// <summary>A Zabbix problem, with the entry it belongs to when one matches.</summary>
 public sealed record DashProblem(string Tag, string Name, string Where, string Age, Guid? EntryId);
 
+/// <summary>
+/// An Oxidized device on the Config backups widget. State is ok, stale, fail, never or changed and picks the archive
+/// glyph's colour. EntryId is the entry it matches, or null when nothing in RemoteMan points at it.
+/// </summary>
+public sealed record DashBackup(Guid? EntryId, string NodeName, string Name, string Detail, string Side, string State, string Hover)
+{
+    public bool HasEntry => EntryId is not null;
+}
+
 /// <summary>A housekeeping line; click it to list the entries behind the count.</summary>
 public sealed partial class DashCheck : ObservableObject
 {
@@ -85,6 +94,10 @@ public sealed partial class DashboardViewModel : SessionViewModel
     internal Action<Guid>? RevealAction { get; set; }
     internal Action? OpenZabbixAction { get; set; }
     internal Action<string, bool>? WidgetToggled { get; set; }
+    /// <summary>Opens the Config backups tab for an Oxidized device (its entry), or its Oxidized page when no entry matches.</summary>
+    internal Action<DashBackup>? OpenBackupAction { get; set; }
+    internal Action? OpenOxidizedAction { get; set; }
+    internal Action? RefreshBackupsAction { get; set; }
 
     [ObservableProperty] private string _sourceName = "";
     [ObservableProperty] private string _sourceState = "";
@@ -130,14 +143,30 @@ public sealed partial class DashboardViewModel : SessionViewModel
 
     // --- Oxidized config backups ---
     [ObservableProperty] private bool _backupsOn;
+    /// <summary>A node list has arrived; until then the widget shows <see cref="BackupsWaiting"/>.</summary>
+    [ObservableProperty] private bool _backupsHasData;
+    [ObservableProperty] private string _backupsWaiting = "";
     [ObservableProperty] private string _backupsMeta = "";
     [ObservableProperty] private int _backupDevices;
-    [ObservableProperty] private int _backupsToday;
+    [ObservableProperty] private int _backupsOk;
+    [ObservableProperty] private int _backupsStale;
     [ObservableProperty] private int _backupsFailing;
+    [ObservableProperty] private int _backupsNever;
     [ObservableProperty] private int _backupsChanged;
-    /// <summary>Failing devices first, then configs that changed lately. Health "high" marks a failure.</summary>
-    public ObservableCollection<DashEntry> BackupRows { get; } = new();
-    [ObservableProperty] private bool _noBackupRows;
+    /// <summary>Devices Oxidized backs up that no entry points at.</summary>
+    [ObservableProperty] private int _backupsUnlinked;
+    [ObservableProperty] private IReadOnlyList<RemoteMan.App.Views.ChartSlice> _backupSlices = [];
+    /// <summary>Failing first, then stale, then never backed up.</summary>
+    public ObservableCollection<DashBackup> BackupAttention { get; } = new();
+    [ObservableProperty] private string _backupAttentionMore = "";
+    [ObservableProperty] private bool _noBackupAttention;
+    /// <summary>Configs that changed in the last 7 days, newest first.</summary>
+    public ObservableCollection<DashBackup> BackupChanges { get; } = new();
+    [ObservableProperty] private string _backupChangesMore = "";
+    [ObservableProperty] private bool _noBackupChanges;
+    /// <summary>Every device with its last backup, shown when <see cref="ShowAllBackups"/> is on.</summary>
+    public ObservableCollection<DashBackup> BackupAll { get; } = new();
+    [ObservableProperty] private bool _showAllBackups;
     public bool BackupsVisible => ShowBackups && BackupsOn;
     partial void OnBackupsOnChanged(bool value) => OnPropertyChanged(nameof(BackupsVisible));
 
@@ -199,4 +228,9 @@ public sealed partial class DashboardViewModel : SessionViewModel
     [RelayCommand] private void RevealProblem(DashProblem? p) { if (p?.EntryId is { } id) RevealAction?.Invoke(id); }
     [RelayCommand] private void OpenZabbix() => OpenZabbixAction?.Invoke();
     [RelayCommand] private void ToggleCheck(DashCheck? c) { if (c is { Count: > 0 }) c.IsOpen = !c.IsOpen; }
+    [RelayCommand] private void RevealBackup(DashBackup? b) { if (b?.EntryId is { } id) RevealAction?.Invoke(id); }
+    [RelayCommand] private void OpenBackup(DashBackup? b) { if (b is not null) OpenBackupAction?.Invoke(b); }
+    [RelayCommand] private void OpenOxidized() => OpenOxidizedAction?.Invoke();
+    [RelayCommand] private void RefreshBackups() => RefreshBackupsAction?.Invoke();
+    [RelayCommand] private void ToggleAllBackups() => ShowAllBackups = !ShowAllBackups;
 }

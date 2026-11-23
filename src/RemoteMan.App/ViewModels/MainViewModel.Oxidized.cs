@@ -27,7 +27,7 @@ public sealed partial class MainViewModel
 
     [ObservableProperty] private bool _selectedOxidizedVisible;
     [ObservableProperty] private bool _selectedOxidizedLinked;
-    /// <summary>ok, fail or never: the dot colour on the entry card.</summary>
+    /// <summary>ok, stale, fail or never: the backup glyph's colour on the overview chip.</summary>
     [ObservableProperty] private string _selectedOxidizedState = "never";
     [ObservableProperty] private string _selectedOxidizedText = "";
     [ObservableProperty] private string _selectedOxidizedTip = "";
@@ -108,6 +108,7 @@ public sealed partial class MainViewModel
                     ? $"Oxidized: {ex.Message} (showing data from {last.FetchedAt.ToLocalTime():HH:mm})"
                     : $"Oxidized: {ex.Message}";
                 RefreshOxidizedCard();
+                RefreshDashboard();
             });
         }
     }
@@ -116,14 +117,19 @@ public sealed partial class MainViewModel
     private void ApplyOxidized()
     {
         var snap = _oxSnapshot;
+        var now = DateTimeOffset.UtcNow;
         foreach (var n in _nodes.Values)
         {
-            if (n.IsFolder || snap is null || !n.Entry.IsConnectable) { n.BackupFailed = false; n.BackupTip = null; continue; }
-            var m = snap.Matcher.Match(n.Entry);
-            n.BackupFailed = m?.Node.IsFailing == true;
-            n.BackupTip = m is { Node: var node } && node.IsFailing
-                ? $"Oxidized: last backup {node.StatusText}" + (node.LastRun is { } t ? $" ({t.ToLocalTime():d MMM HH:mm})" : "")
-                : null;
+            if (n.IsFolder || snap is null || !n.Entry.IsConnectable) { n.BackupState = null; n.BackupTip = null; continue; }
+            var node = snap.Matcher.Match(n.Entry)?.Node;
+            var state = node?.StateAt(now);
+            n.BackupState = state is "fail" or "stale" ? state : null;
+            n.BackupTip = node is null ? null : state switch
+            {
+                "fail" => $"Config backup: last run {node.StatusText}" + (node.LastRun is { } t ? $" ({t.ToLocalTime():d MMM HH:mm})" : ""),
+                "stale" => $"Config backup: none since {node.LastRun!.Value.ToLocalTime():d MMM HH:mm} ({OxidizedSnapshot.Age(node.LastRun.Value, now)})",
+                _ => null,
+            };
         }
         RefreshOxidizedCard();
         RefreshDashboard();
@@ -149,7 +155,7 @@ public sealed partial class MainViewModel
         if (m is null) { SelectedOxidizedText = ""; SelectedOxidizedTip = ""; return; }
         var node = m.Node;
         var now = DateTimeOffset.UtcNow;
-        SelectedOxidizedState = node.IsOk ? "ok" : node.IsFailing ? "fail" : "never";
+        SelectedOxidizedState = node.StateAt(now);
         SelectedOxidizedText = node.IsOk
             ? (node.LastRun is { } t ? $"Backed up {OxidizedSnapshot.Age(t, now)}" : "Backed up")
             : node.IsFailing ? $"Last backup {node.StatusText}" + (node.LastRun is { } f ? $", {OxidizedSnapshot.Age(f, now)}" : "")

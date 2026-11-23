@@ -73,9 +73,10 @@
                         <TextBlock Text="{Binding Badge.Initials}" FontSize="5.5" FontWeight="Bold" Foreground="{StaticResource Bg}" HorizontalAlignment="Center" VerticalAlignment="Center" />
                     </Border>
                 </Grid>
-                <!-- Oxidized: small orange dot when the device's last config backup failed -->
-                <Ellipse DockPanel.Dock="Right" Width="7" Height="7" Margin="6,0,0,0" Fill="{StaticResource Warn}" VerticalAlignment="Center"
-                         ToolTip="{Binding BackupTip}" Visibility="{Binding BackupFailed, Converter={StaticResource BoolVis}}" />
+                <!-- Oxidized: small archive glyph when the device's last backup failed (orange, crossed) or is over a day old (grey) -->
+                <Path DockPanel.Dock="Right" Style="{StaticResource BackupGlyph}" Tag="{Binding BackupState}" Margin="6,0,0,0" ToolTip="{Binding BackupTip}">
+                    <Path.LayoutTransform><ScaleTransform ScaleX="0.875" ScaleY="0.875" /></Path.LayoutTransform>
+                </Path>
                 <!-- Zabbix: health glyph on entries, count of problem hosts on folders -->
                 <Path DockPanel.Dock="Right" Style="{StaticResource HealthGlyph}" Tag="{Binding Health}" Margin="6,0,0,0" ToolTip="{Binding HealthTip}" />
                 <Border x:Name="pcount" DockPanel.Dock="Right" MinWidth="16" Height="16" CornerRadius="8" Padding="4,0" Margin="6,0,0,0" Background="{StaticResource Warn}"

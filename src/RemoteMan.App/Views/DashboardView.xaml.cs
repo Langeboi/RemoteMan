@@ -21,6 +21,16 @@ public partial class DashboardView : UserControl
         }
     }
 
+    /// <summary>Double-click on a backup row: its Config backups tab, or the device's page in Oxidized.</summary>
+    private void OnBackupDoubleClick(object sender, MouseButtonEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.DataContext is DashBackup row && e.ChangedButton == MouseButton.Left)
+        {
+            Vm?.OpenBackupCommand.Execute(row);
+            e.Handled = true;
+        }
+    }
+
     private void OnWidgetsMenu(object sender, RoutedEventArgs e)
     {
         if (Vm is not { } vm) return;
@@ -29,6 +39,7 @@ public partial class DashboardView : UserControl
         {
             var item = new MenuItem { Header = label, IsCheckable = true, IsChecked = vm.IsShown(key), StaysOpenOnClick = true };
             if (key == "zabbix" && !vm.ZabbixOn) item.Header = $"{label} (set up Zabbix to see it)";
+            if (key == "backups" && !vm.BackupsOn) item.Header = $"{label} (set up Oxidized to see it)";
             item.Click += (_, _) => vm.SetShown(key, item.IsChecked);
             menu.Items.Add(item);
         }

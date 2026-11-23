@@ -88,6 +88,31 @@
             </Button>
         </DataTemplate>
 
+        <!-- An Oxidized device: archive glyph coloured by backup state, name, folder or group, last backup on the right.
+             Click selects its entry in the tree, double-click opens its config backups (or its Oxidized page when no entry matches). -->
+        <DataTemplate x:Key="BackupRow" DataType="{x:Type vm:DashBackup}">
+            <Button Style="{StaticResource RowButton}" Padding="6,0" Height="28" ToolTip="{Binding Hover}"
+                    Command="{Binding DataContext.RevealBackupCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" CommandParameter="{Binding}"
+                    MouseDoubleClick="OnBackupDoubleClick">
+                <DockPanel>
+                    <Path Style="{StaticResource BackupGlyph}" Tag="{Binding State}" Margin="0,0,8,0" />
+                    <TextBlock DockPanel.Dock="Right" Text="{Binding Side}" Style="{StaticResource WidgetMeta}" Margin="8,0,0,0" />
+                    <TextBlock VerticalAlignment="Center" TextTrimming="CharacterEllipsis" FontSize="12.5">
+                        <Run Text="{Binding Name, Mode=OneWay}">
+                            <Run.Style>
+                                <Style TargetType="Run">
+                                    <Style.Triggers>
+                                        <!-- No entry in RemoteMan for this device: name in the muted colour -->
+                                        <DataTrigger Binding="{Binding HasEntry}" Value="False"><Setter Property="Foreground" Value="{StaticResource Muted}" /></DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Run.Style>
+                        </Run><Run Text="  " /><Run Text="{Binding Detail, Mode=OneWay}" Foreground="{StaticResource Faint}" FontSize="11" />
+                    </TextBlock>
+                </DockPanel>
+            </Button>
+        </DataTemplate>
+
         <!-- Favorites: a small card per entry -->
         <DataTemplate x:Key="FavoriteCard" DataType="{x:Type vm:DashEntry}">
             <Button Margin="0,0,6,6" Padding="0" Cursor="Hand" ToolTip="Double-click to connect"
@@ -407,41 +432,112 @@
                 </Border>
             </UniformGrid>
 
-            <!-- Oxidized config backups -->
+            <!-- Oxidized config backups: state donut, what needs a look, what changed, and every device on demand -->
             <Border Style="{StaticResource Widget}" Visibility="{Binding BackupsVisible, Converter={StaticResource BoolVis}}">
                 <DockPanel>
                     <Border DockPanel.Dock="Top" Style="{StaticResource WidgetHeader}">
                         <DockPanel>
-                            <TextBlock DockPanel.Dock="Right" Text="{Binding BackupsMeta}" Style="{StaticResource WidgetMeta}" />
-                            <TextBlock Text="Config backups" Style="{StaticResource WidgetTitle}" />
+                            <TextBlock DockPanel.Dock="Right" FontSize="11.5" VerticalAlignment="Center" Margin="12,0,0,0">
+                                <Hyperlink Command="{Binding RefreshBackupsCommand}" Foreground="{StaticResource Link}" ToolTip="Ask Oxidized for the device list now">Refresh</Hyperlink>
+                                <Run Text="  ·  " Foreground="{StaticResource Faint}" />
+                                <Hyperlink Command="{Binding OpenOxidizedCommand}" Foreground="{StaticResource Link}" ToolTip="Open the Oxidized web UI">Open Oxidized</Hyperlink>
+                            </TextBlock>
+                            <Path Style="{StaticResource BackupGlyph}" Tag="never" Opacity="1" Stroke="{StaticResource Muted}" Margin="0,0,6,0">
+                                <Path.LayoutTransform><ScaleTransform ScaleX="0.875" ScaleY="0.875" /></Path.LayoutTransform>
+                            </Path>
+                            <TextBlock Text="Config backups" Style="{StaticResource WidgetTitle}" Margin="0,0,12,0" />
+                            <TextBlock Text="{Binding BackupsMeta}" Style="{StaticResource WidgetMeta}" HorizontalAlignment="Right" />
                         </DockPanel>
                     </Border>
-                    <Grid Margin="12,10,12,10">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="2*" />
-                            <ColumnDefinition Width="3*" />
-                        </Grid.ColumnDefinitions>
-                        <UniformGrid Columns="2" VerticalAlignment="Top" Margin="0,0,6,0">
-                            <UniformGrid.Resources>
-                                <Style TargetType="Border">
-                                    <Setter Property="Background" Value="{StaticResource Panel2}" />
-                                    <Setter Property="BorderBrush" Value="{StaticResource BorderSoft}" />
-                                    <Setter Property="BorderThickness" Value="1" />
-                                    <Setter Property="CornerRadius" Value="{StaticResource Radius}" />
-                                    <Setter Property="Padding" Value="8,5" />
-                                    <Setter Property="Margin" Value="0,0,6,6" />
-                                </Style>
-                            </UniformGrid.Resources>
-                            <Border><StackPanel><TextBlock Text="{Binding BackupDevices}" FontSize="18" FontWeight="SemiBold" Foreground="{StaticResource TextStrong}" /><TextBlock Text="Devices" Style="{StaticResource WidgetMeta}" /></StackPanel></Border>
-                            <Border><StackPanel><TextBlock Text="{Binding BackupsToday}" FontSize="18" FontWeight="SemiBold" Foreground="{StaticResource Ok}" /><TextBlock Text="Backed up in 24 h" Style="{StaticResource WidgetMeta}" /></StackPanel></Border>
-                            <Border><StackPanel><TextBlock Text="{Binding BackupsFailing}" FontSize="18" FontWeight="SemiBold" Foreground="{StaticResource Bad}" /><TextBlock Text="Failing" Style="{StaticResource WidgetMeta}" /></StackPanel></Border>
-                            <Border><StackPanel><TextBlock Text="{Binding BackupsChanged}" FontSize="18" FontWeight="SemiBold" Foreground="{StaticResource Warn}" /><TextBlock Text="Changed in 7 days" Style="{StaticResource WidgetMeta}" /></StackPanel></Border>
-                        </UniformGrid>
-                        <StackPanel Grid.Column="1">
-                            <TextBlock Text="All backups OK, no config changes this week." Style="{StaticResource Empty}" Visibility="{Binding NoBackupRows, Converter={StaticResource BoolVis}}" />
-                            <ItemsControl ItemsSource="{Binding BackupRows}" ItemTemplate="{StaticResource EntryRow}" Focusable="False" />
+                    <StackPanel>
+                        <TextBlock Text="{Binding BackupsWaiting}" Style="{StaticResource Empty}" Margin="18,12" Visibility="{Binding BackupsHasData, Converter={StaticResource InvBoolVis}}" />
+                        <Grid Margin="12,12,12,6" Visibility="{Binding BackupsHasData, Converter={StaticResource BoolVis}}">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+
+                            <!-- Donut and legend, then the two counts that don't fit the donut -->
+                            <StackPanel Width="230" Margin="0,0,16,0">
+                                <StackPanel Orientation="Horizontal">
+                                    <views:DonutChart Width="104" Height="104" Slices="{Binding BackupSlices}" CenterLabel="devices" VerticalAlignment="Top" />
+                                    <ItemsControl ItemsSource="{Binding BackupSlices}" Focusable="False" Margin="12,0,0,0" Width="114" VerticalAlignment="Center">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate DataType="{x:Type views:ChartSlice}">
+                                                <DockPanel Margin="0,2" ToolTip="{Binding Note}">
+                                                    <Border Width="9" Height="9" CornerRadius="2" Background="{Binding Brush}" Margin="0,0,7,0" VerticalAlignment="Center" />
+                                                    <TextBlock DockPanel.Dock="Right" Text="{Binding Count}" Style="{StaticResource MutedText}" FontSize="12" Margin="6,0,0,0" />
+                                                    <TextBlock Text="{Binding Name}" FontSize="11.5" TextTrimming="CharacterEllipsis" />
+                                                </DockPanel>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </StackPanel>
+                                <UniformGrid Columns="2" Margin="0,12,-6,0">
+                                    <UniformGrid.Resources>
+                                        <Style TargetType="Border">
+                                            <Setter Property="Background" Value="{StaticResource Panel2}" />
+                                            <Setter Property="BorderBrush" Value="{StaticResource BorderSoft}" />
+                                            <Setter Property="BorderThickness" Value="1" />
+                                            <Setter Property="CornerRadius" Value="{StaticResource Radius}" />
+                                            <Setter Property="Padding" Value="8,5" />
+                                            <Setter Property="Margin" Value="0,0,6,0" />
+                                        </Style>
+                                    </UniformGrid.Resources>
+                                    <Border ToolTip="Devices whose stored config changed in the last 7 days">
+                                        <StackPanel><TextBlock Text="{Binding BackupsChanged}" FontSize="18" FontWeight="SemiBold" Foreground="{StaticResource Accent}" /><TextBlock Text="Changed, 7 days" Style="{StaticResource WidgetMeta}" /></StackPanel>
+                                    </Border>
+                                    <Border ToolTip="Devices Oxidized backs up that no entry points at. Right-click an entry and pick Link to Oxidized device to pair one.">
+                                        <StackPanel><TextBlock Text="{Binding BackupsUnlinked}" FontSize="18" FontWeight="SemiBold" Foreground="{StaticResource TextStrong}" /><TextBlock Text="Without an entry" Style="{StaticResource WidgetMeta}" /></StackPanel>
+                                    </Border>
+                                </UniformGrid>
+                            </StackPanel>
+
+                            <!-- Needs a look -->
+                            <StackPanel Grid.Column="1" Margin="0,0,10,0">
+                                <TextBlock Text="Needs a look" FontSize="11" Foreground="{StaticResource Muted}" Margin="6,0,0,4" />
+                                <TextBlock Text="Every device was backed up in the last day." Style="{StaticResource Empty}" Visibility="{Binding NoBackupAttention, Converter={StaticResource BoolVis}}" />
+                                <ItemsControl ItemsSource="{Binding BackupAttention}" ItemTemplate="{StaticResource BackupRow}" Focusable="False" />
+                                <TextBlock Text="{Binding BackupAttentionMore}" Style="{StaticResource WidgetMeta}" Margin="6,2,0,0" Visibility="{Binding BackupAttentionMore, Converter={StaticResource EmptyVis}}" />
+                            </StackPanel>
+
+                            <!-- Config changes -->
+                            <StackPanel Grid.Column="2">
+                                <TextBlock Text="Config changes, last 7 days" FontSize="11" Foreground="{StaticResource Muted}" Margin="6,0,0,4" />
+                                <TextBlock Text="No config changed this week." Style="{StaticResource Empty}" Visibility="{Binding NoBackupChanges, Converter={StaticResource BoolVis}}" />
+                                <ItemsControl ItemsSource="{Binding BackupChanges}" ItemTemplate="{StaticResource BackupRow}" Focusable="False" />
+                                <TextBlock Text="{Binding BackupChangesMore}" Style="{StaticResource WidgetMeta}" Margin="6,2,0,0" Visibility="{Binding BackupChangesMore, Converter={StaticResource EmptyVis}}" />
+                            </StackPanel>
+                        </Grid>
+
+                        <!-- Every device with its last backup, folded away by default -->
+                        <StackPanel Margin="6,0,6,8" Visibility="{Binding BackupsHasData, Converter={StaticResource BoolVis}}">
+                            <Button Style="{StaticResource RowButton}" Padding="6,0" Height="28" Command="{Binding ToggleAllBackupsCommand}">
+                                <DockPanel>
+                                    <Path Width="9" Height="9" Margin="0,0,8,0" Stretch="Uniform" Stroke="{StaticResource Faint}" StrokeThickness="1.6" VerticalAlignment="Center">
+                                        <Path.Style>
+                                            <Style TargetType="Path">
+                                                <Setter Property="Data" Value="M0,0 L4,4 L0,8" />
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding ShowAllBackups}" Value="True"><Setter Property="Data" Value="M0,0 L4,4 L8,0" /></DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </Path.Style>
+                                    </Path>
+                                    <TextBlock FontSize="12.5" VerticalAlignment="Center">
+                                        <Run Text="Last backup per device" /><Run Text="  " /><Run Text="{Binding BackupDevices, Mode=OneWay}" Foreground="{StaticResource Faint}" FontSize="11" /><Run Text=" devices" Foreground="{StaticResource Faint}" FontSize="11" />
+                                    </TextBlock>
+                                </DockPanel>
+                            </Button>
+                            <ScrollViewer MaxHeight="320" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False" Margin="16,0,0,0"
+                                          Visibility="{Binding ShowAllBackups, Converter={StaticResource BoolVis}}">
+                                <ItemsControl ItemsSource="{Binding BackupAll}" ItemTemplate="{StaticResource BackupRow}" Focusable="False">
+                                    <ItemsControl.ItemsPanel><ItemsPanelTemplate><UniformGrid Columns="2" VerticalAlignment="Top" /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                                </ItemsControl>
+                            </ScrollViewer>
                         </StackPanel>
-                    </Grid>
+                    </StackPanel>
                 </DockPanel>
             </Border>
 
