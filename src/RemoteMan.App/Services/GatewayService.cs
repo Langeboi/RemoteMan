@@ -33,12 +33,14 @@ public sealed class GatewayService
         foreach (var f in _forwarders.Values) f.Dispose();
         _forwarders.Clear();
         _paths.Clear();
+        _cfg = null;
         _client?.Dispose();
         _client = null;
         Device = null;
         if (cfg is null || string.IsNullOrEmpty(cfg.Url) || string.IsNullOrEmpty(cfg.Token)) return;
         try
         {
+            _cfg = cfg;
             var token = cfg.Token.StartsWith("D1", StringComparison.Ordinal) ? new DpapiSecretProtector().Unprotect(cfg.Token) : cfg.Token;
             _client = new GatewayClient(new Uri(cfg.Url), token);
             Device = cfg.Device;
@@ -54,6 +56,26 @@ public sealed class GatewayService
         }
         Changed?.Invoke();
     }
+
+    // ── The manual switch ──────────────────────────────────────────────────────────────────────────────────────
+    private GatewayConfig? _cfg;
+
+    /// <summary>Auto: direct first, the gateway when that fails. Connected: always the gateway. Disconnected: never.</summary>
+    public GatewayMode Mode => _cfg?.Mode ?? GatewayMode.Auto;
+
+    /// <summary>The switch was flipped (the settings need saving).</summary>
+    public event Action? ModeChanged;
+
+    public void SetMode(GatewayMode mode)
+    {
+        if (_cfg is null || _cfg.Mode == mode) return;
+        _cfg.Mode = mode;
+        _paths.Clear();
+        ModeChanged?.Invoke();
+        Changed?.Invoke();
+    }
+
+    private bool? Override() => Mode switch { GatewayMode.Connected => true, GatewayMode.Disconnected => false, _ => null };
 
     // ── Live state for the status pill and box ─────────────────────────────────────────────────────────────────
     private CancellationTokenSource? _watch;
@@ -143,6 +165,7 @@ public sealed class GatewayService
             var f = new LocalForwarder(Client, site, targets, directFirst);
             f.Failed += m => Problem?.Invoke(m);
             f.Used += direct => RecordPath(site, direct);
+            f.Override = Override;
             return f;
         });
     }
@@ -157,17 +180,46 @@ public sealed class GatewayService
     /// minute, so it keeps this fresh) needed the gateway in the last 10 minutes: this PC is off-site, so entries
     /// skip the direct try and its timeout. Back on site, the next direct success flips it.
     /// </summary>
-    public bool PreferGateway(string site) =>
+    public bool PreferGateway(string site) => Mode == GatewayMode.Connected ||
         _paths.TryGetValue(site, out var p) && !p.Direct && DateTime.UtcNow - p.At < TimeSpan.FromMinutes(10);
 
     /// <summary>
     /// For a data source that names a gateway site: each database server becomes a local forwarder that tries the
     /// server directly first (unless "always") and otherwise goes through the site. Null = connect directly.
     /// </summary>
-    public DataSourceFactory.Route? RouteFor(DataSourceConfig cfg)
+    public DataSourceFactory.Route? RouteFor(DataSourceConfig cfg, string? site = null)
     {
-        if (cfg.GatewaySite is not { Length: > 0 } site || cfg.Kind == DataSourceKind.Sqlite || _client is null) return null;
-        return (host, port) => ("127.0.0.1", Forwarder(site, [GatewayProtocol.FormatTarget(host, port)], !cfg.GatewayAlways).Port);
+        site ??= cfg.GatewaySite;
+        if (site is not { Length: > 0 } || cfg.Kind == DataSourceKind.Sqlite || _client is null) return null;
+        var always = cfg.GatewaySite is { Length: > 0 } && cfg.GatewayAlways;
+        return (host, port) => ("127.0.0.1", Forwarder(site, [GatewayProtocol.FormatTarget(host, port)], !always).Port);
+    }
+
+    /// <summary>
+    /// The site everything uses when nothing names one: the data source's own, else the relay's only site for this
+    /// PC. With one site there's nothing to choose, so a gateway set up on this PC just works: every connection
+    /// tries directly first and falls back to the site, and once off-site is noticed the direct try is skipped.
+    /// </summary>
+    public string? DefaultSite(DataSourceConfig cfg)
+    {
+        if (_client is null) return null;
+        if (cfg.GatewaySite is { } own) return own.Length > 0 ? own : null;
+        return LiveSites.Count == 1 ? LiveSites[0].Name : _startupSite;
+    }
+
+    private string? _startupSite;
+
+    /// <summary>Asks the relay for the sites once at startup (a few seconds at most), so the database can use the only one.</summary>
+    public async Task<string?> DefaultSiteAtStartupAsync(DataSourceConfig cfg)
+    {
+        if (_client is null) return null;
+        if (cfg.GatewaySite is { } own) return own.Length > 0 ? own : null;
+        try
+        {
+            var sites = await SitesAsync().WaitAsync(TimeSpan.FromSeconds(4));
+            return _startupSite = sites.Count == 1 ? sites[0].Name : null;
+        }
+        catch (TimeoutException) { return null; }
     }
 
     /// <summary>host:port for each of an entry's hosts, in fallback order, with the kind's default port filled in.</summary>

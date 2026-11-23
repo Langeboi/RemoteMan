@@ -187,4 +187,8 @@ public sealed class GatewayConfig
     public string Url { get; set; } = "";
     public string Token { get; set; } = "";
     public string? Device { get; set; }
+    /// <summary>The status box's switch: Auto (default), Connected (always through the gateway) or Disconnected (direct only).</summary>
+    public GatewayMode Mode { get; set; }
 }
+
+public enum GatewayMode { Auto, Connected, Disconnected }

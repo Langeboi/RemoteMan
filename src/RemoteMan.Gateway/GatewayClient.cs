@@ -181,6 +181,12 @@ public sealed class LocalForwarder : IDisposable
     public string? LastPath { get; private set; }
     /// <summary>A connection that couldn't be forwarded (the local program sees it close).</summary>
     public event Action<string>? Failed;
+    /// <summary>
+    /// A manual choice that beats <see cref="DirectFirst"/>: true = always through the gateway, false = directly
+    /// only (the gateway is "disconnected"), null = automatic.
+    /// </summary>
+    public Func<bool?>? Override { get; set; }
+
     /// <summary>A connection went through: true when directly, false through the gateway.</summary>
     public event Action<bool>? Used;
 
@@ -233,6 +239,17 @@ public sealed class LocalForwarder : IDisposable
             var ct = _cts.Token;
             try
             {
+                var manual = Override?.Invoke();
+                if (manual == false)
+                {
+                    Interlocked.Exchange(ref _readyBox, null)?.Tunnel.Dispose();
+                    if (await DialDirectAsync(ct, TimeSpan.FromSeconds(10)) is not var (dtcp, dtarget))
+                        throw new GatewayException($"None of {string.Join(", ", Targets)} answered directly (the gateway is switched off).");
+                    LastPath = dtarget;
+                    Used?.Invoke(true);
+                    using (dtcp) await BridgeAsync(local.GetStream(), dtcp.GetStream(), ct);
+                    return;
+                }
                 // A tunnel opened just before (the entry's check) goes to the first connection.
                 if (TakeReady() is { } ready)
                 {
@@ -244,7 +261,7 @@ public sealed class LocalForwarder : IDisposable
                     }
                     return;
                 }
-                var tryDirect = DirectFirst && (_path is not { } p || p.Direct || DateTime.UtcNow - p.At > TimeSpan.FromMinutes(1));
+                var tryDirect = manual != true && DirectFirst && (_path is not { } p || p.Direct || DateTime.UtcNow - p.At > TimeSpan.FromMinutes(1));
                 if (tryDirect)
                 {
                     if (await DialDirectAsync(ct) is var (tcp, target))
@@ -270,14 +287,14 @@ public sealed class LocalForwarder : IDisposable
         }
     }
 
-    private async Task<(TcpClient, string)?> DialDirectAsync(CancellationToken ct)
+    private async Task<(TcpClient, string)?> DialDirectAsync(CancellationToken ct, TimeSpan? timeout = null)
     {
         foreach (var t in Targets)
         {
             if (GatewayProtocol.ParseTarget(t) is not var (host, port)) continue;
             var tcp = new TcpClient { NoDelay = true };
             using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-            cts.CancelAfter(DirectTimeout);
+            cts.CancelAfter(timeout ?? DirectTimeout);
             try
             {
                 await tcp.ConnectAsync(host, port, cts.Token);
