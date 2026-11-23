@@ -107,7 +107,7 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
     private string? GatewayUsage(DataSourceConfig cfg)
     {
         var parts = new List<string>();
-        if (cfg.GatewaySite is { Length: > 0 } ds) parts.Add($"the data source ({ds})");
+        if (cfg.GatewaySite is { Length: > 0 } ds) parts.Add($"the database and every entry in it ({ds}) unless a folder or entry says otherwise");
         var own = _store?.Entries.Count(e => e.Connection?.GatewaySite is { Length: > 0 }) ?? 0;
         if (own > 0) parts.Add($"{own} folder{(own == 1 ? "" : "s")} or entr{(own == 1 ? "y" : "ies")}");
         return parts.Count == 0 ? null : string.Join(" and ", parts);
@@ -420,7 +420,7 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
 
         // A gateway site (on the entry or a folder above it): try the hosts directly first unless it says
         // "always", then go through the site's connector, which tries them in the same order.
-        var gateway = _store?.GatewayFor(e);
+        var gateway = _store?.GatewayFor(e, GatewayService.Instance.IsConfigured ? _settings.Active.GatewaySite : null);
         var result = gateway is { Always: true } ? new ResolveResult(null, []) : await resolver.ResolveAsync(probe);
         string? via = null;
         HostEndpoint? realHost = null;
