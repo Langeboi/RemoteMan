@@ -6,7 +6,7 @@ using RemoteMan.Gateway;
 
 namespace RemoteMan.App.Views;
 
-/// <summary>More > Gateway: paste this PC's invite, see the sites it can use and whether their connectors are online.</summary>
+/// <summary>More > Gateway settings: paste this PC's invite, see the sites it can use and whether their connectors are online.</summary>
 public static class GatewayDialog
 {
     public static void Show(Window owner, AppSettings settings)
@@ -37,7 +37,7 @@ public static class GatewayDialog
             : "The gateway reaches databases and machines in other networks (school, a friend's homelab, behind CG-NAT) " +
               "through your relay, with nothing to open on their side. On the relay run `gateway device add <name>` and paste the invite it prints.";
         string[] buttons = gw.IsConfigured ? ["Save", "Remove from this PC", "Close"] : ["Save", "Cancel"];
-        var pick = ChoiceDialog.Show(owner, "Gateway", text, buttons, DialogIcon.None, extra: panel);
+        var pick = ChoiceDialog.Show(owner, "Gateway settings", text, buttons, DialogIcon.None, extra: panel);
 
         if (pick == 0 && box.Text.Trim().Length > 0)
         {

@@ -153,7 +153,7 @@ int Device(string[] a)
                 return 0;
             }
             Console.WriteLine($"""
-                Device {name} added ({(sites is null ? "all sites" : string.Join(", ", sites))}). In RemoteMan: More > Gateway, paste:
+                Device {name} added ({(sites is null ? "all sites" : string.Join(", ", sites))}). In RemoteMan: More > Gateway settings, paste:
 
                 {new GatewayInvite(url, token, name).Encode()}
 

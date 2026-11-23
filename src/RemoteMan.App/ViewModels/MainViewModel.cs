@@ -539,7 +539,7 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
         {
             Message = $"{e.Name}: no host answered, and the gateway isn't set up on this PC";
             Notify(new ConnectionProblem("Gateway not set up", $"{e.Name} uses the gateway site {site} when it can't be reached directly, but this PC has no gateway invite.",
-                "Ask whoever runs the relay for an invite (gateway device add <name>) and paste it under More > Gateway.", null), e);
+                "Ask whoever runs the relay for an invite (gateway device add <name>) and paste it under More > Gateway settings.", null), e);
             return null;
         }
         var targets = GatewayService.Targets(e, probe.Endpoints, e.Web?.Url);
@@ -558,7 +558,7 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
         {
             Message = $"{e.Name}: {ex.Message}";
             Notify(new ConnectionProblem("Couldn't connect through the gateway", ex.Message,
-                ex is RelayRefusedException ? "Check More > Gateway on this PC, or the relay with: gateway status" : "Check that the connector is running and that its ALLOW setting covers this host.", null), e);
+                ex is RelayRefusedException ? "Check More > Gateway settings on this PC, or the relay with: gateway status" : "Check that the connector is running and that its ALLOW setting covers this host.", null), e);
             return null;
         }
     }

@@ -499,7 +499,7 @@
                 <!-- Bottom bar: data source picker, then the panel tabs (navigation, favorites, recent, credentials) -->
                 <Border Grid.Row="3" Background="{StaticResource Panel2}" BorderBrush="{StaticResource Border}" BorderThickness="0,1,0,0">
                     <StackPanel>
-                        <DockPanel Height="32" Margin="8,0,4,0">
+                        <DockPanel x:Name="PanelBottom" Height="32" Margin="8,0,4,0">
                             <Button DockPanel.Dock="Right" Style="{StaticResource FlatButton}" Width="26" Height="24" Padding="0" ToolTip="Refresh (F5)" AutomationProperties.Name="Refresh" Click="OnPanelRefresh">
                                 <Path Data="M13.5,8 A5.5,5.5 0 1 1 11.9,4.1 M13.5,1.8 V4.6 H10.7" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
                                       StrokeThickness="1.4" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" />
@@ -508,6 +508,23 @@
                                 <Path Data="M3,8 h0.01 M8,8 h0.01 M13,8 h0.01" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
                                       StrokeThickness="2.4" StrokeStartLineCap="Round" StrokeEndLineCap="Round" />
                             </Button>
+                            <!-- Gateway: only when this PC has a gateway invite. The LED shows the relay's state; click for the status box. -->
+                            <Grid DockPanel.Dock="Right" x:Name="GwPill" Visibility="Collapsed" Margin="0,0,2,0">
+                                <ToggleButton x:Name="GwButton" Style="{StaticResource BarToggle}" Height="24" Padding="7,0" AutomationProperties.Name="Gateway status">
+                                    <StackPanel Orientation="Horizontal">
+                                        <Grid Width="10" Height="10" Margin="0,0,5,0" VerticalAlignment="Center">
+                                            <Ellipse x:Name="GwHalo" Width="10" Height="10" Opacity="0" RenderTransformOrigin="0.5,0.5">
+                                                <Ellipse.RenderTransform><ScaleTransform x:Name="GwHaloScale" /></Ellipse.RenderTransform>
+                                            </Ellipse>
+                                            <Ellipse x:Name="GwLed" Width="7" Height="7" Fill="{StaticResource Faint}" />
+                                        </Grid>
+                                        <TextBlock Text="Gateway" FontSize="11" Foreground="{StaticResource Muted}" VerticalAlignment="Center" />
+                                    </StackPanel>
+                                </ToggleButton>
+                                <Popup x:Name="GwPopup" AllowsTransparency="True" IsOpen="{Binding IsChecked, ElementName=GwButton}" StaysOpen="False" Placement="Top"
+                                       PlacementTarget="{Binding ElementName=PanelBottom}" HorizontalOffset="-2" VerticalOffset="-8" PopupAnimation="Fade"
+                                       Opened="OnGwPopupOpened" Closed="OnGwPopupClosed" />
+                            </Grid>
                             <Button Style="{StaticResource FlatButton}" Height="26" Padding="0,0,6,0" HorizontalContentAlignment="Stretch" Click="OnDataSourcePicker"
                                     ToolTip="{Binding DataSourceText}" AutomationProperties.Name="Switch data source">
                                 <DockPanel>

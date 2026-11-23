@@ -48,7 +48,18 @@ public sealed class GatewayClient : IDisposable
     /// Opens a tunnel to the first of <paramref name="targets"/> (host:port) the site's connector can reach.
     /// Throws <see cref="GatewayException"/> or <see cref="RelayRefusedException"/> with a message for people.
     /// </summary>
-    public Task<GatewayTunnel> OpenAsync(string site, IReadOnlyList<string> targets, CancellationToken ct = default) => OpenAsync(site, targets, ct, false);
+    public async Task<GatewayTunnel> OpenAsync(string site, IReadOnlyList<string> targets, CancellationToken ct = default)
+    {
+        using (GatewayActivity.BeginOpening(site)) return await OpenAsync(site, targets, ct, false);
+    }
+
+    /// <summary>Round trip to the relay (listing the sites), for the status box. Also refreshes the site list.</summary>
+    public async Task<(TimeSpan Rtt, List<SiteInfo> Sites)> PingAsync(CancellationToken ct = default)
+    {
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        var sites = await GetSitesAsync(refresh: true, ct);
+        return (sw.Elapsed, sites);
+    }
 
     private async Task<GatewayTunnel> OpenAsync(string site, IReadOnlyList<string> targets, CancellationToken ct, bool retried)
     {
@@ -87,7 +98,7 @@ public sealed class GatewayClient : IDisposable
             var reply = await channel.ReceiveAsync(cts.Token) is { } raw ? GatewayProtocol.Decode<OpenReply>(raw) : null;
             if (reply is null) throw new GatewayException($"The connector for {site} closed the tunnel.");
             if (!reply.Ok) throw new GatewayException($"Through {site}: {reply.Error}");
-            return new GatewayTunnel(ws, channel, reply.Target ?? targets[0]);
+            return new GatewayTunnel(ws, channel, reply.Target ?? targets[0], site);
         }
         catch (OperationCanceledException) when (!ct.IsCancellationRequested)
         {
@@ -122,12 +133,16 @@ public sealed class GatewayClient : IDisposable
 }
 
 /// <summary>One open tunnel: the encrypted channel and which target the connector reached.</summary>
-public sealed class GatewayTunnel(WebSocket ws, SecureChannel channel, string target) : IDisposable
+public sealed class GatewayTunnel(WebSocket ws, SecureChannel channel, string target, string site) : IDisposable
 {
     public SecureChannel Channel { get; } = channel;
     public string Target { get; } = target;
+    public string Site { get; } = site;
 
-    public Task PumpAsync(Stream local, CancellationToken ct) => Pump.RunAsync(local, Channel, ct);
+    public async Task PumpAsync(Stream local, CancellationToken ct)
+    {
+        using (GatewayActivity.BeginTunnel(Site)) await Pump.RunAsync(local, Channel, ct, count: true);
+    }
 
     public void Dispose() => ws.Dispose();
 }
