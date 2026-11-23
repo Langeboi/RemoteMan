@@ -33,8 +33,70 @@ docker logs remoteman-relay-caddy     # "certificate obtained successfully"
 curl https://remoteman.mydomain.dk    # "RemoteMan gateway relay…"
 ```
 
+Already have a reverse proxy or want another port? See [Behind your own proxy](#behind-your-own-proxy-or-on-another-port).
+
 No public IP of your own (your home is behind CG-NAT too)? Run the relay anywhere that has one (a small VPS), or
 publish it through a free Cloudflare Tunnel: drop the `caddy` service and point the tunnel at `http://relay:8080`.
+
+## Behind your own proxy, or on another port
+
+The relay speaks plain HTTP and WebSocket on `PORT` (default 8080), so anything that can forward WebSockets can sit in
+front of it and hold the certificate. Use [`relay-behind-proxy.compose.yaml`](relay-behind-proxy.compose.yaml): no
+Caddy, the relay published on 47200 (change `PORT` and the `ports:` line together for another).
+
+`PUBLIC_URL` is what RemoteMan and the connectors dial, so set it to the proxy's public address, port and path
+included when they aren't the defaults: `https://remoteman.mydomain.dk`, `https://mydomain.dk:8443`,
+`https://mydomain.dk/remoteman`. It goes into the invites and the connector compose files `gateway site add` prints.
+
+What the proxy needs: pass WebSocket upgrades, and don't time out idle connections quickly (both ends ping every
+20 s, so anything above a minute works; tunnels can last hours).
+
+**Nginx Proxy Manager**: new proxy host, domain `remoteman.mydomain.dk`, scheme `http`, forward to the VM's IP and
+port `47200`, tick **Websockets Support**, and on the SSL tab request a Let's Encrypt certificate with Force SSL.
+
+**Nginx**:
+
+```nginx
+server {
+    listen 443 ssl;                      # or any port: then PUBLIC_URL=https://remoteman.mydomain.dk:<port>
+    server_name remoteman.mydomain.dk;
+    ssl_certificate     /etc/letsencrypt/live/remoteman.mydomain.dk/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/remoteman.mydomain.dk/privkey.pem;
+
+    location / {
+        proxy_pass http://10.0.0.20:47200;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_read_timeout 1d;
+        proxy_send_timeout 1d;
+        proxy_buffering off;
+    }
+}
+```
+
+Under a path instead (`location /remoteman/ { proxy_pass http://10.0.0.20:47200/; … }`), set
+`PUBLIC_URL=https://mydomain.dk/remoteman`.
+
+**Traefik** (labels on the relay service, with your existing `websecure` entrypoint and certificate resolver):
+
+```yaml
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.remoteman.rule=Host(`remoteman.mydomain.dk`)
+      - traefik.http.routers.remoteman.entrypoints=websecure
+      - traefik.http.routers.remoteman.tls.certresolver=letsencrypt
+      - traefik.http.services.remoteman.loadbalancer.server.port=47200
+```
+
+**Caddy you already run**: `remoteman.mydomain.dk { reverse_proxy 10.0.0.20:47200 }`.
+
+**Only NAT, no proxy**: the relay can do TLS itself. Mount a certificate and key and set `TLS_CERT=/certs/fullchain.pem`
+and `TLS_KEY=/certs/privkey.pem`; it then serves HTTPS on `PORT`. Forward any outside port to it on the router and put
+that port in `PUBLIC_URL` (`https://remoteman.mydomain.dk:47200`). Plain `http://` works too for testing, and the
+traffic inside is still end-to-end encrypted, but the tokens would cross the internet readable, so use TLS for real.
 
 ## 2. A site per remote network
 
