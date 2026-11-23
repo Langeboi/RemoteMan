@@ -3,7 +3,7 @@
 # Then open https://<this server>:8443 and add the next server under Servers > Add server.
 services:
   remoteman:
-    image: ghcr.io/langeboi/remoteman-server:latest   # test builds: :test
+    image: ghcr.io/langeboi/remoteman-server:test     # :latest once there is a release
     container_name: remoteman
     network_mode: host            # PostgreSQL on 5432, admin page on 8443
     restart: unless-stopped
@@ -18,7 +18,7 @@ services:
       - remoteman-data:/var/lib/remoteman
 
   relay:                          # shared sessions for teammates on other networks (optional)
-    image: ghcr.io/langeboi/remoteman-server:latest
+    image: ghcr.io/langeboi/remoteman-server:test
     command: relay
     network_mode: host            # port 47120
     restart: unless-stopped

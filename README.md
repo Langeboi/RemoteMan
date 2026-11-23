@@ -92,7 +92,7 @@ relay) runs as one container per server. Save this as `compose.yaml` on the firs
 ```yaml
 services:
   remoteman:
-    image: ghcr.io/langeboi/remoteman-server:latest   # test builds: :test
+    image: ghcr.io/langeboi/remoteman-server:test     # :latest once there is a release
     container_name: remoteman
     network_mode: host            # PostgreSQL on 5432, admin page on 8443
     restart: unless-stopped
@@ -107,7 +107,7 @@ services:
       - remoteman-data:/var/lib/remoteman
 
   relay:                          # shared sessions for teammates on other networks (optional)
-    image: ghcr.io/langeboi/remoteman-server:latest
+    image: ghcr.io/langeboi/remoteman-server:test
     command: relay
     network_mode: host            # port 47120
     restart: unless-stopped
@@ -118,7 +118,7 @@ volumes:
 
 Then open `https://<server>:8443`, sign in as `remoteman` (the password is in `docker compose logs remoteman`)
 and add the second server under **Servers > Add server**: it gives you that server's `compose.yaml`,
-join key included. Test builds use the `:test` image tag. More in [deploy/docker](deploy/docker/README.md);
+join key included. Until the first release only the `:test` image exists; switch both lines to `:latest` after it. More in [deploy/docker](deploy/docker/README.md);
 the script for servers without Docker is still in [deploy/postgres](deploy/postgres/README.md).
 
 ## Install
