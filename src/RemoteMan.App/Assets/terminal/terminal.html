@@ -36,9 +36,26 @@
 <script>
   const host = window.chrome.webview;
   const THEMES = {
-    'RemoteMan': { background: '#141517', foreground: '#C9CDD3', cursor: '#C9CDD3', selectionBackground: '#33414F',
+    // Default: saturated ANSI colours on the app's dark background, so ls, htop, git and prompts pop.
+    'RemoteMan': { background: '#141517', foreground: '#DDE1E6', cursor: '#3FB8A4', cursorAccent: '#141517', selectionBackground: '#2F4A66',
+      black: '#2A2D32', red: '#F0525A', green: '#4EC95A', yellow: '#E8C547', blue: '#3B9CFF', magenta: '#C873F0', cyan: '#2BC8D6', white: '#D6DAE0',
+      brightBlack: '#6E7680', brightRed: '#FF7A80', brightGreen: '#7AE582', brightYellow: '#FFE06B', brightBlue: '#6CB6FF', brightMagenta: '#DE96FF', brightCyan: '#5FE3EE', brightWhite: '#FFFFFF' },
+    // The earlier muted default, for anyone who prefers it.
+    'RemoteMan Soft': { background: '#141517', foreground: '#C9CDD3', cursor: '#C9CDD3', selectionBackground: '#33414F',
       black: '#1B1D20', red: '#C46A6A', green: '#8FB08F', yellow: '#C2B48A', blue: '#8FA7C4', magenta: '#A991B5', cyan: '#86AFAF', white: '#C9CDD3',
       brightBlack: '#6E737B', brightRed: '#D88484', brightGreen: '#A6C4A6', brightYellow: '#D6C89E', brightBlue: '#A9BED6', brightMagenta: '#BFA8CA', brightCyan: '#9FC4C4', brightWhite: '#EEF0F2' },
+    'Campbell': { background: '#0C0C0C', foreground: '#CCCCCC', cursor: '#FFFFFF', selectionBackground: '#3A3D41',
+      black: '#0C0C0C', red: '#C50F1F', green: '#13A10E', yellow: '#C19C00', blue: '#0037DA', magenta: '#881798', cyan: '#3A96DD', white: '#CCCCCC',
+      brightBlack: '#767676', brightRed: '#E74856', brightGreen: '#16C60C', brightYellow: '#F9F1A5', brightBlue: '#3B78FF', brightMagenta: '#B4009E', brightCyan: '#61D6D6', brightWhite: '#F2F2F2' },
+    'Tango': { background: '#1E1E1E', foreground: '#D3D7CF', cursor: '#D3D7CF', selectionBackground: '#3E4A57',
+      black: '#000000', red: '#CC0000', green: '#4E9A06', yellow: '#C4A000', blue: '#3465A4', magenta: '#75507B', cyan: '#06989A', white: '#D3D7CF',
+      brightBlack: '#555753', brightRed: '#EF2929', brightGreen: '#8AE234', brightYellow: '#FCE94F', brightBlue: '#729FCF', brightMagenta: '#AD7FA8', brightCyan: '#34E2E2', brightWhite: '#EEEEEC' },
+    'Monokai': { background: '#272822', foreground: '#F8F8F2', cursor: '#F8F8F0', selectionBackground: '#49483E',
+      black: '#272822', red: '#F92672', green: '#A6E22E', yellow: '#F4BF75', blue: '#66D9EF', magenta: '#AE81FF', cyan: '#A1EFE4', white: '#F8F8F2',
+      brightBlack: '#75715E', brightRed: '#F92672', brightGreen: '#A6E22E', brightYellow: '#F4BF75', brightBlue: '#66D9EF', brightMagenta: '#AE81FF', brightCyan: '#A1EFE4', brightWhite: '#F9F8F5' },
+    'Tokyo Night': { background: '#1A1B26', foreground: '#C0CAF5', cursor: '#C0CAF5', selectionBackground: '#33467C',
+      black: '#15161E', red: '#F7768E', green: '#9ECE6A', yellow: '#E0AF68', blue: '#7AA2F7', magenta: '#BB9AF7', cyan: '#7DCFFF', white: '#A9B1D6',
+      brightBlack: '#414868', brightRed: '#F7768E', brightGreen: '#9ECE6A', brightYellow: '#E0AF68', brightBlue: '#7AA2F7', brightMagenta: '#BB9AF7', brightCyan: '#7DCFFF', brightWhite: '#C0CAF5' },
     'Solarized Dark': { background: '#002B36', foreground: '#93A1A1', cursor: '#93A1A1', selectionBackground: '#274642',
       black: '#073642', red: '#DC322F', green: '#859900', yellow: '#B58900', blue: '#268BD2', magenta: '#D33682', cyan: '#2AA198', white: '#EEE8D5',
       brightBlack: '#586E75', brightRed: '#CB4B16', brightGreen: '#93A1A1', brightYellow: '#839496', brightBlue: '#839496', brightMagenta: '#6C71C4', brightCyan: '#93A1A1', brightWhite: '#FDF6E3' },
@@ -65,6 +82,7 @@
     cursorBlink: true,
     scrollback: 10000,
     allowProposedApi: true,
+    drawBoldTextInBrightColors: true,
     theme: THEMES['RemoteMan'],
   });
   const fit = new FitAddon.FitAddon();

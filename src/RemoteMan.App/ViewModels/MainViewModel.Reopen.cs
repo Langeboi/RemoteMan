@@ -32,6 +32,13 @@ public sealed partial class MainViewModel
         set { _settings.Theme = value; TrySaveSettings(); OnPropertyChanged(); }
     }
 
+    /// <summary>Unmanaged (saturated) colours in SSH and web tabs, from the next start.</summary>
+    public bool VividColors
+    {
+        get => _settings.VividColors;
+        set { _settings.VividColors = value; TrySaveSettings(); OnPropertyChanged(); }
+    }
+
     /// <summary>Light and shadow on the controls, from the next start.</summary>
     public Shading Shading
     {

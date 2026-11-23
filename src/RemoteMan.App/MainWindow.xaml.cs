@@ -224,6 +224,10 @@ public partial class MainWindow : Window
         }
         menu.Items.Add(startup);
         menu.Items.Add(Click("Theme…", OnTheme));
+        var vivid = new MenuItem { Header = "Vivid colors in SSH and web tabs", IsCheckable = true, IsChecked = _vm.VividColors,
+            ToolTip = "Shows colours unmanaged, like RDM and most native apps, so they look saturated on wide-gamut screens. Applies after a restart." };
+        vivid.Click += (_, _) => _vm.VividColors = vivid.IsChecked;
+        menu.Items.Add(vivid);
         menu.Items.Add(Click("Run setup again…", OnRunSetup));
         if (_vm.Chat.IsAvailable)
         {

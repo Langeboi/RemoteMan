@@ -9,7 +9,7 @@ public static class TerminalPrefs
 {
     private static string FilePath => Path.Combine(AppPaths.Root, "terminal.json");
 
-    public static readonly string[] Themes = ["RemoteMan", "Solarized Dark", "Dracula", "One Dark", "Nord", "Gruvbox", "Light"];
+    public static readonly string[] Themes = ["RemoteMan", "RemoteMan Soft", "Campbell", "Tango", "Monokai", "Tokyo Night", "Dracula", "One Dark", "Solarized Dark", "Nord", "Gruvbox", "Light"];
     public static readonly string[] Fonts = ["Cascadia Mono", "Cascadia Code", "Consolas", "Lucida Console", "Courier New"];
     public static readonly int[] Scrollbacks = [1000, 5000, 10000, 50000, 100000];
 
