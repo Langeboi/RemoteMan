@@ -148,7 +148,8 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
             var byParent = all.ToLookup(e => e.ParentId is { } p && all.Any(x => x.Id == p) ? p : (Guid?)null);
             void Add(Guid? parent, ObservableCollection<EntryNode> into, int depth)
             {
-                foreach (var e in byParent[parent].OrderBy(e => e.Kind == EntryKind.Folder ? 0 : 1).ThenBy(e => e.Name, StringComparer.OrdinalIgnoreCase))
+                // Folders first with the Credentials folder last among them, then connections, then loose credentials.
+                foreach (var e in byParent[parent].OrderBy(e => CredentialFolders.TreeRank(e, id => byParent[id])).ThenBy(e => e.Name, StringComparer.OrdinalIgnoreCase))
                 {
                     var n = new EntryNode(e, depth) { IsExpanded = !expanded.Contains(e.Id) };
                     _nodes[e.Id] = n;
@@ -675,7 +676,17 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
         try
         {
             Entry saved = null!;
-            foreach (var item in toSave) saved = await _store.SaveAsync(item);
+            foreach (var item in toSave)
+            {
+                // A new credential is filed into the Credentials folder of the folder it was made in (made if missing).
+                if (item.Kind == EntryKind.Credential && _store.Get(item.Id) is null)
+                {
+                    var made = item.ParentId == DataSourceRootId || item.ParentId == FavoritesId ? null : item.ParentId;
+                    item.ParentId = CredentialFolders.PlaceNewCredential(made, _store.Entries, out var folder);
+                    if (folder is not null) await _store.SaveAsync(folder);
+                }
+                saved = await _store.SaveAsync(item);
+            }
             // A template can ask for a second entry next to it, e.g. SSH for a firewall's CLI.
             if (template is not null && EntryTemplates.Companion(template, saved) is { } companion)
             {
