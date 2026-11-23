@@ -43,7 +43,7 @@ def env_int(name, default):
 
 
 PG_PORT = env_int("PG_PORT", 5432)
-ADMIN_PORT = env_int("ADMIN_PORT", 8443)
+ADMIN_PORT = env_int("ADMIN_PORT", 4433)
 RELAY_PORT = env_int("RELAY_PORT", 47120)
 RELAY_HOST = os.environ.get("RELAY_HOST", "127.0.0.1")
 

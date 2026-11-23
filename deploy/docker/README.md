@@ -5,7 +5,7 @@ The same redundant database as `deploy/postgres/remoteman-db.sh`, packed as one 
 - **PostgreSQL 17** with streaming replication: one primary, any number of hot standbys.
 - **Automatic failover**: when the primary is gone, the most up-to-date standby takes over. When the old
   primary comes back it rewinds itself and rejoins as a standby. Planned switch-overs lose nothing.
-- **Admin page** on `https://<server>:8443`: live dashboard, servers, users, login history.
+- **Admin page** on `https://<server>:4433`: live dashboard, servers, users, login history.
 - **Relay** for shared sessions (optional second service, same image).
 
 RemoteMan's connection string lists every server with `Target Session Attributes=primary`, so the app always
@@ -20,7 +20,7 @@ docker compose up -d
 docker compose logs remoteman      # shows the admin page address and the remoteman password
 ```
 
-Open `https://<server>:8443` (the certificate is self-signed, so the browser asks once) and sign in as
+Open `https://<server>:4433` (the certificate is self-signed, so the browser asks once) and sign in as
 `remoteman` with the password from the log, or the `REMOTEMAN_PASSWORD` you set.
 
 ## More servers
@@ -72,7 +72,7 @@ The data stays in the `remoteman-data` volume.
 | `REMOTEMAN_PASSWORD` | random | Password of the shared `remoteman` login, set on the first start |
 | `ADVERTISE` | detected | Address RemoteMan and the other servers reach this one on |
 | `AUTO_FAILOVER` / `FAILOVER_SECONDS` / `WITNESS` | `on` / `30` / `auto` | Starting values; change them later on the Servers page |
-| `PG_PORT` / `ADMIN_PORT` / `RELAY_PORT` | 5432 / 8443 / 47120 | |
+| `PG_PORT` / `ADMIN_PORT` / `RELAY_PORT` | 5432 / 4433 / 47120 | |
 | `TLS_CERT` / `TLS_KEY` | self-signed | Your own certificate for the admin page (mount the files) |
 | `BACKUP_AT` / `BACKUP_KEEP` | `03:00` / 7 | `BACKUP_AT=off` turns the nightly backup off |
 | `LOGIN_HISTORY_DAYS` | 90 | |
@@ -88,7 +88,7 @@ Your own PostgreSQL settings go in `/var/lib/remoteman/postgresql.custom.conf` i
   changes wins (ties go to the first name).
 - A primary that finds another primary on a newer timeline steps down and rejoins as its standby, so two
   primaries never stay side by side.
-- Firewalls: the servers must reach each other on 5432 and 8443; RemoteMan reaches them on 5432 (and the
+- Firewalls: the servers must reach each other on 5432 and 4433; RemoteMan reaches them on 5432 (and the
   relay on 47120).
 
 The container uses host networking because the servers and RemoteMan connect to each other's real
