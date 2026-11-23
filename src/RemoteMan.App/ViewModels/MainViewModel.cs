@@ -194,6 +194,7 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
 
     partial void OnSelectedChanged(EntryNode? value)
     {
+        ResetRangeAnchor(value);
         RefreshProperties();
         if (_store is not null) _ = _store.SetMyPresenceAsync(value?.Id, PresenceState.Viewing);
     }

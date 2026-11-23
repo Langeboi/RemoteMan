@@ -4,7 +4,7 @@ using RemoteMan.Core.Storage;
 namespace RemoteMan.App.ViewModels;
 
 /// <summary>
-/// Several entries selected at once in the tree (Ctrl+click toggles one, Shift+click takes a range),
+/// Several entries selected at once in the tree (Ctrl+click toggles one, Shift+click or Shift+arrow keys take a range),
 /// so they can be moved to a folder together. <see cref="Selected"/> stays the one focused entry that every
 /// other command acts on; the multi-selection is the extra set the tree highlights and Move works on.
 /// </summary>
@@ -20,6 +20,70 @@ public sealed partial class MainViewModel
 
     private static bool CanMultiSelect(EntryNode? n) => n is { IsRoot: false } && n.Id != FavoritesId;
 
+    // Explorer-style range ends. The anchor is where a Shift range starts and stays put while Shift is held;
+    // the cursor is the end that Shift+arrow keys move. A plain selection (click, arrow keys, search) resets both
+    // to that entry; Ctrl+click moves both to the toggled entry; Shift+click and Shift+arrows only move the cursor.
+    private Guid? _rangeAnchor;
+    private Guid? _rangeCursor;
+    private bool _movingRangeFocus;
+
+    /// <summary>Called when the focused entry changes: anything but a Shift range move starts a new anchor there.</summary>
+    private void ResetRangeAnchor(EntryNode? value)
+    {
+        if (_movingRangeFocus) return;
+        _rangeAnchor = _rangeCursor = CanMultiSelect(value) ? value!.Id : null;
+    }
+
+    /// <summary>The anchor if it is still a visible, pickable row, otherwise the focused entry.</summary>
+    private EntryNode? RangeAnchor(IReadOnlyList<EntryNode> visible)
+    {
+        if (_rangeAnchor is { } a && _nodes.TryGetValue(a, out var n) && CanMultiSelect(n) && visible.Contains(n)) return n;
+        return CanMultiSelect(Selected) && visible.Contains(Selected!) ? Selected : null;
+    }
+
+    /// <summary>
+    /// Shift+Up/Down (<paramref name="step"/> -1/+1) or Shift+Home/End (int.MinValue/int.MaxValue): moves the range's
+    /// cursor end to the next pickable row and selects everything from the anchor to it. Returns the row to focus,
+    /// or null when there is nothing to move to (the caller then leaves the key alone).
+    /// </summary>
+    public EntryNode? ExtendRangeByKey(int step)
+    {
+        var visible = VisibleNodes().ToList();
+        if (RangeAnchor(visible) is not { } anchor) return null;
+        var cursor = _rangeCursor is { } c && _nodes.TryGetValue(c, out var cn) && CanMultiSelect(cn) && visible.Contains(cn) ? cn : anchor;
+        _rangeAnchor = anchor.Id;
+
+        var pickable = visible.Where(CanMultiSelect).ToList();
+        var at = pickable.IndexOf(cursor);
+        if (at < 0) return null;
+        var to = step switch
+        {
+            int.MinValue => 0,
+            int.MaxValue => pickable.Count - 1,
+            _ => Math.Clamp(at + step, 0, pickable.Count - 1),
+        };
+        var target = pickable[to];
+        _rangeCursor = target.Id;
+
+        int a = pickable.IndexOf(anchor), b = to;
+        if (a > b) (a, b) = (b, a);
+        _multi.Clear();
+        // Anchor first so it stays the "start" in insertion order, then the rest top to bottom.
+        _multi.Add(anchor.Id);
+        foreach (var n in pickable.Skip(a).Take(b - a + 1))
+            if (!_multi.Contains(n.Id)) _multi.Add(n.Id);
+        ReapplyMultiSelection();
+        return target;
+    }
+
+    /// <summary>Runs <paramref name="focus"/> (which selects a row in the tree) without resetting the Shift anchor.</summary>
+    public void FocusWithinRange(EntryNode node, Action<EntryNode> focus)
+    {
+        _movingRangeFocus = true;
+        try { focus(node); }
+        finally { _movingRangeFocus = false; }
+    }
+
     /// <summary>Ctrl+click: adds or removes one entry. The focused entry joins the set the first time.</summary>
     public void ToggleMultiSelect(EntryNode node)
     {
@@ -34,16 +98,20 @@ public sealed partial class MainViewModel
         if (!_multi.Remove(node.Id)) _multi.Add(node.Id);
         // Un-picking the focused entry hands the focus to the last one still picked, so the highlight matches what moves.
         else if (node == Selected && _multi.Count > 0 && _nodes.TryGetValue(_multi[^1], out var next)) next.IsSelected = true;
+        // Like Explorer, a later Shift range starts from the entry just Ctrl+clicked.
+        _rangeAnchor = _rangeCursor = node.Id;
         ReapplyMultiSelection();
     }
 
-    /// <summary>Shift+click: everything visible in the tree between the focused entry and <paramref name="node"/>.</summary>
+    /// <summary>Shift+click: everything visible in the tree between the range anchor (normally the focused entry)
+    /// and <paramref name="node"/>. The anchor stays, so another Shift+click or Shift+arrow re-draws from it.</summary>
     public void RangeSelect(EntryNode node, bool additive = false)
     {
         if (!CanMultiSelect(node)) return;
-        if (!CanMultiSelect(Selected)) { node.IsSelected = true; return; }
-        var anchor = Selected!;
         var visible = VisibleNodes().ToList();
+        if (RangeAnchor(visible) is not { } anchor) { node.IsSelected = true; return; }
+        _rangeAnchor = anchor.Id;
+        _rangeCursor = node.Id;
         int a = visible.IndexOf(anchor), b = visible.IndexOf(node);
         if (a < 0 || b < 0) { ToggleMultiSelect(node); return; }
         if (a > b) (a, b) = (b, a);

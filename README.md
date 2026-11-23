@@ -26,6 +26,8 @@ WebView2 runtime ships with Windows 11 and current Windows 10.
   (`ssh host`, `rdp://host:3390`, `https://…`).
 - Several hosts per entry: primary first, then fallbacks, each probed with a 2 s TCP check.
 - **Ctrl+click** a credential while a connection is selected to link it.
+- Pick several entries: **Ctrl+click** adds or removes one, **Shift+click** or **Shift+Up/Down** (and
+  Shift+Home/End) takes a range from the anchor, like Explorer. Move them to a folder together.
 - Login per entry or folder: none, inherited from the folder, a saved credential, your Windows login, or typed
   into the entry. Credential types: user name + password (+ domain), SSH key (stored, generated, or a key file
   on disk), client certificate (.pfx), secret / API key; "ask for the password when connecting" is optional.

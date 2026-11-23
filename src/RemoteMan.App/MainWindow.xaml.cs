@@ -554,7 +554,7 @@ public partial class MainWindow : Window
     /// <summary>
     /// Ctrl+click: on a credential while one connection is selected, links the credential to it (without changing
     /// the selection), as before. Anywhere else, Ctrl+click adds or removes the entry from a multi-selection, and
-    /// Shift+click takes the range from the selected entry. A plain click goes back to a single selection.
+    /// Shift+click takes the range from the anchor (the entry selected or Ctrl+clicked last). A plain click goes back to a single selection.
     /// </summary>
     private async void OnTreeMouseDown(object sender, MouseButtonEventArgs e)
     {
@@ -744,14 +744,42 @@ public partial class MainWindow : Window
         }
     }
 
-    /// <summary>Escape drops a multi-selection; moving with the arrow keys (without Shift) goes back to one entry.</summary>
+    /// <summary>Shift+Up/Down (and Shift+Home/End) grow or shrink a range from the anchor, like Explorer.
+    /// Escape drops a multi-selection; moving with the arrow keys (without Shift) goes back to one entry.</summary>
     private void OnTreePreviewKeyDown(object sender, KeyEventArgs e)
     {
+        if (Keyboard.Modifiers == ModifierKeys.Shift && e.Key is Key.Up or Key.Down or Key.Home or Key.End && e.OriginalSource is TreeViewItem or TreeView)
+        {
+            var step = e.Key switch { Key.Up => -1, Key.Down => 1, Key.Home => int.MinValue, _ => int.MaxValue };
+            if (_vm.ExtendRangeByKey(step) is { } target)
+            {
+                _vm.FocusWithinRange(target, FocusTreeRow);
+                e.Handled = true;
+            }
+            return;
+        }
         if (!_vm.HasMultiSelection) return;
         if (e.Key == Key.Escape) { _vm.ClearMultiSelection(); e.Handled = true; }
         else if (e.Key is Key.Up or Key.Down or Key.Left or Key.Right or Key.Home or Key.End or Key.PageUp or Key.PageDown
                  && !Keyboard.Modifiers.HasFlag(ModifierKeys.Shift))
             _vm.ClearMultiSelection();
+    }
+
+    /// <summary>Moves the tree's focus and selection to <paramref name="node"/> and scrolls it into view, so the
+    /// arrow keys carry on from there.</summary>
+    private void FocusTreeRow(EntryNode node)
+    {
+        if (FindContainer(Tree, node) is not { } item)
+        {
+            // Not realized yet (scrolled far away): select it, let the tree lay it out, then try again.
+            node.IsSelected = true;
+            Tree.UpdateLayout();
+            item = FindContainer(Tree, node);
+            if (item is null) return;
+        }
+        item.BringIntoView();
+        item.Focus();
+        node.IsSelected = true;
     }
 
     private void OnTreeKeyDown(object sender, KeyEventArgs e)
