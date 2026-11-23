@@ -46,6 +46,12 @@ jobs:
           $lines = git log $range --no-merges --pretty=format:'- %s'
           "## What's new`n`n$($lines -join "`n")" | Set-Content -Encoding utf8 release-notes.md
 
+      # The list behind the app's What's new tab (release notes above stay the GitHub release's text).
+      - name: What's new list
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python build/changelog.py --version ${{ env.VERSION }}
+
       - run: dotnet test tests/RemoteMan.Tests -c Release
 
       - name: Publish app

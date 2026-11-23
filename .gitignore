@@ -6,3 +6,4 @@ publish/
 src/RemoteMan.App/Assets/terminal/vendor/
 __pycache__/
 releases/
+src/RemoteMan.App/changelog.json
