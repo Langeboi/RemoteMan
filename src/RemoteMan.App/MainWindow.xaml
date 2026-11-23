@@ -510,8 +510,9 @@
                             </Button>
                             <!-- Gateway: only when this PC has a gateway invite. The LED shows the relay's state; click for the status box. -->
                             <Grid DockPanel.Dock="Right" x:Name="GwPill" Visibility="Collapsed" Margin="0,0,2,0">
-                                <ToggleButton x:Name="GwButton" Style="{StaticResource BarToggle}" Height="24" Padding="7,0" AutomationProperties.Name="Gateway status">
-                                    <StackPanel Orientation="Horizontal">
+                                <ToggleButton x:Name="GwButton" Style="{StaticResource BarToggle}" Width="Auto" Height="24" AutomationProperties.Name="Gateway status">
+                                    <!-- BarToggle is a 30 px icon button; this one sizes to its label instead of clipping it. -->
+                                    <StackPanel Orientation="Horizontal" Margin="7,0">
                                         <Grid Width="10" Height="10" Margin="0,0,5,0" VerticalAlignment="Center">
                                             <Ellipse x:Name="GwHalo" Width="10" Height="10" Opacity="0" RenderTransformOrigin="0.5,0.5">
                                                 <Ellipse.RenderTransform><ScaleTransform x:Name="GwHaloScale" /></Ellipse.RenderTransform>
