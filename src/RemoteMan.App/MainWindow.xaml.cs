@@ -18,6 +18,10 @@ public partial class MainWindow : Window
     public MainWindow(AppSettings settings)
     {
         InitializeComponent();
+        // Opens maximized (see WindowState in the XAML). The restored size is what "Restore down" gives:
+        // keep it inside a smaller screen so it never comes back bigger than the monitor.
+        Width = Math.Min(Width, SystemParameters.WorkArea.Width * 0.9);
+        Height = Math.Min(Height, SystemParameters.WorkArea.Height * 0.9);
         _settings = settings;
         _vm = new MainViewModel(settings)
         {
