@@ -16,9 +16,22 @@ public static class WebViewEnvironment
     private static Task<CoreWebView2Environment>? _env;
     private static readonly Dictionary<string, Task<CoreWebView2Environment>> Sso = new();
 
+    /// <summary>
+    /// Browser switches for terminal and web tabs. With vivid colours on, Chromium skips colour
+    /// management and sends sRGB straight to the screen, like most native apps (RDM's terminal included).
+    /// On wide-gamut or calibrated monitors that is what makes colours look saturated instead of washed out.
+    /// Read once: the browser process keeps its switches until RemoteMan restarts.
+    /// </summary>
+    private static readonly Lazy<string> Args = new(() =>
+    {
+        var vivid = true;
+        try { vivid = AppSettings.Load().VividColors; } catch (Exception) { }
+        return "--disable-features=msSmartScreenProtection" + (vivid ? " --force-color-profile=srgb" : "");
+    });
+
     public static Task<CoreWebView2Environment> GetAsync() =>
         _env ??= CoreWebView2Environment.CreateAsync(null, AppPaths.WebViewData,
-            new CoreWebView2EnvironmentOptions("--disable-features=msSmartScreenProtection"));
+            new CoreWebView2EnvironmentOptions(Args.Value));
 
     public static Task<CoreWebView2Environment> GetSsoAsync(IEnumerable<string> hosts)
     {
@@ -28,7 +41,7 @@ public static class WebViewEnvironment
             if (Sso.TryGetValue(list, out var env)) return env;
             var folder = Path.Combine(AppPaths.WebViewData + "-sso", Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(list)))[..12]);
             var options = new CoreWebView2EnvironmentOptions(
-                $"--disable-features=msSmartScreenProtection --auth-server-allowlist=\"{list}\"")
+                $"{Args.Value} --auth-server-allowlist=\"{list}\"")
             {
                 AllowSingleSignOnUsingOSPrimaryAccount = true, // Entra ID / Microsoft account sites
             };

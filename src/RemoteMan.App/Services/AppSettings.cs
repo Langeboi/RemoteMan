@@ -51,6 +51,8 @@ public sealed class AppSettings
     public string Theme { get; set; } = Themes.DefaultId;
     /// <summary>Light and shadow on the controls (Flat, Subtle, Raised). Takes effect on the next start.</summary>
     public Shading Shading { get; set; } = Shading.Subtle;
+    /// <summary>SSH and web tabs draw sRGB colours unmanaged, so they look saturated on wide-gamut screens. Takes effect on the next start.</summary>
+    public bool VividColors { get; set; } = true;
     /// <summary>What was open at the last exit (kept up to date while running, so a crash still leaves it).</summary>
     public List<OpenSessionRecord> LastSessions { get; set; } = new();
 
