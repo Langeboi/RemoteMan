@@ -236,24 +236,27 @@
                                 <TextBlock Text="Entries by protocol" Style="{StaticResource WidgetTitle}" />
                             </DockPanel>
                         </Border>
-                        <Grid Margin="12,12,12,12">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="150" />
-                                <ColumnDefinition Width="*" />
-                            </Grid.ColumnDefinitions>
-                            <views:DonutChart Width="140" Height="140" Slices="{Binding ProtocolSlices}" VerticalAlignment="Top" />
-                            <ItemsControl Grid.Column="1" ItemsSource="{Binding ProtocolSlices}" Focusable="False" Margin="10,4,0,0" VerticalAlignment="Center">
-                                <ItemsControl.ItemTemplate>
-                                    <DataTemplate DataType="{x:Type views:ChartSlice}">
-                                        <DockPanel Margin="0,2" ToolTip="{Binding Note}">
-                                            <Border Width="10" Height="10" CornerRadius="2" Background="{Binding Brush}" Margin="0,0,8,0" VerticalAlignment="Center" />
-                                            <TextBlock DockPanel.Dock="Right" Text="{Binding Count}" Style="{StaticResource MutedText}" FontSize="12" Margin="8,0,0,0" />
-                                            <TextBlock Text="{Binding Name}" FontSize="12" TextTrimming="CharacterEllipsis" />
-                                        </DockPanel>
-                                    </DataTemplate>
-                                </ItemsControl.ItemTemplate>
-                            </ItemsControl>
-                        </Grid>
+                        <!-- Donut and legend as one centred group. The card can be much wider
+                             (maximized window) and taller (matches the Zabbix card) than the chart
+                             needs, so the pair sits in the middle instead of stretching apart;
+                             the Viewbox only ever shrinks it when the card gets narrow. -->
+                        <Viewbox Margin="16,12" Stretch="Uniform" StretchDirection="DownOnly"
+                                 HorizontalAlignment="Center" VerticalAlignment="Center">
+                            <StackPanel Orientation="Horizontal">
+                                <views:DonutChart Width="150" Height="150" Slices="{Binding ProtocolSlices}" VerticalAlignment="Center" />
+                                <ItemsControl ItemsSource="{Binding ProtocolSlices}" Focusable="False" Width="170" Margin="28,0,0,0" VerticalAlignment="Center">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate DataType="{x:Type views:ChartSlice}">
+                                            <DockPanel Margin="0,3" ToolTip="{Binding Note}">
+                                                <Border Width="10" Height="10" CornerRadius="2" Background="{Binding Brush}" Margin="0,0,8,0" VerticalAlignment="Center" />
+                                                <TextBlock DockPanel.Dock="Right" Text="{Binding Count}" Style="{StaticResource MutedText}" FontSize="12" Margin="12,0,0,0" VerticalAlignment="Center" />
+                                                <TextBlock Text="{Binding Name}" FontSize="12" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                                            </DockPanel>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
+                        </Viewbox>
                     </DockPanel>
                 </Border>
 
@@ -353,7 +356,10 @@
                                 <TextBlock Text="When you connect" Style="{StaticResource WidgetTitle}" />
                             </DockPanel>
                         </Border>
-                        <StackPanel Margin="12,10,12,10">
+                        <!-- Cells are 1/24 of the width, so cap it: on a maximized window they
+                             would otherwise turn into long flat bars. A capped
+                             Stretch element is centred by WPF. -->
+                        <StackPanel Margin="12,10,12,10" MaxWidth="800">
                             <Grid>
                                 <views:HeatmapChart Height="142" Cells="{Binding Heat}" />
                                 <TextBlock Text="Fills in as you open sessions." Style="{StaticResource Empty}" HorizontalAlignment="Center" VerticalAlignment="Center"
