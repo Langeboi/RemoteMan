@@ -145,8 +145,9 @@ public sealed partial class MainViewModel
             else
                 o.Chips.Add(new OverviewChip("oxidized", "No config backups", "", "never", "Link device", LinkToOxidizedCommand));
         }
-        // Who else is on it right now.
-        foreach (var p in _store!.PresenceFor(e.Id))
+        // Who else is connected to it (or editing it) right now; just selecting an entry doesn't count.
+        foreach (var p in _store!.PresenceFor(e.Id).Where(p => p.State != PresenceState.Viewing)
+                     .GroupBy(p => (p.User, p.Machine)).Select(g => g.MaxBy(p => p.State)!))
         {
             var state = p.State.ToString().ToLowerInvariant();
             o.Chips.Add(new OverviewChip("presence", $"{p.User} is {state}", p.Machine, null, null, null, p.Initials, PresenceChip.ColorFor(p.User)));

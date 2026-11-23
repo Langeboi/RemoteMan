@@ -57,7 +57,9 @@ public sealed partial class MainViewModel
     {
         _windowSessions.Add(s);
         s.Closed += closed => { if (!_shuttingDown && _windowSessions.Remove(closed)) SaveOpenSessions(); };
+        s.Closed += closed => { if (!_shuttingDown) RefreshMyConnections(closed); };
         SaveOpenSessions();
+        RefreshMyConnections();
     }
 
     /// <summary>Called by the main window as it closes, before the sessions are torn down.</summary>

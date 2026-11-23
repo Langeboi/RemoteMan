@@ -24,6 +24,10 @@ public sealed class EntryStore : IAsyncDisposable
     private IReadOnlyList<Presence> _presence = Array.Empty<Presence>();
     private Timer? _heartbeat;
     private Presence? _myPresence;
+    /// <summary>Entries this user has a tab open to; each is published as its own presence row (see ConnectionMachine).</summary>
+    private Guid[] _myConnections = [];
+    /// <summary>Connection rows written by the last heartbeat, so closed tabs' rows are deleted at once.</summary>
+    private HashSet<Guid> _publishedConnections = new();
     private readonly IEntryCache? _cache;
     private Timer? _reconnect;
     private Timer? _cacheTimer;
@@ -306,8 +310,13 @@ public sealed class EntryStore : IAsyncDisposable
     public IEnumerable<Presence> PresenceFor(Guid entryId)
     {
         var now = DateTimeOffset.UtcNow;
-        return _presence.Where(p => p.EntryId == entryId && p.IsAlive(now) && !(p.User == User && p.Machine == Machine));
+        return _presence.Where(p => p.EntryId == entryId && p.IsAlive(now) && !(p.User == User && p.Machine == Machine))
+            .DistinctBy(p => (p.User, p.Machine, p.State));
     }
+
+    /// <summary>Teammates with a session open to the entry (not just looking at it or editing it), one per user and machine.</summary>
+    public IEnumerable<Presence> ConnectedTo(Guid entryId) =>
+        PresenceFor(entryId).Where(p => p.State == PresenceState.Connected);
 
     /// <summary>Tell others what this user is doing. Pass null to clear.</summary>
     public Task SetMyPresenceAsync(Guid? entryId, PresenceState state = PresenceState.Viewing)
@@ -316,15 +325,45 @@ public sealed class EntryStore : IAsyncDisposable
         return HeartbeatAsync();
     }
 
+    /// <summary>Every entry this user has a session open to right now (tabs and their own windows).
+    /// Teammates see you on all of them, not only on the tab in front.</summary>
+    public Task SetMyConnectionsAsync(IEnumerable<Guid> entryIds)
+    {
+        var ids = entryIds.Distinct().ToArray();
+        if (ids.ToHashSet().SetEquals(_myConnections)) return Task.CompletedTask;
+        _myConnections = ids;
+        if (_myPresence is { State: PresenceState.Connected } p && !ids.Contains(p.EntryId))
+            _myPresence = p with { State = PresenceState.Viewing };
+        return HeartbeatAsync();
+    }
+
+    /// <summary>The presence table keeps one row per user and machine, so each extra open connection gets its own
+    /// row under "MACHINE#entryid". Windows machine names can't contain '#'; readers fold it back (see FoldMachine).</summary>
+    internal static string ConnectionMachine(string machine, Guid entryId) => $"{machine}#{entryId:N}";
+
+    internal static Presence FoldMachine(Presence p)
+    {
+        var i = p.Machine.LastIndexOf('#');
+        return i > 0 && p.Machine.Length - i == 33 && Guid.TryParseExact(p.Machine[(i + 1)..], "N", out _)
+            ? p with { Machine = p.Machine[..i] } : p;
+    }
+
     private async Task HeartbeatAsync()
     {
         if (!_source.SupportsPresence || !IsOnline) return;
         try
         {
+            var now = DateTimeOffset.UtcNow;
             if (_myPresence is { } p)
-                await _source.HeartbeatPresenceAsync(p with { LastSeen = DateTimeOffset.UtcNow }, _cts.Token);
+                await _source.HeartbeatPresenceAsync(p with { LastSeen = now }, _cts.Token);
             else
                 await _source.ClearPresenceAsync(User, Machine, _cts.Token);
+            var conns = _myConnections;
+            foreach (var id in conns)
+                await _source.HeartbeatPresenceAsync(new Presence(User, ConnectionMachine(Machine, id), id, PresenceState.Connected, now), _cts.Token);
+            foreach (var gone in _publishedConnections.Except(conns).ToList())
+                await _source.ClearPresenceAsync(User, ConnectionMachine(Machine, gone), _cts.Token);
+            _publishedConnections = conns.ToHashSet();
             await RefreshPresenceAsync();
         }
         catch (Exception) when (_cts.IsCancellationRequested) { }
@@ -334,7 +373,7 @@ public sealed class EntryStore : IAsyncDisposable
 
     private async Task RefreshPresenceAsync()
     {
-        _presence = await _source.GetPresenceAsync(_cts.Token);
+        _presence = (await _source.GetPresenceAsync(_cts.Token)).Select(FoldMachine).ToList();
         PresenceChanged?.Invoke(this, EventArgs.Empty);
     }
 
@@ -427,7 +466,12 @@ public sealed class EntryStore : IAsyncDisposable
         if (_heartbeat is not null) await _heartbeat.DisposeAsync();
         lock (_cts) { _reconnect?.Dispose(); _reconnect = null; }
         if (_cacheTimer is not null) { await _cacheTimer.DisposeAsync(); SaveCache(); }
-        if (IsOnline) { try { await _source.ClearPresenceAsync(User, Machine); } catch { } }
+        if (IsOnline)
+        {
+            try { await _source.ClearPresenceAsync(User, Machine); } catch { }
+            foreach (var id in _publishedConnections)
+                try { await _source.ClearPresenceAsync(User, ConnectionMachine(Machine, id)); } catch { }
+        }
         _source.Changed -= OnSourceChanged;
         _source.ConnectionChanged -= OnSourceConnectionChanged;
         await _source.DisposeAsync();

@@ -58,11 +58,15 @@
                         </Ellipse.Style>
                     </Ellipse>
                 </Grid>
-                <!-- Protocol icon with a tiny presence badge on its corner when someone is on the entry -->
+                <!-- Protocol icon with a tiny presence badge on its corner when a teammate is connected to the entry (bottom right),
+                     and a green "live" dot when you are (top right; the glyph turns green too) -->
                 <Grid x:Name="tag" Margin="0,0,7,0" VerticalAlignment="Center">
                     <Path x:Name="kind" Style="{StaticResource KindIcon}" Tag="{Binding KindTag}" />
                     <Image x:Name="custom" Width="16" Height="16" Source="{Binding IconImage}" ToolTip="{Binding KindName}" Visibility="Collapsed"
                            RenderOptions.BitmapScalingMode="HighQuality" SnapsToDevicePixels="True" />
+                    <Ellipse x:Name="live" Width="8" Height="8" Margin="0,-3,-3,0" HorizontalAlignment="Right" VerticalAlignment="Top"
+                             Fill="{StaticResource Ok}" Stroke="{StaticResource Panel}" StrokeThickness="1.5" ToolTip="{Binding ConnectedTip}"
+                             Visibility="{Binding IsConnected, Converter={StaticResource BoolVis}}" />
                     <Border Width="9" Height="9" CornerRadius="4.5" Margin="0,0,-3,-3" HorizontalAlignment="Right" VerticalAlignment="Bottom"
                             Background="{Binding Badge.Color}" BorderBrush="{StaticResource Panel}" BorderThickness="1" ToolTip="{Binding Badge.ToolTip}"
                             Visibility="{Binding Badge, Converter={StaticResource NullVis}}">
@@ -84,6 +88,11 @@
             <HierarchicalDataTemplate.Triggers>
                 <DataTrigger Binding="{Binding IsSelected}" Value="True">
                     <Setter TargetName="name" Property="FontWeight" Value="SemiBold" />
+                </DataTrigger>
+                <!-- You have a session open to it: bold name, green glyph (after IsSelected so bold wins) -->
+                <DataTrigger Binding="{Binding IsConnected}" Value="True">
+                    <Setter TargetName="name" Property="FontWeight" Value="Bold" />
+                    <Setter TargetName="kind" Property="Stroke" Value="{StaticResource Ok}" />
                 </DataTrigger>
                 <DataTrigger Binding="{Binding IsFolder}" Value="True">
                     <Setter TargetName="chevBox" Property="Visibility" Value="Visible" />

@@ -159,6 +159,10 @@ class Admin:
             WHERE p.last_seen > (extract(epoch FROM now()) * 1000 - 120000) ORDER BY p.last_seen DESC""")
         out = collections.defaultdict(list)
         for r in rows:
+            # The app writes one extra row per open connection as "MACHINE#<entry id>"; show the machine name.
+            m = r["machine"] or ""
+            if len(m) > 33 and m[-33] == "#":
+                r["machine"] = m[:-33]
             out[r["user_name"].lower()].append(r)
         return out
 

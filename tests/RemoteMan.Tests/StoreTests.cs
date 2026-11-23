@@ -167,6 +167,43 @@ public class StoreTests : IDisposable
         Assert.Equal(PresenceState.Connected, p.State);
         Assert.Empty(a.PresenceFor(e.Id)); // you don't see yourself
     }
+
+    [Fact]
+    public async Task TeammatesShowOnEveryEntryTheyAreConnectedTo_NotOnSelection()
+    {
+        await using var a = new EntryStore(new SqliteDataSource(_db), "alice", "pc1");
+        await a.OpenAsync();
+        await using var b = new EntryStore(new SqliteDataSource(_db), "bob", "pc2");
+        await b.OpenAsync();
+        var one = await a.SaveAsync(Ssh("one"));
+        var two = await a.SaveAsync(Ssh("two"));
+        var three = await a.SaveAsync(Ssh("three"));
+
+        // Two tabs open (one entry twice), a third entry merely selected.
+        await a.SetMyConnectionsAsync([one.Id, two.Id, one.Id]);
+        await a.SetMyPresenceAsync(three.Id, PresenceState.Viewing);
+        await b.SetMyPresenceAsync(null);
+
+        var p = Assert.Single(b.ConnectedTo(one.Id));
+        Assert.Equal("pc1", p.Machine);   // the per-connection row folds back to the machine name
+        Assert.Single(b.ConnectedTo(two.Id));
+        Assert.Empty(b.ConnectedTo(three.Id));
+        Assert.Single(b.PresenceFor(three.Id)); // still there as "viewing", e.g. for who's online
+        Assert.Empty(a.ConnectedTo(one.Id));    // you don't see yourself
+
+        // Closing a tab takes alice off that entry at once.
+        await a.SetMyConnectionsAsync([one.Id]);
+        await b.SetMyPresenceAsync(null);
+        Assert.Single(b.ConnectedTo(one.Id));
+        Assert.Empty(b.ConnectedTo(two.Id));
+
+        // A main row left on "connected" to a closed tab is demoted.
+        await a.SetMyPresenceAsync(one.Id, PresenceState.Connected);
+        await a.SetMyConnectionsAsync([]);
+        await b.SetMyPresenceAsync(null);
+        Assert.Empty(b.ConnectedTo(one.Id));
+        Assert.Single(b.PresenceFor(one.Id));
+    }
     [Fact]
     public void WindowsLoginRewritesConnectionStrings()
     {
