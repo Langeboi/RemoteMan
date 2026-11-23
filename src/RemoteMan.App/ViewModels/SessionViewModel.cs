@@ -46,6 +46,9 @@ public abstract partial class SessionViewModel : ObservableObject, IDisposable
     /// <summary>The Overview tab: one reused tab that follows the selection, its title in italics.</summary>
     public virtual bool IsPreview => false;
 
+    /// <summary>When this tab was last the active one (Environment.TickCount64): a click in the tree goes to the latest.</summary>
+    internal long LastActivated { get; set; }
+
     [ObservableProperty] private string _title;
     /// <summary>True while this tab is the visible one in its pane (both panes can show one in split view).</summary>
     [ObservableProperty] private bool _isActive;

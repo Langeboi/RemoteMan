@@ -13,10 +13,20 @@ public sealed partial class MainViewModel
     /// <summary>The one overview, created on the first click and reused after that.</summary>
     public OverviewViewModel? Overview { get; private set; }
 
-    /// <summary>A click on an entry in the tree: show its overview in the Dashboard tab and bring that tab to the front.</summary>
+    /// <summary>A click on an entry in the tree: bring its open session to the front, or else show its overview
+    /// in the Dashboard tab and bring that tab to the front.</summary>
     public void ShowOverview()
     {
         if (Selected is not { } node || node.Id == FavoritesId || node.IsFolder) return;
+        // Already connected: go to its session tab (the one used last when there are several) instead.
+        var open = Sessions.Where(s => s.IsConnection && s is not ConfigBackupsSessionViewModel && s.Entry.Id == node.Id)
+            .MaxBy(s => s.LastActivated);
+        if (open is not null)
+        {
+            ActiveSession = open;
+            open.RequestFocus();
+            return;
+        }
         if (Overview is null)
         {
             Overview = new OverviewViewModel { Main = this };
