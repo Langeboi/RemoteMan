@@ -127,6 +127,12 @@ class Cluster:
             else:
                 self.bootstrap()
         else:
+            key = os.environ.get("JOIN", "").strip()
+            if key and C.load_state().get("join_key") != key:
+                log.warning("\n%s\n JOIN is set, but this server already has its own database, so the key is ignored.\n"
+                            " A join key only works on a server's very first start. To join this server to the cluster,\n"
+                            " wipe it and start again with a new key (this deletes this server's data):\n"
+                            "   docker compose down -v && docker compose up -d\n%s", "=" * 78, "=" * 78)
             self.pre_start()
             self.pg.start()
             if not self._in_recovery():
@@ -219,7 +225,7 @@ class Cluster:
         if os.environ.get("NAME") and C.clean_name(os.environ["NAME"]) != name:
             log.warning("NAME is %s but the join key is for %s; using %s", os.environ["NAME"], name, name)
         self.name = name
-        C.save_state(name=name, repl_password=k["pw"])
+        C.save_state(name=name, repl_password=k["pw"], join_key=key.strip())
         log.info("Joining as %s", name)
         deadline = time.time() + 600
         last_err = ""
