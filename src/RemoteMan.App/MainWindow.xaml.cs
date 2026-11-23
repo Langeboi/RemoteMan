@@ -91,6 +91,7 @@ public partial class MainWindow : Window
         };
         Closing += async (_, _) => { _vm.FreezeOpenSessions(); await _vm.DisposeAsync(); };
         _vm.AskReopen = AskReopen;
+        _vm.AskMove = AskMove;
         PreviewKeyDown += OnWindowKeyDown;
         SetUpChat();
         StateChanged += (_, _) => MaxGlyph.Data = Geometry.Parse(WindowState == WindowState.Maximized
@@ -107,6 +108,14 @@ public partial class MainWindow : Window
                    " when you closed RemoteMan:\n\n" + string.Join("\n", shown);
         var pick = ChoiceDialog.Show(this, "Reopen last sessions?", text, ["Reopen", "Not now"], DialogIcon.Question, extra: remember);
         return (pick == 0, remember.IsChecked == true && pick >= 0);
+    }
+
+    /// <summary>"Move X to Y?" before drag-drop or Move to moves entries in the tree.</summary>
+    private (bool Move, bool DontAsk) AskMove(string title, string text)
+    {
+        var dontAsk = new CheckBox { Content = "Don't ask again (turn it back on under More > Ask before moving entries)", Margin = new Thickness(0, 12, 0, 0) };
+        var pick = ChoiceDialog.Show(this, title, text, ["Move", "Cancel"], DialogIcon.Question, extra: dontAsk);
+        return (pick == 0, dontAsk.IsChecked == true);
     }
 
     // ---------------- connection notices ----------------
@@ -231,6 +240,10 @@ public partial class MainWindow : Window
             startup.Items.Add(item);
         }
         menu.Items.Add(startup);
+        var askMove = new MenuItem { Header = "Ask before moving entries", IsCheckable = true, IsChecked = _vm.ConfirmMoves,
+            ToolTip = "Asks \"Move X to Y?\" when you drag entries to another folder or use Move to." };
+        askMove.Click += (_, _) => _vm.ConfirmMoves = askMove.IsChecked;
+        menu.Items.Add(askMove);
         menu.Items.Add(Click("Theme…", OnTheme));
         var vivid = new MenuItem { Header = "Vivid colors in SSH and web tabs", IsCheckable = true, IsChecked = _vm.VividColors,
             ToolTip = "Shows colours unmanaged, like RDM and most native apps, so they look saturated on wide-gamut screens. Applies after a restart." };
@@ -645,6 +658,8 @@ public partial class MainWindow : Window
     private Point _dragStart;
     private EntryNode? _dragNode;
     private EntryNode? _dropHighlight;
+    private bool _dragging;
+    private (List<Guid> Ids, Guid? Folder)? _pendingDrop;
 
     private void OnTreeMouseMove(object sender, MouseEventArgs e)
     {
@@ -656,8 +671,12 @@ public partial class MainWindow : Window
         _clearMultiOnUp = false;
         // Dragging a picked entry drags the whole multi-selection.
         var ids = string.Join(",", _vm.MoveSetFor(node));
-        DragDrop.DoDragDrop(Tree, new DataObject(DragFormat, ids), DragDropEffects.Move);
+        _dragging = true;
+        try { DragDrop.DoDragDrop(Tree, new DataObject(DragFormat, ids), DragDropEffects.Move); }
+        finally { _dragging = false; }
         SetDropHighlight(null);
+        // The drop only noted where to go: ask and move now that the drag is over and the mouse is free.
+        if (_pendingDrop is { } drop) { _pendingDrop = null; _ = _vm.MoveManyAsync(drop.Ids, drop.Folder); }
     }
 
     private static List<Guid>? DraggedIds(DragEventArgs e)
@@ -700,6 +719,11 @@ public partial class MainWindow : Window
         if (DraggedIds(e) is not { } moving) return;
         var folder = DropFolder(e, out _);
         e.Handled = true;
+        if (!_vm.CanMoveAny(moving, folder)) return;
+        // A drag from this tree moves once DoDragDrop returns (see OnTreeMouseMove); asking inside the drop
+        // would open the question while the OS drag loop still holds the mouse.
+        if (_dragging) { _pendingDrop = (moving, folder); return; }
+        await Dispatcher.InvokeAsync(() => { }, System.Windows.Threading.DispatcherPriority.Background);
         await _vm.MoveManyAsync(moving, folder);
     }
 

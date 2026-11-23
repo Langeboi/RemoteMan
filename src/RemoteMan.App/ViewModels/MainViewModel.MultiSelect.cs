@@ -87,6 +87,51 @@ public sealed partial class MainViewModel
     /// <summary>The ids a move acts on: the multi-selection when <paramref name="node"/> is part of it, otherwise just that entry.</summary>
     public IReadOnlyList<Guid> MoveSetFor(EntryNode node) => IsInMultiSelection(node) ? _multi.ToList() : new List<Guid> { node.Id };
 
+    /// <summary>Asks "Move X to Y?" before a move. Returns (move, don't ask again). Null moves without asking.</summary>
+    public Func<string, string, (bool Move, bool DontAsk)>? AskMove { get; set; }
+
+    /// <summary>Whether drag-drop and Move to ask first (More > Ask before moving entries).</summary>
+    public bool ConfirmMoves
+    {
+        get => _settings.ConfirmMoves;
+        set { _settings.ConfirmMoves = value; TrySaveSettings(); OnPropertyChanged(); }
+    }
+
+    /// <summary>True when the move should go ahead: asking is off, nothing would move, or the user said Move.</summary>
+    private bool ConfirmMove(IReadOnlyList<Guid> ids, Guid? folder)
+    {
+        if (!ConfirmMoves || AskMove is null || _store is null) return true;
+        var moving = _store.MovableForMove(ids, folder);
+        if (moving.Count == 0) return true; // nothing to ask about; the move itself does nothing
+        var (title, text) = MovePrompt(moving, folder);
+        var (move, dontAsk) = AskMove(title, text);
+        if (move && dontAsk) ConfirmMoves = false;
+        return move;
+    }
+
+    /// <summary>The question and details for moving <paramref name="moving"/> into <paramref name="folder"/> (null = top level).</summary>
+    public (string Title, string Text) MovePrompt(IReadOnlyList<Entry> moving, Guid? folder)
+    {
+        var target = folder is { } f && _store?.Get(f) is { } fe ? $"\"{fe.Name}\"" : "the top level";
+        string From(Entry e) => e.ParentId is { } p && _store?.Get(p) is { } pe ? FolderPath(pe) : "the top level";
+        string Noun(Entry e) => e.Kind == EntryKind.Folder ? "folder " : "";
+        var where = folder is { } f2 && _store?.Get(f2) is { } fe2 ? FolderPath(fe2) : "the top level";
+
+        if (moving.Count == 1)
+        {
+            var e = moving[0];
+            var text = $"From: {From(e)}\nTo: {where}";
+            if (e.Kind == EntryKind.Folder) text += "\n\nEverything in the folder moves with it.";
+            return ($"Move {Noun(e)}\"{e.Name}\" to {target}?", text);
+        }
+
+        var lines = moving.Take(8).Select(e => $"  •  {e.Name}{(e.Kind == EntryKind.Folder ? " (folder)" : "")}").ToList();
+        if (moving.Count > 8) lines.Add($"  …and {moving.Count - 8} more");
+        var body = $"To: {where}\n\n" + string.Join("\n", lines);
+        if (moving.Any(e => e.Kind == EntryKind.Folder)) body += "\n\nFolders take everything in them along.";
+        return ($"Move {moving.Count} entries to {target}?", body);
+    }
+
     /// <summary>True when at least one of <paramref name="ids"/> can go into <paramref name="folder"/>.</summary>
     public bool CanMoveAny(IReadOnlyList<Guid> ids, Guid? folder) =>
         _store is not null && _store.MovableForMove(ids, folder).Count > 0;
@@ -96,6 +141,7 @@ public sealed partial class MainViewModel
     public async Task MoveManyAsync(IReadOnlyList<Guid> ids, Guid? folder)
     {
         if (_store is null) return;
+        if (!ConfirmMove(ids, folder)) return;
         if (ids.Count == 1) { await MoveAsync(ids[0], folder); return; }
         if (!_store.IsOnline) { Message = "Offline: entries can't be moved until the database is back"; return; }
         var moving = _store.MovableForMove(ids, folder);
