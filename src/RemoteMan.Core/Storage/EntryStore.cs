@@ -320,7 +320,7 @@ public sealed class EntryStore : IAsyncDisposable
     public IEnumerable<Presence> ConnectedTo(Guid entryId) =>
         PresenceFor(entryId).Where(p => p.State == PresenceState.Connected);
 
-    /// <summary>Tell others what this user is doing. Pass null to clear.</summary>
+    /// <summary>Tell others what this user is doing. Null means nothing in particular: you still show as online.</summary>
     public Task SetMyPresenceAsync(Guid? entryId, PresenceState state = PresenceState.Viewing)
     {
         _myPresence = entryId is null ? null : new Presence(User, Machine, entryId.Value, state, DateTimeOffset.UtcNow);
@@ -356,10 +356,10 @@ public sealed class EntryStore : IAsyncDisposable
         try
         {
             var now = DateTimeOffset.UtcNow;
-            if (_myPresence is { } p)
-                await _source.HeartbeatPresenceAsync(p with { LastSeen = now }, _cts.Token);
-            else
-                await _source.ClearPresenceAsync(User, Machine, _cts.Token);
+            // Always keep a row while the app is open, so teammates see you online from the start, before you
+            // select or open anything. Guid.Empty = online, not on any entry. The row goes when the store closes.
+            var main = _myPresence ?? new Presence(User, Machine, Guid.Empty, PresenceState.Viewing, now);
+            await _source.HeartbeatPresenceAsync(main with { LastSeen = now }, _cts.Token);
             var conns = _myConnections;
             foreach (var id in conns)
                 await _source.HeartbeatPresenceAsync(new Presence(User, ConnectionMachine(Machine, id), id, PresenceState.Connected, now), _cts.Token);

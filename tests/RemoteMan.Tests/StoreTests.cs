@@ -169,6 +169,29 @@ public class StoreTests : IDisposable
     }
 
     [Fact]
+    public async Task TeammatesShowOnlineRightAfterOpening()
+    {
+        await using var a = new EntryStore(new SqliteDataSource(_db), "alice", "pc1");
+        await a.OpenAsync();
+        await using var b = new EntryStore(new SqliteDataSource(_db), "bob", "pc2");
+        await b.OpenAsync();
+
+        // Nothing selected, no session open: alice is still online for bob.
+        await b.SetMyPresenceAsync(null);
+        var p = Assert.Single(b.Presence, p => p.User == "alice");
+        Assert.Equal(Guid.Empty, p.EntryId);
+        Assert.Equal(PresenceState.Viewing, p.State);
+
+        // Selecting and then deselecting keeps her online.
+        var e = await a.SaveAsync(Ssh("x"));
+        await a.SetMyPresenceAsync(e.Id, PresenceState.Viewing);
+        await a.SetMyPresenceAsync(null);
+        await b.SetMyPresenceAsync(null);
+        Assert.Contains(b.Presence, p => p.User == "alice");
+        Assert.Empty(b.PresenceFor(e.Id));
+    }
+
+    [Fact]
     public async Task TeammatesShowOnEveryEntryTheyAreConnectedTo_NotOnSelection()
     {
         await using var a = new EntryStore(new SqliteDataSource(_db), "alice", "pc1");
