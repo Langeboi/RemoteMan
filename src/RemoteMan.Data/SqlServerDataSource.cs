@@ -18,6 +18,7 @@ public sealed class SqlServerDataSource : SqlDataSource
     public override string DisplayName => $"SQL Server ({new SqlConnectionStringBuilder(ConnectionString).DataSource})";
     public override DataSourceKind Kind => DataSourceKind.SqlServer;
 
+    protected override void ClearPool() { try { SqlConnection.ClearPool((SqlConnection)CreateConnection()); } catch { } }
     protected override DbConnection CreateConnection() => new SqlConnection(ConnectionString);
 
     protected override IEnumerable<string> SchemaStatements =>

@@ -50,6 +50,8 @@ public abstract partial class SqlDataSource : IDataSource
     }
 
     protected abstract DbConnection CreateConnection();
+    /// <summary>Drops this source's idle pooled connections (after one broke, the others may be stale too).</summary>
+    protected virtual void ClearPool() { }
     protected abstract IEnumerable<string> SchemaStatements { get; }
     /// <summary>Statement that increments a counter row of remoteman_meta (1 = entry revisions, 2 = chat messages) and returns the new value.</summary>
     protected abstract string NextCounterSql(int id);
@@ -392,6 +394,7 @@ public abstract partial class SqlDataSource : IDataSource
     /// <summary>Reads the counter row and the newest presence stamp; raises Changed when either moved.</summary>
     protected async Task PollLoopAsync(int intervalMs, CancellationToken ct)
     {
+        var failures = 0;
         while (!ct.IsCancellationRequested)
         {
             try
@@ -433,11 +436,19 @@ public abstract partial class SqlDataSource : IDataSource
                         catch (DbException) { }
                     }
                     await PollSettingsAsync(c, ct);
+                    failures = 0;
                     SetConnected(true);
                     await Task.Delay(intervalMs, ct);
                 }
             }
             catch (OperationCanceledException) { return; }
+            catch (Exception) when (++failures == 1 && !ct.IsCancellationRequested)
+            {
+                // One dropped connection (a hiccup on the line or the gateway) isn't an outage: retry at once on a
+                // fresh connection, and only show offline when that fails too.
+                ClearPool();
+                try { await Task.Delay(500, ct); } catch (OperationCanceledException) { return; }
+            }
             catch (Exception)
             {
                 SetConnected(false);

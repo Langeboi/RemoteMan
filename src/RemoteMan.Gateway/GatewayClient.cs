@@ -177,6 +177,11 @@ public sealed class LocalForwarder : IDisposable
     public bool DirectFirst { get; }
     public int Port { get; }
     public TimeSpan DirectTimeout { get; init; } = TimeSpan.FromMilliseconds(1500);
+    /// <summary>
+    /// After the direct try failed, how long new connections go straight to the gateway (a database opens a
+    /// connection now and then, so a short memory made every one of them wait out the direct try first).
+    /// </summary>
+    public TimeSpan OffSiteMemory { get; init; } = TimeSpan.FromMinutes(10);
     /// <summary>The target last reached, and whether it was direct ("10.0.0.5:5432 via lab").</summary>
     public string? LastPath { get; private set; }
     /// <summary>A connection that couldn't be forwarded (the local program sees it close).</summary>
@@ -293,7 +298,7 @@ public sealed class LocalForwarder : IDisposable
                     }
                     return;
                 }
-                var tryDirect = manual != true && DirectFirst && (_path is not { } p || p.Direct || DateTime.UtcNow - p.At > TimeSpan.FromMinutes(1));
+                var tryDirect = manual != true && DirectFirst && (_path is not { } p || p.Direct || DateTime.UtcNow - p.At > OffSiteMemory);
                 if (tryDirect)
                 {
                     if (await DialDirectAsync(ct) is var (tcp, target))

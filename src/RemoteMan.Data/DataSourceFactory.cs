@@ -66,6 +66,9 @@ public static class DataSourceFactory
     /// keep their multi-host lists (each host gets its own route), SQL Server its "host,port". SQLite is unchanged.
     /// TLS still checks the real server name: the host the client sees is only where the bytes go.
     /// </summary>
+    /// <summary>Connect timeout for a database reached through a gateway forwarder.</summary>
+    public const int GatewayConnectSeconds = 20;
+
     public static string RouteHosts(DataSourceKind kind, string cs, Route route)
     {
         switch (kind)
@@ -76,6 +79,9 @@ public static class DataSourceFactory
                 var hosts = (b.Host ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
                     .Select(h => SplitHostPort(h, b.Port)).Select(hp => route(hp.Host, hp.Port)).Select(r => $"{r.Host}:{r.Port}");
                 b.Host = string.Join(",", hosts);
+                // Through the gateway a new connection is a tunnel plus the login's round trips over it: a few
+                // seconds from a slow line, more than the 5 s a primary/standby pair is given for a direct connect.
+                if (b.Timeout < GatewayConnectSeconds) b.Timeout = GatewayConnectSeconds;
                 // The certificate names the real server, not 127.0.0.1.
                 if (b.SslMode is Npgsql.SslMode.VerifyFull) b.SslMode = Npgsql.SslMode.VerifyCA;
                 return b.ConnectionString;
@@ -89,6 +95,7 @@ public static class DataSourceFactory
                 var r = route(first, (int)b.Port);
                 b.Server = r.Host;
                 b.Port = (uint)r.Port;
+                if (b.ConnectionTimeout < GatewayConnectSeconds) b.ConnectionTimeout = GatewayConnectSeconds;
                 return b.ConnectionString;
             }
             case DataSourceKind.SqlServer:
@@ -103,6 +110,7 @@ public static class DataSourceFactory
                 var rs = route(host.Split('\\')[0], port);
                 b.DataSource = $"tcp:{rs.Host},{rs.Port}";
                 b.TrustServerCertificate = true;
+                if (b.ConnectTimeout < GatewayConnectSeconds) b.ConnectTimeout = GatewayConnectSeconds;
                 return b.ConnectionString;
             }
             default:

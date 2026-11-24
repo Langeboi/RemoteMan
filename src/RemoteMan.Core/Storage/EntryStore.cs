@@ -223,6 +223,24 @@ public sealed class EntryStore : IAsyncDisposable
         }
     }
 
+    /// <summary>
+    /// A background read failed on the connection: one dropped connection (a hiccup on the line or the gateway)
+    /// isn't an outage, so try once more on a fresh one and go offline only when that fails too.
+    /// </summary>
+    private async Task OfflineUnlessRecoveredAsync()
+    {
+        try
+        {
+            await Task.Delay(TimeSpan.FromSeconds(1), _cts.Token);
+            await PullCoreAsync(_cts.Token);
+            return;
+        }
+        catch (Exception) when (_cts.IsCancellationRequested) { return; }
+        catch (Exception ex) when (IsConnectionFailure(ex)) { LastError = Innermost(ex).Message; }
+        catch (Exception) { return; }
+        GoOffline();
+    }
+
     private void GoOnline()
     {
         lock (_cts)
@@ -377,7 +395,7 @@ public sealed class EntryStore : IAsyncDisposable
             await RefreshPresenceAsync();
         }
         catch (Exception) when (_cts.IsCancellationRequested) { }
-        catch (Exception ex) when (IsConnectionFailure(ex)) { GoOffline(); }
+        catch (Exception ex) when (IsConnectionFailure(ex)) { await OfflineUnlessRecoveredAsync(); }
         catch (Exception) { /* transient: next tick retries */ }
     }
 
@@ -399,7 +417,7 @@ public sealed class EntryStore : IAsyncDisposable
             else if (signal.Revision is null || signal.Revision > LastRevision) await PullAsync(_cts.Token);
         }
         catch (Exception) when (_cts.IsCancellationRequested) { }
-        catch (Exception ex) when (IsConnectionFailure(ex)) { GoOffline(); }
+        catch (Exception ex) when (IsConnectionFailure(ex)) { await OfflineUnlessRecoveredAsync(); }
         catch (Exception) { /* the next signal or poll will catch up */ }
     }
 
