@@ -303,12 +303,15 @@ public partial class MainWindow : Window
     /// <summary>More > Run setup again: the first-run steps, starting from the current settings.</summary>
     private void OnRunSetup(object sender, RoutedEventArgs e)
     {
+        var before = DataSourceKey();
         var w = new Views.SetupWindow(_settings, rerun: true) { Owner = this };
         w.ShowDialog();
+        // A new data source or new integration settings apply right away.
+        if (DataSourceKey() != before || w.IntegrationsChanged) _ = _vm.ReloadDataSourceAsync();
         if (w.ImportAfter is { } source) new ImportWindow(_vm, source) { Owner = this }.ShowDialog();
         if (!w.NeedsRestart) return;
         var choice = Views.ChoiceDialog.Show(this, "Restart to apply setup",
-            "Some of the changes are used from the next start. Restart RemoteMan now? Open sessions are closed; you can reopen them when it starts.",
+            "The new theme or AI settings are used from the next start. Restart RemoteMan now? Open sessions are closed; you can reopen them when it starts.",
             ["Restart now", "Later"], Views.DialogIcon.Question);
         if (choice == 0) RestartApp();
     }
@@ -424,7 +427,15 @@ public partial class MainWindow : Window
         if (name == _settings.Active.Name) return;
         _settings.ActiveDataSource = name;
         _settings.Save();
-        Views.ChoiceDialog.Info(this, "Restart to switch", $"Restart RemoteMan to open {name}.");
+        _ = _vm.ReloadDataSourceAsync();
+    }
+
+    /// <summary>What the open data source connects with: when this changes, it's closed and opened again.</summary>
+    private string DataSourceKey()
+    {
+        var a = _settings.Active;
+        return string.Join("\u0001", a.Name, a.Kind, string.Join("\n", a.ConnectionStrings), a.UseWindowsLogin, a.GatewaySite, a.GatewayAlways,
+            a.UseSharedVaultKey, Services.Secrets.LoadVaultPassphrase(a.Name));
     }
 
     private void OnPanelMore(object sender, RoutedEventArgs e)
@@ -550,7 +561,13 @@ public partial class MainWindow : Window
         Dispatcher.BeginInvoke(() => GwButton.IsHitTestVisible = true, System.Windows.Threading.DispatcherPriority.Input);
     }
 
-    private void OpenGatewaySettings() => Views.GatewayDialog.Show(this, _settings);
+    private void OpenGatewaySettings()
+    {
+        // Setting up or removing the gateway closes its forwarders, the database's among them: reopen the data
+        // source so it connects on the new path straight away.
+        if (Views.GatewayDialog.Show(this, _settings) && _settings.Active.Kind != RemoteMan.Core.Storage.DataSourceKind.Sqlite)
+            _ = _vm.ReloadDataSourceAsync();
+    }
     private void OnZPopupButton(object sender, RoutedEventArgs e) => ZButton.IsChecked = false;
 
     private void OnWindowKeyDown(object sender, KeyEventArgs e)
@@ -895,11 +912,11 @@ public partial class MainWindow : Window
 
     private void OnDataSources(object sender, RoutedEventArgs e)
     {
+        var before = DataSourceKey();
         var dlg = new DataSourceWindow(_settings) { Owner = this };
         if (dlg.ShowDialog() != true) return;
-        if (Views.ChoiceDialog.Show(this, "Restart to apply",
-                "The data source (and its gateway site) is used from the next start. Restart RemoteMan now? Open sessions are closed; you can reopen them when it starts.",
-                ["Restart now", "Later"], Views.DialogIcon.Question) == 0) RestartApp();
+        // Another data source, or new connection or gateway settings on this one: switch over now, no restart.
+        if (DataSourceKey() != before) _ = _vm.ReloadDataSourceAsync();
     }
 
     private void OnImport(object sender, RoutedEventArgs e) => new ImportWindow(_vm) { Owner = this }.ShowDialog();

@@ -110,6 +110,8 @@ public sealed class SetupWindow : Window
 
     /// <summary>A theme, shading or data source change that only takes effect after a restart.</summary>
     public bool NeedsRestart { get; private set; }
+    /// <summary>Zabbix or Oxidized settings were confirmed: they go into the data source when it's opened again.</summary>
+    public bool IntegrationsChanged { get; private set; }
 
     /// <summary>Whether Finish was pressed (rather than Skip setup or closing the window).</summary>
     public bool Finished { get; private set; }
@@ -837,8 +839,6 @@ public sealed class SetupWindow : Window
         if (_applied) return;
         _applied = true;
         bool Confirmed(Step s) => _state[s] == State.Done && AutoSkipReason(s) is null;
-        var before = (_settings.ActiveDataSource, _settings.Active.Kind);
-
         if (Confirmed(Step.DataSource))
         {
             if (_dsKind == DataSourceKind.Sqlite)
@@ -921,7 +921,9 @@ public sealed class SetupWindow : Window
         // Colours are looked up once as windows are built, so a new theme needs a fresh start. When run again from
         // More, the open window also holds the data source, AI and integration connections made at startup.
         var themeChanged = Themes.Find(_settings.Theme).Id != Themes.Current.Id || _settings.Shading != Themes.CurrentShading;
-        var sourceChanged = before != (_settings.ActiveDataSource, _settings.Active.Kind);
-        NeedsRestart = themeChanged || (_rerun && (sourceChanged || aiChanged || integrationsChanged));
+        // The data source and integrations switch over live (the main window reopens the data source); only a new
+        // theme, or new AI settings when run again, need a fresh start.
+        IntegrationsChanged = integrationsChanged;
+        NeedsRestart = themeChanged || (_rerun && aiChanged);
     }
 }
