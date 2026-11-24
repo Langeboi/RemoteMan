@@ -66,7 +66,7 @@
                     </Ellipse>
                 </Grid>
                 <!-- Protocol icon with a tiny presence badge on its corner when a teammate is connected to the entry (bottom right),
-                     and a green "live" dot when you are (top right; the glyph turns green too) -->
+                     and a green "live" dot when you are (top right; the glyph, custom glyph or vendor mark turns green too) -->
                 <Grid x:Name="tag" Margin="0,0,7,0" VerticalAlignment="Center">
                     <Path x:Name="kind" Style="{StaticResource KindIcon}" Tag="{Binding KindTag}" />
                     <Image x:Name="custom" Width="16" Height="16" Source="{Binding IconImage}" ToolTip="{Binding KindName}" Visibility="Collapsed"
@@ -114,6 +114,14 @@
                     <Setter TargetName="kind" Property="Visibility" Value="Collapsed" />
                     <Setter TargetName="custom" Property="Visibility" Value="Visible" />
                 </DataTrigger>
+                <!-- Connected with a custom glyph or vendor mark: show it in the connected green too (after HasCustomIcon) -->
+                <MultiDataTrigger>
+                    <MultiDataTrigger.Conditions>
+                        <Condition Binding="{Binding HasCustomIcon}" Value="True" />
+                        <Condition Binding="{Binding IsConnected}" Value="True" />
+                    </MultiDataTrigger.Conditions>
+                    <Setter TargetName="custom" Property="Source" Value="{Binding ConnectedIconImage}" />
+                </MultiDataTrigger>
                 <DataTrigger Binding="{Binding IsExpanded}" Value="False">
                     <Setter TargetName="chevron" Property="Data" Value="M0,0 L4,4 L0,8" />
                 </DataTrigger>

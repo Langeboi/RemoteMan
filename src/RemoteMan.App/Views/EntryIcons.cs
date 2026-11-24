@@ -28,6 +28,28 @@ public static class EntryIcons
         return img;
     }
 
+    /// <summary>
+    /// The icon for an entry you're connected to: line glyphs drawn in the theme's connected green (like the protocol icons),
+    /// vendor marks recoloured in that green with their shading kept (<see cref="VendorMarks.Mark.Tinted"/>).
+    /// </summary>
+    public static ImageSource RenderConnected(string? icon, string kindTag)
+    {
+        var ok = RemoteMan.App.Services.Themes.GetBrush("Ok");
+        var okColor = ok is SolidColorBrush sb ? sb.Color : Colors.LimeGreen;
+        var key = (icon, "OK:" + okColor, kindTag);
+        if (Cache.TryGetValue(key, out var hit)) return hit;
+        ImageSource img;
+        if (VendorMarks.Find(icon) is { } mark)
+        {
+            var di = new DrawingImage(mark.Tinted(okColor));
+            di.Freeze();
+            img = di;
+        }
+        else img = RenderWith(icon, ok, kindTag);
+        Cache[key] = img;
+        return img;
+    }
+
     /// <summary>Same as <see cref="Render"/> with an explicit stroke brush for line glyphs (vendor marks keep their own colours).</summary>
     public static ImageSource RenderWith(string? icon, Brush stroke, string kindTag)
     {
