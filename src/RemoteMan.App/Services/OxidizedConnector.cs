@@ -47,6 +47,7 @@ public static class OxidizedConnector
             var local = tunnel.LocalEndPoint;
             via = () => local;
         }
+        else via = GatewayService.Instance.ViaFor(baseUri.Host, baseUri.Port);   // off-site: through the gateway
         return new OxidizedClient(cfg.Url, string.IsNullOrWhiteSpace(cfg.UserName) ? null : cfg.UserName.Trim(), password,
             cfg.IgnoreCertificateErrors, via, attached: tunnel);
     }

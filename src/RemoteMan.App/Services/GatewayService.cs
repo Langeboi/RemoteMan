@@ -245,6 +245,21 @@ public sealed class GatewayService
 
     private string? _startupSite;
 
+    /// <summary>The data source in use (set at startup), whose site the integrations use too.</summary>
+    public DataSourceConfig? ActiveSource { get; set; }
+
+    /// <summary>
+    /// For Zabbix, Oxidized and other web APIs that have no jump host of their own: where to open the TCP
+    /// connection instead of host:port, a local forwarder that tries directly first and goes through the site
+    /// when that fails (and follows the Connected/Disconnected switch). Null = no gateway, connect directly.
+    /// </summary>
+    public Func<System.Net.EndPoint>? ViaFor(string host, int port)
+    {
+        if (ActiveSource is not { } cfg || DefaultSite(cfg) is not { } site) return null;
+        var f = Forwarder(site, [GatewayProtocol.FormatTarget(host, port)], directFirst: true);
+        return () => new System.Net.IPEndPoint(System.Net.IPAddress.Loopback, f.Port);
+    }
+
     /// <summary>Asks the relay for the sites once at startup (a few seconds at most), so the database can use the only one.</summary>
     public async Task<string?> DefaultSiteAtStartupAsync(DataSourceConfig cfg)
     {

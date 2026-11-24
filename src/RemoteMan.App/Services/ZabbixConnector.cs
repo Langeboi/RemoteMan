@@ -48,6 +48,13 @@ public static class ZabbixConnector
             via = () => local;
         }
 
+        else
+        {
+            // Off-site with a gateway: the API goes through it like the database and entries do.
+            var api = ZabbixClient.ApiEndpoint(cfg.Url);
+            via = GatewayService.Instance.ViaFor(api.Host, api.Port);
+        }
+
         var client = new ZabbixClient(cfg.Url, token, cfg.IgnoreCertificateErrors, via, attached: tunnel);
         try
         {

@@ -67,6 +67,7 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
             GatewayService.Instance.Configure(_settings.Gateway);
             GatewayService.Instance.Problem += m => OnUi(() => Message = $"Gateway: {m}");
             GatewayService.Instance.UsageSummary = () => GatewayUsage(cfg);
+            GatewayService.Instance.ActiveSource = cfg;
             GatewayService.Instance.ModeChanged += () => OnUi(() =>
             {
                 try { _settings.Save(); } catch (Exception ex) { Message = $"Could not save settings: {ex.Message}"; }
