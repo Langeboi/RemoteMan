@@ -102,9 +102,36 @@ public abstract partial class SqlDataSource : IDataSource
     private Exception ReadOnlyError() => new UnauthorizedAccessException(
         $"Your database login{(DatabaseUser is { } u ? $" ({u})" : "")} can only read. Ask whoever runs the database for edit rights.");
 
+    /// <summary>The server's clock as Unix milliseconds (null = use this PC's clock).</summary>
+    protected virtual string? ServerNowSql => null;
+
+    private long _clockSkewMs;
+
+    /// <summary>
+    /// The server's clock minus this PC's, so presence is judged on one clock: a PC whose clock is half a minute
+    /// off would otherwise see everyone (or be seen) as offline, since a heartbeat counts for 30 seconds.
+    /// </summary>
+    public TimeSpan ClockSkew => TimeSpan.FromMilliseconds(Interlocked.Read(ref _clockSkewMs));
+
+    private async Task MeasureClockAsync(DbConnection c, CancellationToken ct)
+    {
+        if (ServerNowSql is not { } sql) return;
+        try
+        {
+            var before = DateTimeOffset.UtcNow;
+            await using var cmd = Cmd(c, sql);
+            var server = Convert.ToInt64(await cmd.ExecuteScalarAsync(ct));
+            var after = DateTimeOffset.UtcNow;
+            var local = (before + (after - before) / 2).ToUnixTimeMilliseconds();
+            Interlocked.Exchange(ref _clockSkewMs, server - local);
+        }
+        catch (DbException) { }
+    }
+
     public virtual async Task InitializeAsync(CancellationToken ct = default)
     {
         await using var c = await OpenAsync(ct);
+        await MeasureClockAsync(c, ct);
         // A read-only login can't create or upgrade the tables. That's fine as long as they exist:
         // it then works read-only. If they don't exist yet, someone with edit rights has to connect first.
         var denied = false;
@@ -344,7 +371,7 @@ public abstract partial class SqlDataSource : IDataSource
         var args = new (string, object?)[]
         {
             ("@user", p.User), ("@machine", p.Machine), ("@entry", p.EntryId.ToString()),
-            ("@state", (int)p.State), ("@seen", p.LastSeen.ToUnixTimeMilliseconds()),
+            ("@state", (int)p.State), ("@seen", (p.LastSeen + ClockSkew).ToUnixTimeMilliseconds()),
         };
         // Update first; insert if missing (portable across all four dialects).
         int n;
@@ -373,14 +400,15 @@ public abstract partial class SqlDataSource : IDataSource
 
     public async Task<IReadOnlyList<Presence>> GetPresenceAsync(CancellationToken ct = default)
     {
-        var cutoff = (DateTimeOffset.UtcNow - Presence.Ttl).ToUnixTimeMilliseconds();
+        var skew = ClockSkew;
+        var cutoff = (DateTimeOffset.UtcNow + skew - Presence.Ttl).ToUnixTimeMilliseconds();
         await using var c = await OpenAsync(ct);
         await using var cmd = Cmd(c, "SELECT user_name, machine, entry_id, state, last_seen FROM remoteman_presence WHERE last_seen > @cutoff", null, ("@cutoff", cutoff));
         var list = new List<Presence>();
         await using var r = await cmd.ExecuteReaderAsync(ct);
         while (await r.ReadAsync(ct))
             list.Add(new Presence(r.GetString(0), r.GetString(1), Guid.Parse(r.GetString(2)),
-                (PresenceState)Convert.ToInt32(r.GetValue(3)), DateTimeOffset.FromUnixTimeMilliseconds(Convert.ToInt64(r.GetValue(4)))));
+                (PresenceState)Convert.ToInt32(r.GetValue(3)), DateTimeOffset.FromUnixTimeMilliseconds(Convert.ToInt64(r.GetValue(4))) - skew));
         return list;
     }
 

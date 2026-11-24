@@ -91,5 +91,6 @@ public sealed class SqlServerDataSource : SqlDataSource
     /// <summary>DOMAIN\user with Windows authentication, the SQL login name otherwise.</summary>
     protected override string? CurrentUserSql => "SELECT SUSER_SNAME()";
 
+    protected override string? ServerNowSql => "SELECT DATEDIFF_BIG(millisecond, '1970-01-01', SYSUTCDATETIME())";
     protected override string NextCounterSql(int id) => $"UPDATE dbo.remoteman_meta SET rev = rev + 1 OUTPUT inserted.rev WHERE id = {id}";
 }

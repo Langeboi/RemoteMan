@@ -71,5 +71,6 @@ public sealed class MySqlDataSource : SqlDataSource
     protected override string? CurrentUserSql => "SELECT SUBSTRING_INDEX(USER(), '@', 1)";
 
     // LAST_INSERT_ID(expr) stores the value per-connection, so this is race free.
+    protected override string? ServerNowSql => "SELECT CAST(UNIX_TIMESTAMP(NOW(3)) * 1000 AS SIGNED)";
     protected override string NextCounterSql(int id) => $"UPDATE remoteman_meta SET rev = LAST_INSERT_ID(rev + 1) WHERE id = {id}; SELECT LAST_INSERT_ID();";
 }
