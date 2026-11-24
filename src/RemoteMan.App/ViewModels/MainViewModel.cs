@@ -136,6 +136,7 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
         try
         {
             // No site named on the data source but the relay has just one: the database uses it too (directly first).
+            GatewayService.Instance.ActiveSource = cfg;
             var dbSite = await GatewayService.Instance.DefaultSiteAtStartupAsync(cfg);
             var source = DataSourceFactory.Create(cfg, GatewayService.Instance.RouteFor(cfg, dbSite));
             _protector = Secrets.For(cfg);
