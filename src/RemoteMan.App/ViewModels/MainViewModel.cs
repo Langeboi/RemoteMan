@@ -81,7 +81,7 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
             var dbSite = await GatewayService.Instance.DefaultSiteAtStartupAsync(cfg);
             var source = DataSourceFactory.Create(cfg, GatewayService.Instance.RouteFor(cfg, dbSite));
             if (source is RedundantDataSource r)
-                r.FailedOver += (_, now) => OnUi(() => { DataSourceText = r.DisplayName; Message = $"Data source failed over to {now.DisplayName}"; });
+                r.FailedOver += (_, now) => OnUi(() => { DataSourceText = GatewayService.Instance.Describe(r.DisplayName); Message = $"Data source failed over to {GatewayService.Instance.Describe(now.DisplayName)}"; });
             _protector = Secrets.For(cfg);
             // Local files: your Windows account. Shared databases: the login the server reports (set on open).
             var user = Environment.UserDomainName is { Length: > 0 } dom && dom != Environment.MachineName
@@ -97,6 +97,16 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
                 ShowOnlineState(source, store);
                 Message = up ? "Back online" : "Database unreachable: working offline, retrying every 15 seconds";
             });
+            // The switch was flipped: the database's open connections were closed, so it reconnects on the new path
+            // now (directly when disconnected) rather than when they happen to drop.
+            GatewayService.Instance.Rerouted += () => _ = Task.Run(async () =>
+            {
+                DataSourceFactory.ClearPools();
+                await Task.Delay(TimeSpan.FromSeconds(1));
+                try { if (store.IsOnline) await store.PullAsync(); else await store.ReconnectNowAsync(); } catch { }
+                OnUi(() => ShowOnlineState(source, store));
+            });
+            GatewayService.Instance.ModeChanged += () => OnUi(() => ShowOnlineState(source, store));
             await store.OpenAsync();
             ShowOnlineState(source, store);
             RebuildTree();
@@ -129,8 +139,8 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
     {
         DataSourceOk = store.IsOnline;
         DataSourceText = store.IsOnline
-            ? $"{source.DisplayName} as {store.User}"
-            : $"{source.DisplayName}: offline, retrying every {store.ReconnectInterval.TotalSeconds:0} s" + (store.LastError is { } err ? $" ({err})" : "");
+            ? $"{GatewayService.Instance.Describe(source.DisplayName)} as {store.User}"
+            : $"{GatewayService.Instance.Describe(source.DisplayName)}: offline, retrying every {store.ReconnectInterval.TotalSeconds:0} s" + (store.LastError is { } err ? $" ({err})" : "");
         RefreshDashboard();
     }
 
