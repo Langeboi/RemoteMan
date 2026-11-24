@@ -565,7 +565,7 @@ public partial class MainWindow : Window
     {
         // Setting up or removing the gateway closes its forwarders, the database's among them: reopen the data
         // source so it connects on the new path straight away.
-        if (Views.GatewayDialog.Show(this, _settings) && _settings.Active.Kind != RemoteMan.Data.DataSourceKind.Sqlite)
+        if (Views.GatewayDialog.Show(this, _settings) && _settings.Active.Kind != RemoteMan.Core.Storage.DataSourceKind.Sqlite)
             _ = _vm.ReloadDataSourceAsync();
     }
     private void OnZPopupButton(object sender, RoutedEventArgs e) => ZButton.IsChecked = false;
