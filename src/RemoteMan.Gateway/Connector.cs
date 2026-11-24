@@ -17,6 +17,8 @@ public sealed class ConnectorOptions
     /// <summary>Shown on the relay (several connectors can serve one site).</summary>
     public string Name { get; init; } = Environment.MachineName;
     public AllowList Allow { get; init; } = new(null);
+    /// <summary>Sent to the relay so its admin console can show it (the image's version).</summary>
+    public string? Version { get; init; }
     public TimeSpan ConnectTimeout { get; init; } = TimeSpan.FromSeconds(3);
     public Action<string> Log { get; init; } = Console.WriteLine;
 }
@@ -31,6 +33,7 @@ public sealed class Connector
     private readonly ConnectorOptions _o;
     private readonly string _keyHeader;
     private int _active;
+    private AllowList? _siteAllow;
 
     public Connector(ConnectorOptions options)
     {
@@ -41,6 +44,8 @@ public sealed class Connector
     public string Fingerprint => SecureChannel.Fingerprint(_o.Key.ExportSubjectPublicKeyInfo());
     public int ActiveTunnels => Volatile.Read(ref _active);
     public bool Connected { get; private set; }
+    /// <summary>The site's resources as the relay's admin console set them (null: none, only <see cref="ConnectorOptions.Allow"/> counts).</summary>
+    public AllowList? SiteAllow => Volatile.Read(ref _siteAllow);
 
     /// <summary>Fires each time the control connection to the relay is up (for tests and the health check).</summary>
     public event Action? Online;
@@ -70,6 +75,8 @@ public sealed class Connector
                 using var ws = NewSocket();
                 ws.Options.SetRequestHeader(GatewayProtocol.KeyHeader, _keyHeader);
                 ws.Options.SetRequestHeader(GatewayProtocol.NameHeader, _o.Name);
+                ws.Options.SetRequestHeader(GatewayProtocol.AllowHeader, _o.Allow.ToString());
+                if (_o.Version is { Length: > 0 and <= 64 } v) ws.Options.SetRequestHeader(GatewayProtocol.ConnectorVersionHeader, v);
                 await RelayRefusedException.ConnectAsync(ws, GatewayProtocol.WebSocketUri(_o.Relay, GatewayProtocol.ConnectorPath), ct);
                 Connected = true;
                 _o.Log($"Connected to the relay {_o.Relay.Host} as {_o.Name} (key {Fingerprint})");
@@ -115,19 +122,36 @@ public sealed class Connector
 
     private async Task ControlLoopAsync(ClientWebSocket ws, CancellationToken ct)
     {
-        var buf = new byte[256];
+        var buf = new byte[4096];
+        var msg = new MemoryStream();
         while (ws.State == WebSocketState.Open)
         {
             WebSocketReceiveResult r;
             try { r = await ws.ReceiveAsync(buf, ct); }
             catch (WebSocketException) { return; }
             if (r.MessageType == WebSocketMessageType.Close) return;
-            if (!r.EndOfMessage || r.MessageType != WebSocketMessageType.Text) continue;
-            var line = Encoding.ASCII.GetString(buf, 0, r.Count);
+            if (msg.Length + r.Count <= 64 * 1024) msg.Write(buf, 0, r.Count);
+            if (!r.EndOfMessage) continue;
+            var line = Encoding.UTF8.GetString(msg.GetBuffer(), 0, (int)msg.Length);
+            msg.SetLength(0);
+            if (r.MessageType != WebSocketMessageType.Text) continue;
             if (line.StartsWith("open ", StringComparison.Ordinal))
             {
                 var id = line[5..].Trim();
                 _ = Task.Run(() => ServeTunnelAsync(id, ct), ct);
+            }
+            else if (line.StartsWith("allow", StringComparison.Ordinal))
+            {
+                var spec = line[5..].Trim();
+                try
+                {
+                    var next = spec.Length == 0 ? null : new AllowList(spec);
+                    var before = Volatile.Read(ref _siteAllow)?.ToString();
+                    Volatile.Write(ref _siteAllow, next);
+                    if (before != next?.ToString())
+                        _o.Log(next is null ? "The site has no resources set on the relay; ALLOW alone decides" : $"Site resources from the relay: {next} (also limited by ALLOW={_o.Allow})");
+                }
+                catch (FormatException ex) { _o.Log($"Ignoring the site's resources from the relay: {ex.Message}"); }
             }
         }
     }
@@ -182,6 +206,9 @@ public sealed class Connector
             catch (SocketException) { errors.Add($"{t}: no such host on the connector's network"); continue; }
             var allowed = addresses.Where(a => _o.Allow.Allows(a, port)).ToList();
             if (allowed.Count == 0) { errors.Add($"{t}: not allowed by the connector (ALLOW={_o.Allow})"); continue; }
+            var site = SiteAllow;
+            if (site is not null) allowed = allowed.Where(a => site.Allows(a, port)).ToList();
+            if (allowed.Count == 0) { errors.Add($"{t}: not in the site's resources on the relay ({site})"); continue; }
             foreach (var a in allowed)
             {
                 var tcp = new TcpClient(a.AddressFamily) { NoDelay = true };

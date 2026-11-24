@@ -21,6 +21,64 @@ RemoteMan (laptop, anywhere) ──443──►  relay (your home, remoteman.myd
 
 The relay doesn't have to be where the database or the devices are: they just need a connector next to them.
 
+## Quick start (one command, then the web console)
+
+On the Linux box that will run the relay:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/langeboi/remoteman/test/all-features/deploy/gateway/install-relay.sh | sudo sh
+```
+
+It asks for the relay's public name and whether it gets its own certificate (Caddy) or sits behind your proxy,
+installs Docker if needed, starts the relay and prints a one-time link. Open it, create your admin, and do the rest
+in the **admin console** at `https://<your relay>/admin/`:
+
+1. **Add site** (one per network). It opens straight into **Add connector**: a one-line install
+   (`curl … | sudo sh`, installs Docker on that machine if missing), a `docker run` line, or a `compose.yaml`, each
+   with a fresh token for that connector. Paste it inside the network and the dialog turns green when it's online.
+2. **Invite someone**: makes a link (`https://<relay>/enroll#…`). In RemoteMan, **More > Gateway settings**, paste
+   the link, Save. The PC joins by itself as its own device. (Opened in a browser, the link gives an `rmgw1.` code
+   for older RemoteMan builds.)
+
+Prefer to do it by hand? The sections below are the same thing step by step, and every console action has a CLI
+command too.
+
+## Admin console
+
+`https://<your relay>/admin/`, served by the relay itself (same port, nothing extra to run or proxy).
+
+- **Overview**: sites and connectors online, tunnels open now (who, where, how long, how much), traffic, recent
+  activity, and a *Get started* list until the first site, connector and device exist.
+- **Sites**: per site its connectors live (online since, from which address, version, its own `ALLOW`, open
+  tunnels, key) and offline ones with when they were last seen; one token per connector, each revocable on its
+  own (revoking disconnects it); **Resources**, the addresses and ports the site's connectors may open, pushed to
+  them at once (they open only what both the resources and their own `ALLOW` allow); which devices have access;
+  forget keys; remove.
+- **People & devices**: every device with its owner, sites, status (tunnels open, active, paused), last seen and
+  last address. Edit access, pause (refused until turned back on) or remove (refused at once, open tunnels close).
+  Invite links with an owner, sites, lifetime and how many PCs they may add; open ones can be revoked.
+- **Activity**: connectors coming and going, closed tunnels with duration and traffic, device and invite changes,
+  sign-ins (also failed ones) and every change made in the console, with who made it. Kept in `activity.jsonl`.
+- **Settings**: change your password, turn on an authenticator code (QR code, any TOTP app), see and sign out
+  your other sessions, add or remove admins.
+
+**Security.** The console is internet-facing like the relay, so: the first admin can only be made with the
+one-time setup link from the relay's log (or `gateway admin setup`); passwords are PBKDF2-SHA256 (210,000
+rounds); sessions are random tokens in an HttpOnly, SameSite=Strict cookie (Secure behind HTTPS), 12 hours idle at
+most; every change needs the console's own request header, so another site can't post to it; five wrong sign-ins
+lock that name and that address for 30 s, doubling up to 15 min, and are logged; pages carry a strict CSP. Narrow
+who can reach it with `ADMIN_ALLOW` (e.g. `ADMIN_ALLOW: 192.168.0.0/16,203.0.113.7`; behind your proxy, the last
+`X-Forwarded-For` address counts) or turn it off with `ADMIN=off`. RemoteMan, connectors and invite links work
+either way.
+
+**Locked out?** `docker exec -it remoteman-relay gateway admin reset <name>` sets a new password and turns the
+code off. `gateway admin list | add <name> | remove <name>` manage admins from the shell.
+
+**Already running a relay?** `docker compose pull && docker compose up -d`, then `docker logs remoteman-relay`
+shows the setup link (or run `docker exec remoteman-relay gateway admin setup`). Existing sites, devices and
+connectors carry on unchanged; the site's original token shows as *Site token* in the console. Update the
+connectors too (same command where they run) so they report their version and follow the site's resources.
+
 ## 1. Relay (once)
 
 1. DNS: an A record, e.g. `remoteman.mydomain.dk`, pointing at your public IP.
@@ -169,6 +227,8 @@ sites on one address) shows its default site; give those entries their own IP or
 | `gateway site reset-key <site>` | Forget the site's connector keys (after replacing a connector on purpose) |
 | `gateway site remove <site>` | |
 | `gateway device list` / `gateway device remove <name>` | A removed device is refused at once |
+| `gateway invite [--sites a,b] [--owner name] [--days 7] [--uses 1]` | Invite link to paste into RemoteMan |
+| `gateway admin setup` / `add` / `reset` / `remove` / `list` | Admin console accounts |
 
 Upgrade: `docker compose pull && docker compose up -d` on the relay and on each connector.
 

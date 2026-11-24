@@ -35,6 +35,12 @@ public sealed class AllowList
 
     public override string ToString() => _any ? "*" : string.Join(", ", _rules);
 
+    /// <summary>The spec in canonical form ("10.0.0.0/8, 192.168.1.0/24:22|3389"). Throws <see cref="FormatException"/> on a bad rule.</summary>
+    public static string Normalize(string spec) => new AllowList(spec).ToString();
+
+    /// <summary>The rules one by one, for showing.</summary>
+    public IReadOnlyList<string> Rules => _any ? ["*"] : _rules.Select(r => r.ToString()).ToList();
+
     public bool Allows(IPAddress address, int port)
     {
         if (address.IsIPv4MappedToIPv6) address = address.MapToIPv4();
@@ -68,7 +74,7 @@ public sealed class AllowList
             var addrText = slash < 0 ? text : text[..slash];
             if (!IPAddress.TryParse(addrText, out var ip)) throw new FormatException($"\"{text}\" isn't an address or range (hostnames aren't allowed in ALLOW).");
             var bytes = ip.GetAddressBytes();
-            var bits = slash < 0 ? bytes.Length * 8 : int.Parse(text[(slash + 1)..]);
+            var bits = slash < 0 ? bytes.Length * 8 : int.TryParse(text[(slash + 1)..], out var pb) ? pb : -1;
             if (bits < 0 || bits > bytes.Length * 8) throw new FormatException($"Bad prefix in {text}");
             return new Rule(bytes, bits, ip.AddressFamily, ports, ports is null ? text : $"{text}:{string.Join('|', ports)}");
         }
