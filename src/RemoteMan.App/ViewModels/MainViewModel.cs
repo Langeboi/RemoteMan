@@ -61,27 +61,83 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
 
     public async Task InitializeAsync()
     {
-        var cfg = _settings.Active;
+        HookGateway();
+        await _switching.WaitAsync();
+        try { await OpenDataSourceAsync(startup: true); }
+        finally { _switching.Release(); }
+    }
+
+    private bool _gatewayHooked;
+
+    /// <summary>
+    /// The gateway lives as long as the app; its events are wired once and always act on whichever data source is
+    /// open at the time, so switching data sources never leaves a handler behind on the old one.
+    /// </summary>
+    private void HookGateway()
+    {
+        if (_gatewayHooked) return;
+        _gatewayHooked = true;
+        var gw = GatewayService.Instance;
+        gw.Configure(_settings.Gateway);
+        gw.Problem += m => OnUi(() => Message = $"Gateway: {m}");
+        gw.UsageSummary = () => GatewayUsage(_settings.Active);
+        gw.ModeChanged += () => OnUi(() =>
+        {
+            try { _settings.Save(); } catch (Exception ex) { Message = $"Could not save settings: {ex.Message}"; }
+            Message = gw.Mode switch
+            {
+                GatewayMode.Connected => "Gateway: connected, everything goes through it",
+                GatewayMode.Disconnected => "Gateway: disconnected, everything connects directly",
+                _ => "Gateway: automatic, directly when possible and through the gateway when not",
+            };
+            if (_store is { } s) ShowOnlineState(s.Source, s);
+        });
+        // The switch was flipped: the database's open connections were closed, so it reconnects on the new path
+        // now (directly when disconnected) rather than when they happen to drop.
+        gw.Rerouted += () =>
+        {
+            if (_store is not { } store) return;
+            _ = Task.Run(async () =>
+            {
+                DataSourceFactory.ClearPools();
+                await Task.Delay(TimeSpan.FromSeconds(1));
+                if (_store != store) return;
+                try { if (store.IsOnline) await store.PullAsync(); else await store.ReconnectNowAsync(); } catch { }
+                OnUi(() => { if (_store == store) ShowOnlineState(store.Source, store); });
+            });
+        };
+    }
+
+    private readonly SemaphoreSlim _switching = new(1, 1);
+
+    /// <summary>
+    /// Closes the open data source and opens the active one in its place, without restarting: the database
+    /// connection, entry tree, presence, chat, shared sessions, integrations and dashboard all follow. Open tabs
+    /// keep running. Used after picking another data source, or changing the open one's connection or gateway site.
+    /// </summary>
+    public async Task ReloadDataSourceAsync()
+    {
+        await _switching.WaitAsync();
         try
         {
-            GatewayService.Instance.Configure(_settings.Gateway);
-            GatewayService.Instance.Problem += m => OnUi(() => Message = $"Gateway: {m}");
-            GatewayService.Instance.UsageSummary = () => GatewayUsage(cfg);
-            GatewayService.Instance.ModeChanged += () => OnUi(() =>
-            {
-                try { _settings.Save(); } catch (Exception ex) { Message = $"Could not save settings: {ex.Message}"; }
-                Message = GatewayService.Instance.Mode switch
-                {
-                    GatewayMode.Connected => "Gateway: connected, everything goes through it",
-                    GatewayMode.Disconnected => "Gateway: disconnected, everything connects directly",
-                    _ => "Gateway: automatic, directly when possible and through the gateway when not",
-                };
-            });
+            await CloseDataSourceAsync();
+            await OpenDataSourceAsync(startup: false);
+            if (_store is not null && DataSourceOk) Message = $"Opened {_settings.Active.Name}";
+        }
+        finally { _switching.Release(); }
+    }
+
+    private async Task OpenDataSourceAsync(bool startup)
+    {
+        var cfg = _settings.Active;
+        DataSourceOk = false;
+        DataSourceText = startup ? "Opening…" : $"Opening {cfg.Name}…";
+        OnPropertyChanged(nameof(DataSourceName));
+        try
+        {
             // No site named on the data source but the relay has just one: the database uses it too (directly first).
             var dbSite = await GatewayService.Instance.DefaultSiteAtStartupAsync(cfg);
             var source = DataSourceFactory.Create(cfg, GatewayService.Instance.RouteFor(cfg, dbSite));
-            if (source is RedundantDataSource r)
-                r.FailedOver += (_, now) => OnUi(() => { DataSourceText = GatewayService.Instance.Describe(r.DisplayName); Message = $"Data source failed over to {GatewayService.Instance.Describe(now.DisplayName)}"; });
             _protector = Secrets.For(cfg);
             // Local files: your Windows account. Shared databases: the login the server reports (set on open).
             var user = Environment.UserDomainName is { Length: > 0 } dom && dom != Environment.MachineName
@@ -89,40 +145,94 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
             IsSharedSource = cfg.Kind != DataSourceKind.Sqlite;
             var cache = IsSharedSource ? new OfflineCache(cfg.Name) : null;
             var store = _store = new EntryStore(source, user, Environment.MachineName, cache);
-            store.EntriesChanged += (_, _) => OnUi(RebuildTree);
-            store.PresenceChanged += (_, _) => OnUi(ApplyPresence);
+            // Every handler checks the store is still the open one: after a switch the old one may still finish a call.
+            bool Current() => ReferenceEquals(_store, store);
+            if (source is RedundantDataSource r)
+                r.FailedOver += (_, now) => OnUi(() =>
+                {
+                    if (!Current()) return;
+                    DataSourceText = GatewayService.Instance.Describe(r.DisplayName);
+                    Message = $"Data source failed over to {GatewayService.Instance.Describe(now.DisplayName)}";
+                });
+            store.EntriesChanged += (_, _) => OnUi(() => { if (Current()) RebuildTree(); });
+            store.PresenceChanged += (_, _) => OnUi(() => { if (Current()) ApplyPresence(); });
             // Lost connection = offline mode: red Q, entries stay usable, edits wait. Back online = green Q, live again.
             store.OnlineChanged += (_, up) => OnUi(() =>
             {
+                if (!Current()) return;
                 ShowOnlineState(source, store);
                 Message = up ? "Back online" : "Database unreachable: working offline, retrying every 15 seconds";
             });
-            // The switch was flipped: the database's open connections were closed, so it reconnects on the new path
-            // now (directly when disconnected) rather than when they happen to drop.
-            GatewayService.Instance.Rerouted += () => _ = Task.Run(async () =>
-            {
-                DataSourceFactory.ClearPools();
-                await Task.Delay(TimeSpan.FromSeconds(1));
-                try { if (store.IsOnline) await store.PullAsync(); else await store.ReconnectNowAsync(); } catch { }
-                OnUi(() => ShowOnlineState(source, store));
-            });
-            GatewayService.Instance.ModeChanged += () => OnUi(() => ShowOnlineState(source, store));
             await store.OpenAsync();
+            if (!Current()) return;
             ShowOnlineState(source, store);
             RebuildTree();
-            OfferReopen();
+            if (startup) OfferReopen();
             await LoadIntegrationsAsync(cfg, store);
             await SeedSnippetsAsync(cfg.Name);
-            _ = BackupLoopAsync();
+            if (startup) _ = BackupLoopAsync();
             await StartChatAsync(store);
             StartSharingWatch(store);
+            // Tabs left open from the previous data source: the new one hears about those that are its entries.
+            if (!startup) RefreshMyConnections();
         }
         catch (Exception ex)
         {
             DataSourceOk = false;
             DataSourceText = $"{cfg.Name}: {ex.Message}";
             Message = DataSourceText;
+            RefreshDashboard();
         }
+    }
+
+    /// <summary>
+    /// Turns off everything that belongs to the open data source, team features first while the database can still
+    /// be told (shares ended, presence cleared), then the connection itself. Open tabs stay; shared-session tabs
+    /// you joined close, because they came through that database's team.
+    /// </summary>
+    private async Task CloseDataSourceAsync()
+    {
+        SaveOpenSessions();
+        var store = _store;
+
+        // Shared sessions: end the ones you host (teammates are told), close the ones you watch, drop invites.
+        foreach (var hosted in _hosted.Keys.ToList())
+            try { await StopSharingAsync(hosted); } catch (Exception) { }
+        foreach (var guest in Sessions.Concat(_windowSessions).OfType<SharedSessionViewModel>().ToList()) guest.RequestClose();
+        StopSharingWatch();
+
+        // Chat: hub stopped, drawer emptied and hidden until the next source has chat.
+        if (_chat is not null)
+        {
+            try { await _chat.StopAsync(); } catch (Exception) { }
+            _chat.Reset();
+        }
+
+        // Zabbix and Oxidized settings are the data source's: stop polling and forget them.
+        await StopZabbixAsync();
+        StopOxidized();
+        _integrations = null;
+        await StartZabbixAsync();    // with no settings: clears the status, badges and dashboard tiles
+        await StartOxidizedAsync();
+
+        _store = null;
+        _protector = null;
+        _multi.Clear();
+        Selected = null;
+        _nodes.Clear();
+        Roots.Clear();
+        IsSharedSource = false;
+        OnlineText = "";
+        RefreshOnlineUsers();
+        if (store is not null)
+        {
+            // Clears this PC's presence on the old database, then closes its connections.
+            try { await store.DisposeAsync(); } catch (Exception) { }
+        }
+        DataSourceFactory.ClearPools();
+        GatewayService.Instance.ReleaseDatabase();
+        DataSourceOk = false;
+        RefreshDashboard();
     }
 
     /// <summary>What on this PC names a gateway site: the data source, and folders or entries that set one themselves.</summary>

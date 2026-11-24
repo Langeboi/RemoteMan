@@ -44,6 +44,18 @@ public sealed partial class MainViewModel
         _ = CheckInvitesAsync();
     }
 
+    /// <summary>The data source is closing: stop listening for invites and take their pop-ups away.</summary>
+    private void StopSharingWatch()
+    {
+        _shareTimer?.Stop();
+        _shareTimer = null;
+        foreach (var n in _inviteNotices.Values) Notices.Remove(n);
+        _inviteNotices.Clear();
+        _seenInvites.Clear();
+        _invites = [];
+        HasNotices = Notices.Count > 0;
+    }
+
     private bool SharingReady()
     {
         if (CanShareSessions) return true;

@@ -36,6 +36,8 @@ public sealed class GatewayService
         _cfg = null;
         _client?.Dispose();
         _client = null;
+        _dbForwarder = null;
+        _dbKeys.Clear();
         Device = null;
         if (cfg is null || string.IsNullOrEmpty(cfg.Url) || string.IsNullOrEmpty(cfg.Token)) return;
         try
@@ -88,6 +90,19 @@ public sealed class GatewayService
     }
 
     private LocalForwarder? _dbForwarder;
+    private readonly ConcurrentDictionary<string, byte> _dbKeys = new();
+
+    /// <summary>
+    /// The data source closed (switched or reconfigured): its database forwarders are closed, so the next one
+    /// starts on fresh ones and the status text never names the old server.
+    /// </summary>
+    public void ReleaseDatabase()
+    {
+        foreach (var key in _dbKeys.Keys)
+            if (_forwarders.TryRemove(key, out var f)) f.Dispose();
+        _dbKeys.Clear();
+        _dbForwarder = null;
+    }
 
     public void SetMode(GatewayMode mode)
     {
@@ -188,10 +203,8 @@ public sealed class GatewayService
         catch (Exception) { return []; }
     }
 
-    public LocalForwarder Forwarder(string site, IReadOnlyList<string> targets, bool directFirst)
-    {
-        var key = $"{site}|{string.Join(",", targets)}|{directFirst}";
-        return _forwarders.GetOrAdd(key, _ =>
+    public LocalForwarder Forwarder(string site, IReadOnlyList<string> targets, bool directFirst) =>
+        _forwarders.GetOrAdd(ForwarderKey(site, targets, directFirst), _ =>
         {
             var f = new LocalForwarder(Client, site, targets, directFirst);
             f.Failed += m => Problem?.Invoke(m);
@@ -199,7 +212,9 @@ public sealed class GatewayService
             f.Override = Override;
             return f;
         });
-    }
+
+    private static string ForwarderKey(string site, IReadOnlyList<string> targets, bool directFirst) =>
+        $"{site}|{string.Join(",", targets)}|{directFirst}";
 
     private readonly ConcurrentDictionary<string, (DateTime At, bool Direct)> _paths = new(StringComparer.OrdinalIgnoreCase);
 
@@ -225,7 +240,9 @@ public sealed class GatewayService
         var always = cfg.GatewaySite is { Length: > 0 } && cfg.GatewayAlways;
         return (host, port) =>
         {
-            var f = Forwarder(site, [GatewayProtocol.FormatTarget(host, port)], !always);
+            string[] targets = [GatewayProtocol.FormatTarget(host, port)];
+            var f = Forwarder(site, targets, !always);
+            _dbKeys[ForwarderKey(site, targets, !always)] = 0;
             _dbForwarder ??= f;
             return ("127.0.0.1", f.Port);
         };
