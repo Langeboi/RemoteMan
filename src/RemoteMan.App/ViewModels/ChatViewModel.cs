@@ -68,6 +68,7 @@ public sealed partial class ChatViewModel : ObservableObject
         hub.MessageArrived += OnHubMessage;
         await hub.StartAsync();
         IsAvailable = true;
+        OnPropertyChanged(nameof(CanSendFiles));
         Refresh();
     }
 
@@ -345,6 +346,12 @@ public sealed partial class ChatViewModel : ObservableObject
             {
                 var parts = ChatLink.Parse(lines[i]);
                 var only = parts.Where(p => p.Link is not null || p.Text.Trim().Length > 0).ToList();
+                if (only.Count == 1 && only[0].Link is { Kind: ChatLink.File } fl && ChatFileRef.From(fl) is { } file)
+                {
+                    FlushText();
+                    blocks.Add(new ChatFileBlock(file, this));
+                    continue;
+                }
                 if (only.Count == 1 && only[0].Link is { Kind: ChatLink.Invite } inv)
                 {
                     FlushText();

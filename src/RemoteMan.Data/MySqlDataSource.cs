@@ -62,6 +62,12 @@ public sealed class MySqlDataSource : SqlDataSource
             updated_at BIGINT NOT NULL, expires_at BIGINT NOT NULL, payload LONGTEXT NULL) CHARACTER SET utf8mb4
         """;
 
+    protected override string? ChatFilesTableSql => """
+        CREATE TABLE IF NOT EXISTS remoteman_chat_files (
+            id VARCHAR(36) NOT NULL PRIMARY KEY, room_id VARCHAR(36) NOT NULL, sender VARCHAR(200) NOT NULL,
+            sent_at BIGINT NOT NULL, size BIGINT NOT NULL, data LONGBLOB NOT NULL, INDEX ix_remoteman_chat_files_sent (sent_at)) CHARACTER SET utf8mb4
+        """;
+
     protected override string? SettingsTableSql => """
         CREATE TABLE IF NOT EXISTS remoteman_settings (
             name VARCHAR(100) NOT NULL PRIMARY KEY, value LONGTEXT NOT NULL, updated_at BIGINT NOT NULL, updated_by VARCHAR(200) NULL) CHARACTER SET utf8mb4

@@ -57,6 +57,8 @@ public sealed record ChatLink(string Kind, string Target, string Label)
     public const string Backups = "b";
     /// <summary>A shared-session invite; the target is the invite id.</summary>
     public const string Invite = "invite";
+    /// <summary>A file or image; the target is <see cref="ChatFileRef"/>'s id, size and key.</summary>
+    public const string File = "f";
 
     private static readonly Regex Token = new(@"\[\[([a-z]{1,12}):([^|\]\r\n]{1,200})\|([^\]\r\n]{0,200})\]\]", RegexOptions.Compiled);
 
@@ -82,7 +84,8 @@ public sealed record ChatLink(string Kind, string Target, string Label)
     }
 
     /// <summary>The body as plain text (links become their labels), for previews and toasts.</summary>
-    public static string Plain(string body) => string.Concat(Parse(body).Select(p => p.Link?.Label ?? p.Text));
+    public static string Plain(string body) => string.Concat(Parse(body).Select(p =>
+        p.Link is null ? p.Text : ChatFileRef.From(p.Link) is { } f ? $"[{f.Kind}: {f.Name}]" : p.Link.Label));
 }
 
 public sealed record ChatPart(string Text, ChatLink? Link);

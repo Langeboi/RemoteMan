@@ -82,6 +82,13 @@ public sealed class SqlServerDataSource : SqlDataSource
             updated_at BIGINT NOT NULL, expires_at BIGINT NOT NULL, payload NVARCHAR(MAX) NULL)
         """;
 
+    protected override string? ChatFilesTableSql => """
+        IF OBJECT_ID(N'dbo.remoteman_chat_files', N'U') IS NULL
+        CREATE TABLE dbo.remoteman_chat_files (
+            id VARCHAR(36) NOT NULL PRIMARY KEY, room_id VARCHAR(36) NOT NULL, sender NVARCHAR(200) NOT NULL,
+            sent_at BIGINT NOT NULL, size BIGINT NOT NULL, data VARBINARY(MAX) NOT NULL)
+        """;
+
     protected override string? SettingsTableSql => """
         IF OBJECT_ID(N'dbo.remoteman_settings', N'U') IS NULL
         CREATE TABLE dbo.remoteman_settings (

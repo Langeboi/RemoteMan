@@ -29,6 +29,7 @@ public partial class ChatPanel : UserControl
             else if (_vm is not null) _vm.IsPickerOpen = false;
         };
         // The picker is a popup (it floats above other apps): close it when the message box loses focus to another window.
+        CommandManager.AddPreviewExecutedHandler(Input, OnInputPaste);
         Input.LostKeyboardFocus += (_, e) => { if (_vm is not null && e.NewFocus is null) _vm.IsPickerOpen = false; };
     }
 
@@ -185,8 +186,48 @@ public partial class ChatPanel : UserControl
     private static Guid? DraggedEntry(DragEventArgs e) =>
         e.Data.GetData(EntryDragFormat) is string s && Guid.TryParse(s, out var id) ? id : null;
 
+    private static string[]? DroppedFiles(DragEventArgs e) =>
+        e.Data.GetDataPresent(DataFormats.FileDrop) ? e.Data.GetData(DataFormats.FileDrop) as string[] : null;
+
+    /// <summary>Files from Explorer dropped on the conversation or the message box are sent.</summary>
+    private void OnFilesDragOver(object sender, DragEventArgs e)
+    {
+        if (DroppedFiles(e) is null || _vm is not { CanSendFiles: true, Current: not null }) return;
+        e.Effects = DragDropEffects.Copy;
+        e.Handled = true;
+    }
+
+    private void OnFilesDrop(object sender, DragEventArgs e)
+    {
+        if (DroppedFiles(e) is not { } files || _vm is null) return;
+        e.Handled = true;
+        _ = _vm.SendFilesAsync(files);
+    }
+
+    /// <summary>Paste: files copied in Explorer, or a picture (a screenshot), are sent after asking; text pastes as usual.</summary>
+    private void OnInputPaste(object sender, ExecutedRoutedEventArgs e)
+    {
+        if (e.Command != ApplicationCommands.Paste || _vm is not { CanSendFiles: true, Current: not null }) return;
+        try
+        {
+            if (Clipboard.ContainsFileDropList())
+            {
+                var files = Clipboard.GetFileDropList().Cast<string>().ToList();
+                e.Handled = true;
+                _ = _vm.SendFilesAsync(files, ask: true);
+            }
+            else if (!Clipboard.ContainsText() && Clipboard.ContainsImage() && Clipboard.GetImage() is { } img)
+            {
+                e.Handled = true;
+                _ = _vm.SendClipboardImageAsync(img);
+            }
+        }
+        catch (Exception) { /* clipboard busy: paste as usual */ }
+    }
+
     private void OnInputDragOver(object sender, DragEventArgs e)
     {
+        if (DroppedFiles(e) is not null) { OnFilesDragOver(sender, e); return; }
         if (DraggedEntry(e) is null) return;   // text drags work as usual
         e.Effects = DragDropEffects.Link;
         e.Handled = true;
@@ -194,6 +235,7 @@ public partial class ChatPanel : UserControl
 
     private void OnInputDrop(object sender, DragEventArgs e)
     {
+        if (DroppedFiles(e) is not null) { OnFilesDrop(sender, e); return; }
         if (DraggedEntry(e) is not { } id || ResolveEntry?.Invoke(id) is not { } entry) return;
         _vm?.ShareEntry(entry);
         e.Handled = true;

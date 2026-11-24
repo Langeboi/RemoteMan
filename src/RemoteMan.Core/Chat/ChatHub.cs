@@ -203,6 +203,59 @@ public sealed class ChatHub : IAsyncDisposable
         await FlushAsync(ct);
     }
 
+    // ---------------- files ----------------
+
+    /// <summary>Whether files and images can be sent on this database.</summary>
+    public bool SupportsFiles => _chat.SupportsChatFiles;
+
+    /// <summary>
+    /// Sends a file: its bytes go to the files table (encrypted with a key of their own), then a message
+    /// links to it. Needs the database (files don't wait in the outbox), up to <see cref="ChatFileRef.MaxBytes"/>.
+    /// </summary>
+    public async Task<ChatFileRef> SendFileAsync(ChatRoom room, string name, byte[] data, CancellationToken ct = default)
+    {
+        if (!SupportsFiles) throw new NotSupportedException("This database can't store chat files yet: someone who may create tables has to connect once.");
+        if (data.LongLength > ChatFileRef.MaxBytes)
+            throw new InvalidOperationException($"{ChatFileRef.SafeName(name)} is {ChatFileRef.FormatSize(data.LongLength)}; files up to {ChatFileRef.FormatSize(ChatFileRef.MaxBytes)} can be sent in chat.");
+        var (blob, key) = ChatFileRef.Encrypt(data);
+        var file = new ChatFileRef(Guid.NewGuid(), data.LongLength, key, ChatFileRef.SafeName(name));
+        if (room is { Kind: ChatRoomKind.Direct } && !await RoomStoredAsync(room.Id, ct)) await _chat.SaveChatRoomAsync(room, ct);
+        await _chat.PostChatFileAsync(new StoredChatFile(file.Id, room.Id, Me, DateTimeOffset.UtcNow, blob), ct);
+        lock (_files) Remember(file.Id, data);
+        await SendAsync(room, file.ToLink().ToToken(), ct);
+        return file;
+    }
+
+    private readonly Dictionary<Guid, byte[]> _files = new();
+    private readonly LinkedList<Guid> _fileOrder = new();
+    private long _fileBytes;
+    private const long FileCacheBytes = 64 * 1024 * 1024;
+
+    /// <summary>A file's bytes (kept in memory for a while, so scrolling back doesn't fetch it again); null when it is gone.</summary>
+    public async Task<byte[]?> GetFileAsync(ChatFileRef file, CancellationToken ct = default)
+    {
+        lock (_files) if (_files.TryGetValue(file.Id, out var hit)) return hit;
+        var stored = await _chat.GetChatFileAsync(file.Id, ct);
+        if (stored is null) return null;
+        var data = file.Decrypt(stored.Blob);
+        lock (_files) Remember(file.Id, data);
+        return data;
+    }
+
+    private void Remember(Guid id, byte[] data)
+    {
+        if (_files.ContainsKey(id)) return;
+        _files[id] = data;
+        _fileOrder.AddLast(id);
+        _fileBytes += data.LongLength;
+        while (_fileBytes > FileCacheBytes && _fileOrder.First is { } oldest && oldest.Value != id)
+        {
+            _fileBytes -= _files[oldest.Value].LongLength;
+            _files.Remove(oldest.Value);
+            _fileOrder.RemoveFirst();
+        }
+    }
+
     /// <summary>Sends what is waiting in the outbox. Stops at the first connection failure.</summary>
     public async Task FlushAsync(CancellationToken ct = default)
     {

@@ -71,7 +71,9 @@ WebView2 runtime ships with Windows 11 and current Windows 10.
   multi-server failover, live updates and presence (who is viewing, editing or connected).
 - **Team chat** on shared databases: a contact list of groups and people, direct messages, and `#` links to
   entries, folders, credentials (name only), snippets and config backups that open in the reader's tree.
-  Messages are stored encrypted with the team vault key.
+  Messages are stored encrypted with the team vault key. Files, pictures and GIFs (up to 10 MB) are sent
+  with the paperclip, by dropping them from Explorer or by pasting; pictures and GIFs show inline, other
+  files get Open and Save. Each file is encrypted with a key of its own that only the message carries.
 - **AI assistant** (button at the top right, Ctrl+Shift+A): pick Claude, ChatGPT, Gemini, Mistral, a
   local Ollama server or any OpenAI-compatible endpoint. Signed in, it waits on standby; the button opens
   a chat box styled like the chosen provider. With an API key it can read the active SSH session's last
