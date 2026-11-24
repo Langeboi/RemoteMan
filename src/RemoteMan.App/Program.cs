@@ -17,6 +17,11 @@ public static class Program
         VelopackApp.Build().Run();
 
         AppDomain.CurrentDomain.UnhandledException += (_, e) => ReportCrash(e.ExceptionObject as Exception);
+        // A task nobody awaited failed: it doesn't end the app, but keep it for the log.
+        TaskScheduler.UnobservedTaskException += (_, e) => { WriteLog(e.Exception, "unobserved task"); e.SetObserved(); };
+        RecordLastRun();
+        // Runs on a normal exit and on Environment.Exit (an update restart), not when the process is torn down.
+        AppDomain.CurrentDomain.ProcessExit += (_, _) => EndRun();
         try
         {
             var app = new App();
@@ -61,13 +66,81 @@ public static class Program
         }
     }
 
-    private static void WriteLog(Exception ex)
+    private static void WriteLog(Exception ex, string? what = null) =>
+        WriteLog($"{(what is null ? "" : what + ": ")}{ex}");
+
+    private static void WriteLog(string text)
     {
         try
         {
             Directory.CreateDirectory(LogDir);
-            File.AppendAllText(CrashLog, $"[{DateTimeOffset.Now:O}] {typeof(Program).Assembly.GetName().Version}\n{ex}\n\n");
+            File.AppendAllText(CrashLog, $"[{DateTimeOffset.Now:O}] {typeof(Program).Assembly.GetName().Version}\n{text}\n\n");
         }
         catch (Exception) { }
+    }
+
+    // ── Crashes that skip the handlers above ─────────────────────────────────────────────────────────────────
+    // A crash inside native code (the RDP control, WebView2, a driver) or a stack overflow ends the process
+    // before any .NET handler runs. A marker file is written at start and removed on a normal exit; if it's
+    // still there at the next start, the last run died that way, and Windows' own record of it (Event Viewer,
+    // Application log) is copied into crash.log so it can be sent along like any other crash.
+
+    private static string RunMarker => Path.Combine(LogDir, "running");
+
+    private static void RecordLastRun()
+    {
+        try
+        {
+            if (File.Exists(RunMarker))
+            {
+                var started = File.GetLastWriteTime(RunMarker);
+                var other = File.ReadAllText(RunMarker).Trim();
+                // Another copy still running (a second window) isn't a crash.
+                if (!(int.TryParse(other, out var pid) && IsRemoteMan(pid)) && WindowsCrashRecord(started) is { } record)
+                    WriteLog($"The previous run (started {started:yyyy-MM-dd HH:mm:ss}) crashed outside .NET; Windows recorded:\n{record}");
+            }
+            Directory.CreateDirectory(LogDir);
+            File.WriteAllText(RunMarker, Environment.ProcessId.ToString());
+        }
+        catch (Exception) { }
+    }
+
+    private static void EndRun()
+    {
+        try
+        {
+            if (File.Exists(RunMarker) && File.ReadAllText(RunMarker).Trim() == Environment.ProcessId.ToString()) File.Delete(RunMarker);
+        }
+        catch (Exception) { }
+    }
+
+    private static bool IsRemoteMan(int pid)
+    {
+        if (pid == Environment.ProcessId) return false;
+        try { using var p = System.Diagnostics.Process.GetProcessById(pid); return p.ProcessName.Equals(System.Diagnostics.Process.GetCurrentProcess().ProcessName, StringComparison.OrdinalIgnoreCase); }
+        catch (Exception) { return false; }
+    }
+
+    /// <summary>Windows' Application log entries about RemoteMan since <paramref name="since"/> (the crash itself).</summary>
+    private static string? WindowsCrashRecord(DateTime since)
+    {
+        try
+        {
+            using var log = new System.Diagnostics.EventLog("Application");
+            var exe = Path.GetFileName(Environment.ProcessPath ?? "RemoteMan.exe");
+            var hits = new List<string>();
+            for (var i = log.Entries.Count - 1; i >= 0 && hits.Count < 3; i--)
+            {
+                var e = log.Entries[i];
+                if (e.TimeGenerated < since) break;
+                if (e.EntryType != System.Diagnostics.EventLogEntryType.Error) continue;
+                if (e.Source is not ("Application Error" or ".NET Runtime" or "Application Hang")) continue;
+                if (!e.Message.Contains(exe, StringComparison.OrdinalIgnoreCase)) continue;
+                hits.Add($"Windows Event Log, {e.Source}, {e.TimeGenerated:yyyy-MM-dd HH:mm:ss}:\n{e.Message.Trim()}");
+            }
+            // Nothing recorded: ended from Task Manager, a shutdown, or a crash already in the log above.
+            return hits.Count == 0 ? null : string.Join("\n\n", hits);
+        }
+        catch (Exception ex) { return $"Couldn't read the Windows event log: {ex.Message}"; }
     }
 }
