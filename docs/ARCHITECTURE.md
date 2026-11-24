@@ -194,6 +194,15 @@ network, both connecting out only. Setup in [deploy/gateway](../deploy/gateway/R
   through the site, then points the session at a `LocalForwarder` on 127.0.0.1. Data sources route each
   server through its own forwarder (`DataSourceFactory.RouteHosts`) that tries direct first and remembers the
   choice for a minute. SSH host keys are saved under the real host.
+- **Admin console** (`Gateway.Server/Admin`): served by the relay at `/admin` as embedded static files (vanilla JS,
+  no build step) plus a JSON API under `/admin/api`. Admins are stored in `relay.json` with PBKDF2 hashes and an
+  optional TOTP secret. The first admin comes from a one-time setup code that the relay logs, or from
+  `gateway admin setup`. Sessions are kept in memory behind an HttpOnly, SameSite=Strict cookie, and every change
+  needs the `X-RemoteMan-Admin` header. Each connector can have its own token (`SiteRecord.ConnectorTokens`).
+  Site resources are sent to connectors as `allow <spec>` on the control socket, and a connector opens only what
+  both the site's resources and its own `ALLOW` allow. Invite links (`/enroll#code`, `POST /v1/enroll`) create a
+  device when they're used; `GatewayEnrollment` lets RemoteMan redeem one directly. Activity is appended to
+  `activity.jsonl`.
 
 ## Known gaps / next steps
 

@@ -127,10 +127,19 @@ the script for servers without Docker is still in [deploy/postgres](deploy/postg
 
 Reach the database and the machines at school, in a friend's homelab or behind CG-NAT over 443, with no port
 forwarding on their side. A relay runs at home (or anywhere with a public IP) and a connector runs in each remote
-network; both only connect out, and RemoteMan's traffic is encrypted end to end through them. Paste your invite
-under **More > Gateway settings**, then pick a site on a folder, an entry or the data source. Once it's set up, a **Gateway** pill appears at the
-bottom left; its light shows the relay's state, and clicking it opens a live status box (relay latency, open
-tunnels, traffic, sites). Setup in [deploy/gateway](deploy/gateway/README.md).
+network; both only connect out, and RemoteMan's traffic is encrypted end to end through them.
+
+- **Set up the relay with one command** on any Linux box:
+  `curl -fsSL https://raw.githubusercontent.com/langeboi/remoteman/test/all-features/deploy/gateway/install-relay.sh | sudo sh`.
+  It prints a one-time link that creates your admin.
+- **Manage everything in the relay's web admin console** at `https://<your relay>/admin/`: add sites, start
+  connectors with a one-line install, set which subnets each site may reach, invite people and PCs, pause or remove
+  devices, and watch connectors, tunnels and activity live. Sign-in is a password plus an optional authenticator code.
+- **In RemoteMan**, paste the invite link under **More > Gateway settings**, then pick a site on a folder, an entry or the
+  data source. A **Gateway** pill appears at the bottom left; its light shows the relay's state, and clicking it opens
+  a live status box (relay latency, open tunnels, traffic, sites).
+
+Full guide, proxy examples and the CLI in [deploy/gateway](deploy/gateway/README.md).
 
 ## Install
 
