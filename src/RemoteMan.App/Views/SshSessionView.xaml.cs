@@ -99,6 +99,14 @@ public partial class SshSessionView : UserControl
 
     private async void OnWebMessage(object? sender, CoreWebView2WebMessageReceivedEventArgs e)
     {
+        // async void: anything thrown here would take the app down. Work that finishes after the tab closed
+        // (a connect, an upload) finds the terminal gone; that's expected, not a crash.
+        try { await HandleWebMessageAsync(e); }
+        catch (Exception ex) when (_closing && ex is ObjectDisposedException or InvalidOperationException or OperationCanceledException) { }
+    }
+
+    private async Task HandleWebMessageAsync(CoreWebView2WebMessageReceivedEventArgs e)
+    {
         using var doc = JsonDocument.Parse(e.WebMessageAsJson);
         var m = doc.RootElement;
         switch (m.GetProperty("t").GetString())
@@ -166,7 +174,7 @@ public partial class SshSessionView : UserControl
         _ssh.Info += s => Dispatcher.BeginInvoke(() => Post(new { t = "info", d = s }));
         _ssh.Closed += ex => Dispatcher.BeginInvoke(() =>
         {
-            if (!ReferenceEquals(_ssh, ssh0)) return;  // an older connection, already replaced
+            if (_closing || !ReferenceEquals(_ssh, ssh0)) return;  // the tab closed, or an older connection already replaced
             Post(new { t = "info", d = ex is null ? "\r\n[session closed]" : $"\r\n[disconnected: {ex.Message}]" });
             _vm.StatusText = "SSH disconnected";
             _vm.Sender = null;
@@ -179,7 +187,9 @@ public partial class SshSessionView : UserControl
         Post(new { t = "info", d = $"Connecting to {targets[0]}{fb}…" });
         try
         {
-            await _ssh.ConnectAsync(targets, _vm.Jumps, _vm.Credential, _vm.Settings, KnownHosts, cols, rows);
+            await ssh0.ConnectAsync(targets, _vm.Jumps, _vm.Credential, _vm.Settings, KnownHosts, cols, rows);
+            // The tab was closed (or a reconnect replaced this one) while connecting.
+            if (_closing || !ReferenceEquals(_ssh, ssh0)) { if (_closing) try { ssh0.Dispose(); } catch (Exception) { } return; }
             Post(new { t = "info", d = _ssh.NegotiatedSummary ?? "" });
             var via = _vm.Jumps.Count > 0 ? $" via {string.Join(" → ", _vm.Jumps.Select(j => j.Name))}" : "";
             if (_vm.Via is { } gw) via = $" ({gw})";
@@ -201,6 +211,7 @@ public partial class SshSessionView : UserControl
         }
         catch (Exception ex)
         {
+            if (_closing || !ReferenceEquals(_ssh, ssh0)) return;
             Post(new { t = "info", d = $"Connection failed: {ex.Message}" });
             _vm.StatusText = "SSH failed";
             if (_reconnects > 0 && TryReconnect()) return;
@@ -231,6 +242,7 @@ public partial class SshSessionView : UserControl
                 Hook(telnet, label);
                 Post(new { t = "info", d = $"Connecting to {vm.Endpoint}…" });
                 await telnet.ConnectAsync(vm.Endpoint, vm.Credential, cols, rows);
+                if (_closing) { try { telnet.Dispose(); } catch (Exception) { } return; }
                 _chan = telnet;
                 vm.StatusText = $"Telnet {vm.Endpoint}";
             }
@@ -243,6 +255,7 @@ public partial class SshSessionView : UserControl
         }
         catch (Exception ex)
         {
+            if (_closing) return;
             Post(new { t = "info", d = $"Connection failed: {ex.Message}" });
             vm.StatusText = $"{label} failed";
             if (_reconnects > 0 && TryReconnect()) return;
@@ -256,7 +269,7 @@ public partial class SshSessionView : UserControl
         c.Info += s => Dispatcher.BeginInvoke(() => Post(new { t = "info", d = s }));
         c.Closed += ex => Dispatcher.BeginInvoke(() =>
         {
-            if (_chan is not null && !ReferenceEquals(_chan, c)) return;  // an older connection, already replaced
+            if (_closing || _chan is not null && !ReferenceEquals(_chan, c)) return;  // the tab closed, or an older connection already replaced
             Post(new { t = "info", d = ex is null ? "\r\n[session closed]" : $"\r\n[disconnected: {ex.Message}]" });
             if (_vm is null) return;
             _vm.StatusText = $"{label} disconnected";
@@ -280,7 +293,10 @@ public partial class SshSessionView : UserControl
 
     private void Post(object message)
     {
-        if (Web.CoreWebView2 is { } core) core.PostWebMessageAsJson(JsonSerializer.Serialize(message));
+        // A connect or reconnect that finishes after the tab closed has nowhere to write: drop it.
+        if (_closing) return;
+        try { if (Web.CoreWebView2 is { } core) core.PostWebMessageAsJson(JsonSerializer.Serialize(message)); }
+        catch (Exception ex) when (ex is ObjectDisposedException or InvalidOperationException) { }
     }
 
     // ---------------- SFTP Files panel ----------------
@@ -813,10 +829,14 @@ public partial class SshSessionView : UserControl
     /// <summary>The connection dropped: try again a few times (Advanced > Connection > Reconnect). False when it won't.</summary>
     private bool TryReconnect()
     {
-        if (_closing || _vm is not { AutoReconnect: true } || _reconnects >= 5 || _vm.Entry.Kind == EntryKind.Serial) return false;
-        _reconnects++;
-        var wait = TimeSpan.FromSeconds(Math.Min(30, 3 * _reconnects));
-        Post(new { t = "info", d = $"Reconnecting in {wait.TotalSeconds:0} s (try {_reconnects} of 5)…" });
+        if (_closing || _vm is null || _vm.Entry.Kind == EntryKind.Serial) return false;
+        // The gateway switch was just flipped and closed this connection on purpose: reconnect right away on the
+        // new path, whatever the reconnect setting, and don't count it as a failed try.
+        var switched = Services.GatewayService.Instance.JustRerouted;
+        if (!switched && (!_vm.AutoReconnect || _reconnects >= 5)) return false;
+        if (!switched) _reconnects++;
+        var wait = switched ? TimeSpan.FromMilliseconds(500) : TimeSpan.FromSeconds(Math.Min(30, 3 * _reconnects));
+        Post(new { t = "info", d = switched ? "Gateway switched: reconnecting…" : $"Reconnecting in {wait.TotalSeconds:0} s (try {_reconnects} of 5)…" });
         _vm.StatusText = "Reconnecting…";
         var timer = new DispatcherTimer { Interval = wait };
         timer.Tick += async (_, _) =>

@@ -71,6 +71,11 @@ public sealed class GatewayService
     /// <summary>Connections were closed so they reconnect on the new path (database pools should be cleared).</summary>
     public event Action? Rerouted;
 
+    private DateTime _reroutedAt;
+
+    /// <summary>The switch closed connections in the last few seconds (sessions that dropped should just reconnect).</summary>
+    public bool JustRerouted => DateTime.UtcNow - _reroutedAt < TimeSpan.FromSeconds(5);
+
     /// <summary>
     /// A data source name with the local forwarder addresses (127.0.0.1:port) put back to the real servers and
     /// the path last used: "PostgreSQL (10.0.0.5:5432 via school)" rather than "PostgreSQL (127.0.0.1:60518)".
@@ -115,7 +120,7 @@ public sealed class GatewayService
         {
             var dropped = 0;
             foreach (var f in _forwarders.Values) dropped += f.Drop(direct: mode == GatewayMode.Connected);
-            if (dropped > 0) Rerouted?.Invoke();
+            if (dropped > 0) { _reroutedAt = DateTime.UtcNow; Rerouted?.Invoke(); }
         }
         ModeChanged?.Invoke();
         Changed?.Invoke();
