@@ -23,7 +23,11 @@ public sealed partial class MainViewModel
     {
         ApplyMyConnections(closing);
         if (_store is not null)
-            _ = _store.SetMyConnectionsAsync(MyConnections(closing).Where(s => s.Entry.Revision > 0).Select(s => s.Entry.Id));
+        {
+            // Only this data source's entries: tabs still open from another one aren't announced here.
+            var store = _store;
+            _ = store.SetMyConnectionsAsync(MyConnections(closing).Where(s => s.Entry.Revision > 0 && store.Get(s.Entry.Id) is not null).Select(s => s.Entry.Id).ToList());
+        }
     }
 
     /// <summary>Sets each tree row's count of open sessions (several tabs to one entry count each).</summary>

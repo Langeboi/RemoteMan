@@ -156,9 +156,8 @@ public sealed class GatewayStatusBox : Border
         var usage = idle ? gw.UsageSummary?.Invoke() : null;
         _hint.Text = !idle ? "" : usage is null
             ? $"Nothing uses the gateway yet. Pick {site ?? "a site"} under Gateway on a folder or entry (Edit > Advanced > Connection), " +
-              "or for the database in Data sources (then restart)."
-            : $"Set to use it: {usage}. Nothing has needed it yet: each connection first tries directly, unless Always is ticked. " +
-              "A data source change applies after a restart.";
+              "or for the database in Data sources."
+            : $"Set to use it: {usage}. Nothing has needed it yet: each connection first tries directly, unless Always is ticked.";
         _hint.Visibility = idle ? Visibility.Visible : Visibility.Collapsed;
         _latency.Text = gw.Latency is { } l ? $"{l.TotalMilliseconds:0} ms" : "–";
         _tunnels.Text = opening ? $"{open} +1" : open.ToString(CultureInfo.CurrentCulture);

@@ -83,6 +83,28 @@ public sealed partial class ChatViewModel : ObservableObject
         _hub = null;
     }
 
+    /// <summary>The data source closed: empty the drawer so nothing from the old team's chat is left showing.</summary>
+    public void Reset()
+    {
+        _store = null;
+        // Hidden without changing the saved choice, so the drawer comes back open on the next source that has chat.
+        _resetting = true;
+        try { IsOpen = false; } finally { _resetting = false; }
+        IsPickerOpen = false;
+        Current = null;
+        Groups.Clear();
+        People.Clear();
+        Messages.Clear();
+        PickItems.Clear();
+        Toasts.Clear();
+        _draftLinks.Clear();
+        Draft = "";
+        Filter = "";
+        HeaderText = "";
+        PendingShareText = "";
+        TotalUnread = 0;
+    }
+
     private void OnHubChanged(object? sender, EventArgs e) => OnUi(Refresh);
     private void OnHubMessage(object? sender, ChatMessage m) => OnUi(() => Arrived(m));
 
@@ -92,9 +114,11 @@ public sealed partial class ChatViewModel : ObservableObject
         if (d is null || d.CheckAccess()) a(); else d.BeginInvoke(a);
     }
 
+    private bool _resetting;
+
     partial void OnIsOpenChanged(bool value)
     {
-        _main.ChatOpenChanged(value);
+        if (!_resetting) _main.ChatOpenChanged(value);
         if (value) { Toasts.Clear(); if (Current is not null) MarkRead(); }
         else IsPickerOpen = false;
     }

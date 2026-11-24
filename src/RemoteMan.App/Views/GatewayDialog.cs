@@ -9,7 +9,8 @@ namespace RemoteMan.App.Views;
 /// <summary>More > Gateway settings: paste this PC's invite, see the sites it can use and whether their connectors are online.</summary>
 public static class GatewayDialog
 {
-    public static void Show(Window owner, AppSettings settings)
+    /// <summary>Returns true when the gateway was set up, replaced or removed (its connections were closed).</summary>
+    public static bool Show(Window owner, AppSettings settings)
     {
         var gw = GatewayService.Instance;
         var box = new TextBox
@@ -44,24 +45,25 @@ public static class GatewayDialog
             if (GatewayInvite.TryParse(box.Text) is not { } invite)
             {
                 ChoiceDialog.Info(owner, "That isn't an invite", "An invite starts with rmgw1. and is one long line. Copy all of it from the relay's output.");
-                return;
+                return false;
             }
             settings.Gateway = GatewayService.FromInvite(invite);
             settings.Save();
             gw.Configure(settings.Gateway);
-            var restartNote = settings.Active.GatewaySite is { Length: > 0 }
-                ? " The database goes through it from the next start." : "";
-            ChoiceDialog.Info(owner, "Gateway set up", $"This PC now uses the relay {new Uri(invite.Url).Host}.{restartNote}");
+            ChoiceDialog.Info(owner, "Gateway set up", $"This PC now uses the relay {new Uri(invite.Url).Host}.");
+            return true;
         }
         else if (pick == 1 && gw.IsConfigured)
         {
             if (ChoiceDialog.Show(owner, "Remove the gateway from this PC?",
                     "Entries that need it won't connect from other networks. The relay keeps the device until you run `gateway device remove` there.",
-                    ["Remove", "Cancel"], DialogIcon.Question, danger: true) != 0) return;
+                    ["Remove", "Cancel"], DialogIcon.Question, danger: true) != 0) return false;
             settings.Gateway = null;
             settings.Save();
             gw.Configure(null);
+            return true;
         }
+        return false;
     }
 
     private static async Task<string> DescribeSitesAsync(GatewayService gw)
