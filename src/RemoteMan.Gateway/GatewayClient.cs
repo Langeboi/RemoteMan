@@ -232,11 +232,41 @@ public sealed class LocalForwarder : IDisposable
         }
     }
 
+    private sealed class Live(CancellationTokenSource cts, TcpClient local)
+    {
+        public CancellationTokenSource Cts { get; } = cts;
+        public TcpClient Local { get; } = local;
+        public bool? Direct { get; set; }
+    }
+
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<Live, byte> _live = new();
+
+    /// <summary>
+    /// Closes the open connections that went directly (<paramref name="direct"/> true) or through the gateway
+    /// (false), e.g. after the switch was flipped: the program reconnects and its new connection takes the new
+    /// path. Returns how many were closed.
+    /// </summary>
+    public int Drop(bool direct)
+    {
+        var n = 0;
+        foreach (var l in _live.Keys)
+        {
+            if (l.Direct != direct) continue;
+            try { l.Cts.Cancel(); } catch { }
+            try { l.Local.Dispose(); } catch { }
+            n++;
+        }
+        return n;
+    }
+
     private async Task ServeAsync(TcpClient local)
     {
+        using var connCts = CancellationTokenSource.CreateLinkedTokenSource(_cts.Token);
+        var live = new Live(connCts, local);
+        _live[live] = 0;
         using (local)
         {
-            var ct = _cts.Token;
+            var ct = connCts.Token;
             try
             {
                 var manual = Override?.Invoke();
@@ -246,6 +276,7 @@ public sealed class LocalForwarder : IDisposable
                     if (await DialDirectAsync(ct, TimeSpan.FromSeconds(10)) is not var (dtcp, dtarget))
                         throw new GatewayException($"None of {string.Join(", ", Targets)} answered directly (the gateway is switched off).");
                     LastPath = dtarget;
+                    live.Direct = true;
                     Used?.Invoke(true);
                     using (dtcp) await BridgeAsync(local.GetStream(), dtcp.GetStream(), ct);
                     return;
@@ -256,6 +287,7 @@ public sealed class LocalForwarder : IDisposable
                     using (ready)
                     {
                         LastPath = $"{ready.Target} via {Site}";
+                        live.Direct = false;
                         Used?.Invoke(false);
                         await ready.PumpAsync(local.GetStream(), ct);
                     }
@@ -268,6 +300,7 @@ public sealed class LocalForwarder : IDisposable
                     {
                         _path = (DateTime.UtcNow, true);
                         LastPath = target;
+                        live.Direct = true;
                         Used?.Invoke(true);
                         using (tcp) await BridgeAsync(local.GetStream(), tcp.GetStream(), ct);
                         return;
@@ -276,6 +309,7 @@ public sealed class LocalForwarder : IDisposable
                 using var tunnel = await _client.OpenAsync(Site, Targets, ct);
                 if (DirectFirst) _path = (DateTime.UtcNow, false);
                 LastPath = $"{tunnel.Target} via {Site}";
+                live.Direct = false;
                 Used?.Invoke(false);
                 await tunnel.PumpAsync(local.GetStream(), ct);
             }
@@ -284,6 +318,7 @@ public sealed class LocalForwarder : IDisposable
                 Failed?.Invoke(ex is GatewayException or RelayRefusedException ? ex.Message : ex.GetBaseException().Message);
             }
             catch { }
+            finally { _live.TryRemove(live, out _); }
         }
     }
 

@@ -120,6 +120,25 @@ public sealed class GatewayTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Flipping_the_switch_closes_connections_on_the_old_path()
+    {
+        using var client = Client();
+        using var fwd = new LocalForwarder(client, "lab", [$"127.0.0.1:{EchoPort}"], directFirst: true) { Override = () => true };
+        using var tcp = new TcpClient();
+        await tcp.ConnectAsync(IPAddress.Loopback, fwd.Port);
+        var s = tcp.GetStream();
+        await s.WriteAsync("a"u8.ToArray());
+        var buf = new byte[1];
+        Assert.Equal(1, await s.ReadAsync(buf));                         // open, through the gateway
+        Assert.Equal(0, fwd.Drop(direct: true));                         // nothing direct to close
+        Assert.Equal(1, fwd.Drop(direct: false));                        // switched off: the tunnelled one closes
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        int n;
+        try { n = await s.ReadAsync(buf, cts.Token); } catch (IOException) { n = 0; }
+        Assert.Equal(0, n);
+    }
+
+    [Fact]
     public async Task Many_connections_at_once_all_get_through()
     {
         // Four people with a few sessions each: tunnels are independent, so they open side by side.

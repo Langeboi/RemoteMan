@@ -10,6 +10,14 @@ public static class DataSourceFactory
     /// </summary>
     public delegate (string Host, int Port) Route(string host, int port);
 
+    /// <summary>Drops the pooled database connections, so the next query opens a fresh one (on the current path).</summary>
+    public static void ClearPools()
+    {
+        try { Npgsql.NpgsqlConnection.ClearAllPools(); } catch { }
+        try { Microsoft.Data.SqlClient.SqlConnection.ClearAllPools(); } catch { }
+        try { MySqlConnector.MySqlConnection.ClearAllPools(); } catch { }
+    }
+
     public static IDataSource Create(DataSourceConfig cfg, Route? route = null)
     {
         if (cfg.ConnectionStrings.Count == 0) throw new ArgumentException("No connection string configured.");

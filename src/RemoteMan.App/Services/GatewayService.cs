@@ -66,11 +66,42 @@ public sealed class GatewayService
     /// <summary>The switch was flipped (the settings need saving).</summary>
     public event Action? ModeChanged;
 
+    /// <summary>Connections were closed so they reconnect on the new path (database pools should be cleared).</summary>
+    public event Action? Rerouted;
+
+    /// <summary>
+    /// A data source name with the local forwarder addresses (127.0.0.1:port) put back to the real servers and
+    /// the path last used: "PostgreSQL (10.0.0.5:5432 via school)" rather than "PostgreSQL (127.0.0.1:60518)".
+    /// </summary>
+    public string Describe(string text)
+    {
+        if (!text.Contains("127.0.0.1")) return text;
+        foreach (var f in _forwarders.Values)
+        {
+            var shown = f.LastPath ?? f.Targets.FirstOrDefault() ?? "";
+            text = text.Replace($"tcp:127.0.0.1,{f.Port}", shown).Replace($"127.0.0.1:{f.Port}", shown);
+        }
+        // MySQL names the server without its port.
+        if (text.Contains("(127.0.0.1)") && _dbForwarder is { } db)
+            text = text.Replace("(127.0.0.1)", $"({db.LastPath ?? db.Targets.FirstOrDefault()})");
+        return text;
+    }
+
+    private LocalForwarder? _dbForwarder;
+
     public void SetMode(GatewayMode mode)
     {
         if (_cfg is null || _cfg.Mode == mode) return;
         _cfg.Mode = mode;
         _paths.Clear();
+        // Open connections on the path that's now switched off are closed, so the database and sessions reconnect
+        // on the new one right away instead of staying on the old path until they happen to drop.
+        if (mode != GatewayMode.Auto)
+        {
+            var dropped = 0;
+            foreach (var f in _forwarders.Values) dropped += f.Drop(direct: mode == GatewayMode.Connected);
+            if (dropped > 0) Rerouted?.Invoke();
+        }
         ModeChanged?.Invoke();
         Changed?.Invoke();
     }
@@ -192,7 +223,12 @@ public sealed class GatewayService
         site ??= cfg.GatewaySite;
         if (site is not { Length: > 0 } || cfg.Kind == DataSourceKind.Sqlite || _client is null) return null;
         var always = cfg.GatewaySite is { Length: > 0 } && cfg.GatewayAlways;
-        return (host, port) => ("127.0.0.1", Forwarder(site, [GatewayProtocol.FormatTarget(host, port)], !always).Port);
+        return (host, port) =>
+        {
+            var f = Forwarder(site, [GatewayProtocol.FormatTarget(host, port)], !always);
+            _dbForwarder ??= f;
+            return ("127.0.0.1", f.Port);
+        };
     }
 
     /// <summary>
