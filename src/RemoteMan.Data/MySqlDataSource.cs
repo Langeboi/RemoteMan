@@ -12,6 +12,7 @@ public sealed class MySqlDataSource : SqlDataSource
     public override string DisplayName => $"MySQL ({new MySqlConnectionStringBuilder(ConnectionString).Server})";
     public override DataSourceKind Kind => DataSourceKind.MySql;
 
+    protected override void ClearPool() { try { MySqlConnection.ClearPool((MySqlConnection)CreateConnection()); } catch { } }
     protected override DbConnection CreateConnection() => new MySqlConnection(ConnectionString);
 
     protected override IEnumerable<string> SchemaStatements =>

@@ -20,6 +20,7 @@ public sealed class PostgresDataSource : SqlDataSource
     public override string DisplayName => $"PostgreSQL ({new NpgsqlConnectionStringBuilder(ConnectionString).Host})";
     public override DataSourceKind Kind => DataSourceKind.PostgreSql;
 
+    protected override void ClearPool() { try { NpgsqlConnection.ClearPool((NpgsqlConnection)CreateConnection()); } catch { } }
     protected override DbConnection CreateConnection() => new NpgsqlConnection(_connectionString ??= WithAppName(ConnectionString));
 
     private string? _connectionString;
@@ -126,6 +127,7 @@ public sealed class PostgresDataSource : SqlDataSource
 
     private async Task ListenLoopAsync(CancellationToken ct)
     {
+        var failures = 0;
         while (!ct.IsCancellationRequested)
         {
             try
@@ -148,6 +150,7 @@ public sealed class PostgresDataSource : SqlDataSource
                 };
                 await using (var cmd = new NpgsqlCommand($"LISTEN {Channel}", conn)) await cmd.ExecuteNonQueryAsync(ct);
                 // Catch up on anything that happened while we were not listening.
+                failures = 0;
                 SetConnected(true);
                 RaiseChanged(new ChangeSignal(ChangeSignalKind.Entries));
                 RaiseChanged(new ChangeSignal(ChangeSignalKind.Chat));
@@ -156,6 +159,8 @@ public sealed class PostgresDataSource : SqlDataSource
             catch (OperationCanceledException) { return; }
             catch (Exception)
             {
+                // The listening connection dropped: reconnect at once, and only show offline when that fails too.
+                if (++failures == 1) continue;
                 SetConnected(false);
                 try { await Task.Delay(2000, ct); } catch (OperationCanceledException) { return; }
             }

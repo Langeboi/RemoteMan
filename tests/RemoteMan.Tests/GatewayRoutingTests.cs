@@ -48,6 +48,7 @@ public class GatewayRoutingTests : IDisposable
         Assert.Equal("127.0.0.1:15432,127.0.0.1:15433", routed.Host);
         Assert.Equal("primary", routed.TargetSessionAttributes);
         Assert.Equal("anna", routed.Username);
+        Assert.True(routed.Timeout >= DataSourceFactory.GatewayConnectSeconds);   // a tunnel plus the login takes longer than 5 s
     }
 
     [Fact]
@@ -56,6 +57,7 @@ public class GatewayRoutingTests : IDisposable
         var sql = new Microsoft.Data.SqlClient.SqlConnectionStringBuilder(
             DataSourceFactory.RouteHosts(DataSourceKind.SqlServer, "Data Source=sql01\\TEAM;Initial Catalog=rm;User ID=a;Password=b", Fwd));
         Assert.Equal("tcp:127.0.0.1,11433", sql.DataSource);
+        Assert.Equal(DataSourceFactory.GatewayConnectSeconds, sql.ConnectTimeout);
         var my = new MySqlConnector.MySqlConnectionStringBuilder(
             DataSourceFactory.RouteHosts(DataSourceKind.MySql, "Server=db1,db2;Port=3306;Database=rm;User ID=a;Password=b", Fwd));
         Assert.Equal("127.0.0.1", my.Server);
