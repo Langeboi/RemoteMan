@@ -28,7 +28,7 @@ public sealed partial class EntryNode : ObservableObject
         Depth = depth;
     }
 
-    [ObservableProperty] [NotifyPropertyChangedFor(nameof(Name), nameof(KindTag), nameof(IsFolder), nameof(HasLinkedCredential), nameof(FolderGlyph), nameof(FolderBrush), nameof(FolderFill), nameof(HasCustomIcon), nameof(IconImage), nameof(KindName))]
+    [ObservableProperty] [NotifyPropertyChangedFor(nameof(Name), nameof(KindTag), nameof(IsFolder), nameof(HasLinkedCredential), nameof(FolderGlyph), nameof(FolderBrush), nameof(FolderFill), nameof(HasCustomIcon), nameof(IconImage), nameof(ConnectedIconImage), nameof(KindName))]
     private Entry _entry;
 
     [ObservableProperty] private bool _isExpanded = true;
@@ -77,6 +77,9 @@ public sealed partial class EntryNode : ObservableObject
     public bool HasCustomIcon => RemoteMan.App.Views.EntryIcons.IsCustom(Entry.Icon, Entry.IconColor, IsFolder);
     public System.Windows.Media.ImageSource? IconImage =>
         HasCustomIcon ? RemoteMan.App.Views.EntryIcons.Render(Entry.Icon, Entry.IconColor, IsFolder ? "DIR" : KindTag) : null;
+    /// <summary>The custom icon in the connected green, swapped in by the tree while you have a session open.</summary>
+    public System.Windows.Media.ImageSource? ConnectedIconImage =>
+        HasCustomIcon && !IsFolder ? RemoteMan.App.Views.EntryIcons.RenderConnected(Entry.Icon, KindTag) : null;
     /// <summary>Tooltip on a custom icon, so the protocol stays visible.</summary>
     public string KindName => RemoteMan.App.Views.EntryIcons.KindName(IsFolder ? "DIR" : KindTag);
 
