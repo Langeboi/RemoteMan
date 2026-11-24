@@ -3,8 +3,9 @@
 #
 #   1. DNS: an A record for remoteman.mydomain.dk -> your public IP. Router: forward TCP 443 (and 80) to this box.
 #   2. Change DOMAIN below, then:  docker compose -f relay.compose.yaml up -d
-#   3. docker exec remoteman-relay gateway site add school      (prints the connector's compose.yaml)
-#   4. docker exec remoteman-relay gateway device add my-laptop (prints the invite for RemoteMan)
+#   3. docker logs remoteman-relay: open the one-time link it prints to create the admin console's first admin,
+#      then add sites, connectors and devices at https://remoteman.mydomain.dk/admin/
+#      (or by hand: docker exec -it remoteman-relay gateway site add school / gateway invite)
 services:
   relay:
     image: ghcr.io/langeboi/remoteman-gateway:test     # :latest once there is a release
@@ -14,8 +15,10 @@ services:
     environment:
       PUBLIC_URL: https://remoteman.mydomain.dk          # the address RemoteMan and connectors use
       TZ: Europe/Copenhagen
+      # ADMIN_ALLOW: 192.168.0.0/16                      # only these addresses may open the admin console (/admin)
+      # ADMIN: "off"                                     # no web console at all; the CLI still works
     volumes:
-      - relay-data:/data                                 # sites, devices (tokens stored hashed)
+      - relay-data:/data                                 # sites, devices, console admins (secrets stored hashed), activity
 
   caddy:
     image: caddy:2

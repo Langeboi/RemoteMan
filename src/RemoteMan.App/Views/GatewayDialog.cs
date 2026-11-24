@@ -16,7 +16,7 @@ public static class GatewayDialog
         var box = new TextBox
         {
             MinWidth = 460, Margin = new Thickness(0, 6, 0, 0), FontSize = 11,
-            ToolTip = "rmgw1.… as printed by `gateway device add <name>` on the relay",
+            ToolTip = "The invite link from the relay's admin console (https://…/enroll#…), or an rmgw1.… invite",
         };
         if (Application.Current.TryFindResource("MonoFont") is FontFamily mono) box.FontFamily = mono;
         var sites = new TextBlock { TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 12, 0, 0), MaxWidth = 520 };
@@ -36,15 +36,30 @@ public static class GatewayDialog
             ? $"This PC reaches other networks through the relay {gw.RelayHost}{(gw.Device is { } d ? $" as {d}" : "")}. " +
               "Entries and folders pick a site under Advanced > Connection; a database picks one in Data sources."
             : "The gateway reaches databases and machines in other networks (school, a friend's homelab, behind CG-NAT) " +
-              "through your relay, with nothing to open on their side. On the relay run `gateway device add <name>` and paste the invite it prints.";
+              "through your relay, with nothing to open on their side. Paste the invite link from the relay's admin console (or an rmgw1. invite).";
         string[] buttons = gw.IsConfigured ? ["Save", "Remove from this PC", "Close"] : ["Save", "Cancel"];
         var pick = ChoiceDialog.Show(owner, "Gateway settings", text, buttons, DialogIcon.None, extra: panel);
 
         if (pick == 0 && box.Text.Trim().Length > 0)
         {
-            if (GatewayInvite.TryParse(box.Text) is not { } invite)
+            var invite = GatewayInvite.TryParse(box.Text);
+            if (invite is null && GatewayEnrollment.TryParseLink(box.Text) is not null)
             {
-                ChoiceDialog.Info(owner, "That isn't an invite", "An invite starts with rmgw1. and is one long line. Copy all of it from the relay's output.");
+                // An invite link: the relay makes this PC's device and answers with its token.
+                try
+                {
+                    var link = box.Text.Trim();
+                    invite = Task.Run(() => GatewayEnrollment.RedeemAsync(link, Environment.MachineName)).GetAwaiter().GetResult();
+                }
+                catch (Exception ex)
+                {
+                    ChoiceDialog.Info(owner, "The invite link didn't work", ex is GatewayException ? ex.Message : $"Can't reach the relay: {ex.GetBaseException().Message}");
+                    return false;
+                }
+            }
+            if (invite is null)
+            {
+                ChoiceDialog.Info(owner, "That isn't an invite", "Paste the invite link you were sent (https://…/enroll#…), or an invite that starts with rmgw1. Copy all of it.");
                 return false;
             }
             settings.Gateway = GatewayService.FromInvite(invite);

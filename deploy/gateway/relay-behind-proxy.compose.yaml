@@ -3,6 +3,7 @@
 #
 #   docker compose -f relay-behind-proxy.compose.yaml up -d
 #   then point the proxy at http://<this VM>:47200 (examples in README.md, "Behind your own proxy")
+#   docker logs remoteman-relay   -> the one-time link for the admin console's first admin (https://<your name>/admin/)
 services:
   relay:
     image: ghcr.io/langeboi/remoteman-gateway:test
@@ -15,6 +16,7 @@ services:
       PUBLIC_URL: https://remoteman.mydomain.dk
       PORT: 47200                  # what the relay listens on inside the container (plain HTTP)
       TZ: Europe/Copenhagen
+      # ADMIN_ALLOW: 192.168.0.0/16  # only these may open the admin console at /admin (default: anyone who reaches it, sign-in required)
     ports:
       - "47200:47200"              # host port : PORT. Bind to one address if only the proxy should reach it: "10.0.0.20:47200:47200"
     volumes:

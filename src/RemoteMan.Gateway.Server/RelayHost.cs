@@ -4,13 +4,17 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using RemoteMan.Gateway.Server.Admin;
 
 namespace RemoteMan.Gateway.Server;
 
 /// <summary>The relay's web server: plain HTTP behind Caddy (or Cloudflare Tunnel), or HTTPS with your own certificate.</summary>
 public static class RelayHost
 {
-    public static WebApplication Build(Relay relay, string urls, string? certPem = null, string? keyPem = null, string? publicUrl = null)
+    public static WebApplication Build(Relay relay, string urls, string? certPem = null, string? keyPem = null, string? publicUrl = null, AdminOptions? admin = null) =>
+        Build(relay, urls, certPem, keyPem, publicUrl, admin, out _);
+
+    public static WebApplication Build(Relay relay, string urls, string? certPem, string? keyPem, string? publicUrl, AdminOptions? admin, out AdminConsole console)
     {
         var builder = WebApplication.CreateSlimBuilder();
         builder.Logging.ClearProviders();
@@ -28,7 +32,11 @@ public static class RelayHost
         var app = builder.Build();
         app.UseWebSockets(new WebSocketOptions { KeepAliveInterval = TimeSpan.FromSeconds(20), KeepAliveTimeout = TimeSpan.FromSeconds(30) });
 
-        app.MapGet("/", () => Results.Text($"RemoteMan gateway relay{(publicUrl is null ? "" : " for " + publicUrl)}. Nothing to see here; RemoteMan and connectors use /v1.\n"));
+        console = new AdminConsole(relay, admin ?? new AdminOptions { PublicUrl = publicUrl });
+        var consoleOn = admin?.Enabled ?? true;
+        app.MapGet("/", () => Results.Text($"RemoteMan gateway relay{(publicUrl is null ? "" : " for " + publicUrl)}. RemoteMan and connectors use /v1" +
+            (consoleOn ? "; the admin console is at /admin/.\n" : ".\n")));
+        console.Map(app);
         app.MapGet("/healthz", () => Results.Text("ok\n"));
 
         app.MapGet(GatewayProtocol.StatusPath, (HttpContext c) =>
@@ -36,13 +44,15 @@ public static class RelayHost
                 ? Results.Json(relay.Status(), GatewayProtocol.Json) : Results.StatusCode(403));
 
         app.MapGet(GatewayProtocol.SitesPath, (HttpContext c) =>
-            relay.Store.DeviceByToken(Bearer(c)) is { } device
-                ? Results.Json(relay.SitesFor(device).ToList(), GatewayProtocol.Json)
-                : Results.StatusCode(401));
+        {
+            if (relay.Store.DeviceByToken(Bearer(c)) is not { } device) return Results.StatusCode(401);
+            relay.Store.TouchDevice(device.Name, AdminConsole.ClientIp(c));
+            return Results.Json(relay.SitesFor(device).ToList(), GatewayProtocol.Json);
+        });
 
         app.Map(GatewayProtocol.ConnectorPath, async (HttpContext c) =>
         {
-            if (relay.Store.SiteByToken(Bearer(c)) is not { } site) { c.Response.StatusCode = 401; return; }
+            if (relay.Store.SiteAndTokenByToken(Bearer(c)) is not var (site, token)) { c.Response.StatusCode = 401; return; }
             if (!c.WebSockets.IsWebSocketRequest) { c.Response.StatusCode = 400; return; }
             var key = c.Request.Headers[GatewayProtocol.KeyHeader].ToString();
             if (!ValidKey(key)) { c.Response.StatusCode = 400; return; }
@@ -50,7 +60,9 @@ public static class RelayHost
             using var ws = await c.WebSockets.AcceptWebSocketAsync();
             // Behind a reverse proxy the connector's address is the first X-Forwarded-For entry; it's only shown, never trusted.
             var from = c.Request.Headers["X-Forwarded-For"].ToString().Split(',')[0].Trim() is { Length: > 0 and <= 64 } fwd ? fwd : c.Connection.RemoteIpAddress?.ToString();
-            await relay.ServeConnectorAsync(site, name, key, ws, c.RequestAborted, from);
+            var version = Header(c, GatewayProtocol.ConnectorVersionHeader, 64);
+            var allow = Header(c, GatewayProtocol.AllowHeader, 2000);
+            await relay.ServeConnectorAsync(site, name, key, ws, c.RequestAborted, from, version, allow, token?.Id);
         });
 
         app.Map(GatewayProtocol.AcceptPath + "{id}", async (HttpContext c, string id) =>
@@ -70,17 +82,22 @@ public static class RelayHost
             if (!device.MayUse(site.Name)) { c.Response.StatusCode = 403; return; }
             if (!relay.IsOnline(site.Name)) { c.Response.StatusCode = 503; return; }
             // Pair with the connector first, so a site that doesn't answer is an HTTP error RemoteMan can show.
-            if (await relay.RequestTunnelAsync(site.Name, c.RequestAborted) is not var (connector, done)) { c.Response.StatusCode = 504; return; }
+            if (await relay.RequestTunnelFromAsync(site.Name, c.RequestAborted) is not var (connector, done, connectorName)) { c.Response.StatusCode = 504; return; }
             try
             {
+                var ip = AdminConsole.ClientIp(c);
+                relay.Store.TouchDevice(device.Name, ip);
                 using var ws = await c.WebSockets.AcceptWebSocketAsync();
-                await relay.SpliceAsync(ws, connector, done, c.RequestAborted);
+                await relay.SpliceAsync(ws, connector, done, c.RequestAborted, new TunnelInfo { Device = device.Name, Site = site.Name, Connector = connectorName, From = ip });
             }
             finally { done.TrySetResult(); }
         });
 
         return app;
     }
+
+    private static string? Header(HttpContext c, string name, int max) =>
+        c.Request.Headers[name].ToString() is { Length: > 0 } v && v.Length <= max ? v : null;
 
     private static string? Bearer(HttpContext c)
     {

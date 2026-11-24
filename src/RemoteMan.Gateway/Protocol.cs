@@ -27,6 +27,11 @@ public static class GatewayProtocol
     public const string KeyHeader = "X-RemoteMan-Connector-Key";
     public const string NameHeader = "X-RemoteMan-Connector-Name";
     public const string VersionHeader = "X-RemoteMan-Gateway";
+    /// <summary>The connector's own ALLOW and its version, shown in the relay's admin console.</summary>
+    public const string AllowHeader = "X-RemoteMan-Connector-Allow";
+    public const string ConnectorVersionHeader = "X-RemoteMan-Connector-Version";
+    /// <summary>RemoteMan → relay POST: redeem an invite link's code for a device token (no auth; the code is the secret).</summary>
+    public const string EnrollPath = "/v1/enroll";
     public const int Version = 1;
 
     public static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web)
@@ -172,4 +177,55 @@ internal static class Pump
 internal static class Text
 {
     public static string Utf8(byte[] b) => Encoding.UTF8.GetString(b);
+}
+
+/// <summary>
+/// An invite link from the relay's admin console (<c>https://relay/enroll#&lt;code&gt;</c>). RemoteMan takes it in place of an
+/// <c>rmgw1.</c> invite: it posts the code to the relay, which creates this PC's device and answers with its token.
+/// </summary>
+public static class GatewayEnrollment
+{
+    /// <summary>The relay's base address and the code, when <paramref name="text"/> is an invite link.</summary>
+    public static (Uri Relay, string Code)? TryParseLink(string? text)
+    {
+        text = text?.Trim();
+        if (string.IsNullOrEmpty(text) || !Uri.TryCreate(text, UriKind.Absolute, out var uri) || uri.Scheme is not ("https" or "http")) return null;
+        var path = uri.AbsolutePath.TrimEnd('/');
+        string code;
+        string basePath;
+        var i = path.LastIndexOf("/enroll", StringComparison.Ordinal);
+        if (i < 0) return null;
+        if (path.EndsWith("/enroll", StringComparison.Ordinal)) { code = uri.Fragment.TrimStart('#'); basePath = path[..i]; }
+        else if (path[(i + 7)..] is ['/', .. var rest] && !rest.Contains('/')) { code = rest; basePath = path[..i]; }
+        else return null;
+        code = Uri.UnescapeDataString(code).Trim();
+        if (code.Length is < 16 or > 128 || !code.All(c => char.IsAsciiLetterOrDigit(c) || c is '-' or '_')) return null;
+        var b = new UriBuilder(uri) { Path = basePath.Length == 0 ? "/" : basePath, Query = "", Fragment = "" };
+        return (b.Uri, code);
+    }
+
+    /// <summary>Redeems an invite link for this PC. Throws <see cref="GatewayException"/> with a message to show when the relay says no.</summary>
+    public static async Task<GatewayInvite> RedeemAsync(string link, string pcName, HttpMessageHandler? handler = null, CancellationToken ct = default)
+    {
+        if (TryParseLink(link) is not var (relay, code)) throw new GatewayException("That isn't an invite link.");
+        using var http = handler is null ? new HttpClient() : new HttpClient(handler, disposeHandler: false);
+        http.Timeout = TimeSpan.FromSeconds(20);
+        http.DefaultRequestHeaders.Add(GatewayProtocol.VersionHeader, GatewayProtocol.Version.ToString());
+        using var res = await http.PostAsync(GatewayProtocol.HttpUri(relay, GatewayProtocol.EnrollPath),
+            new StringContent(JsonSerializer.Serialize(new { code, name = pcName }, GatewayProtocol.Json), Encoding.UTF8, "application/json"), ct);
+        var body = await res.Content.ReadAsStringAsync(ct);
+        if (!res.IsSuccessStatusCode)
+        {
+            var msg = (int)res.StatusCode switch
+            {
+                404 or 410 => "That invite link has expired or was already used. Ask for a new one.",
+                429 => "Too many tries. Wait a minute and try again.",
+                _ => $"The relay answered {(int)res.StatusCode}.",
+            };
+            throw new GatewayException(msg);
+        }
+        using var doc = JsonDocument.Parse(body);
+        var invite = GatewayInvite.TryParse(doc.RootElement.GetProperty("invite").GetString());
+        return invite ?? throw new GatewayException("The relay's answer didn't hold an invite.");
+    }
 }

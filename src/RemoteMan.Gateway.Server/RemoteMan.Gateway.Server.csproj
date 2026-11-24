@@ -11,6 +11,10 @@
     <Version>0.1.0</Version>
   </PropertyGroup>
   <ItemGroup>
+    <!-- The admin console's page, script and styles, served from the program itself (no wwwroot to ship). -->
+    <EmbeddedResource Include="Admin/web/*" LogicalName="web/%(Filename)%(Extension)" />
+  </ItemGroup>
+  <ItemGroup>
     <ProjectReference Include="..\RemoteMan.Gateway\RemoteMan.Gateway.csproj" />
   </ItemGroup>
 </Project>
