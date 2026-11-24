@@ -92,8 +92,33 @@
   term.open(document.getElementById('t'));
   // Shared session (guest): the size follows the host's terminal instead of the window.
   let fixed = false;
-  function refit() { if (!fixed) fit.fit(); }
-  fit.fit();
+  const box = document.getElementById('t');
+  function refit() {
+    if (fixed) return;
+    // A hidden tab reports a zero-size box; fitting to that would squash the session to 1 row and push
+    // the prompt into scrollback, so it came back mid-screen. Wait until the tab is laid out again.
+    if (box.clientWidth < 40 || box.clientHeight < 30) return;
+    const b = term.buffer.active, atBottom = b.viewportY >= b.baseY;
+    fit.fit();
+    if (atBottom) term.scrollToBottom();
+  }
+  refit();
+
+  // Keep the prompt on the bottom row. A new session starts there, and when the terminal grows
+  // (first fit after layout, window resize, zoom out) the screen is shifted down instead of leaving
+  // the prompt floating at the top or middle. Only while nothing is below the cursor and there is no
+  // scrollback to pull down; full-screen programs (alternate screen) are left alone.
+  function anchorBottom() {
+    term.write('', () => {
+      const b = term.buffer.active;
+      if (b.type !== 'normal' || b.baseY > 0) return;
+      const gap = term.rows - 1 - b.cursorY;
+      if (gap <= 0) return;
+      for (let y = b.cursorY + 1; y < term.rows; y++) if (b.getLine(y)?.translateToString(true)) return;
+      term.write(`\x1b[${gap}T\x1b[${gap}B`);
+    });
+  }
+  anchorBottom();
 
   function applyLook(p) {
     const theme = THEMES[p.theme] || THEMES['RemoteMan'];
@@ -155,18 +180,18 @@
   });
 
   term.onData(d => host.postMessage({ t: 'data', d: backspaceCtrlH ? d.replace(/\x7f/g, '\b') : d }));
-  term.onResize(({ cols, rows }) => host.postMessage({ t: 'resize', cols, rows }));
+  term.onResize(({ cols, rows }) => { anchorBottom(); host.postMessage({ t: 'resize', cols, rows }); });
   new ResizeObserver(() => refit()).observe(document.body);
 
   host.addEventListener('message', e => {
     const m = e.data;
     if (m.t === 'out') term.write(m.d);
     else if (m.t === 'info') term.write('\x1b[38;2;156;162;169m' + m.d + '\x1b[0m\r\n');
-    else if (m.t === 'focus') term.focus();
+    else if (m.t === 'focus') { refit(); term.focus(); }
     else if (m.t === 'config') { copyOnSelect = m.copyOnSelect; backspaceCtrlH = !!m.backspaceCtrlH; }
     else if (m.t === 'look') applyLook(m.d);
     else if (m.t === 'find') openFind();
-    else if (m.t === 'clear') term.clear();
+    else if (m.t === 'clear') { term.clear(); anchorBottom(); }
     else if (m.t === 'fixed') { fixed = true; term.resize(Math.max(2, m.cols), Math.max(2, m.rows)); }
     else if (m.t === 'stdin') { term.options.disableStdin = !m.on; term.options.cursorBlink = !!m.on; }
   });
