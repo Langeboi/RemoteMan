@@ -132,7 +132,7 @@ public sealed partial class MainViewModel
         if (snap is not null)
         {
             var hosts = snap.ProblemHostCount;
-            var problems = snap.Problems.Count(p => !p.Suppressed && snap.Hosts.Any(h => h.HostId == p.HostId && h.Enabled));
+            var problems = snap.Problems.Count(p => snap.Hosts.Any(h => h.HostId == p.HostId && h.Enabled));
             var worst = snap.Hosts.Where(h => h.Enabled).Select(h => snap.HealthOf(h).State).DefaultIfEmpty(ZabbixHealthState.Ok).Max();
             ZabbixStatusTag = worst switch { ZabbixHealthState.High => "high", ZabbixHealthState.Warning => "warn", _ => null };
             ZabbixStatusText = problems == 0 && hosts == 0
@@ -178,7 +178,7 @@ public sealed partial class MainViewModel
         {
             var tag = p.Severity >= ZabbixSeverity.High ? "high" : p.Severity >= ZabbixSeverity.Warning ? "warn" : "info";
             var ack = p.Acknowledged ? (p.AcknowledgedBy is { } by ? $"acked by {by}" : "acknowledged") : "not acknowledged";
-            SelectedProblems.Add(new ZabbixProblemRow(tag, p.Name, $"{SeverityName(p.Severity)} · {ZabbixSnapshot.Age(p.Since, now)}, {ack}{(p.Suppressed ? " · suppressed" : "")}"));
+            SelectedProblems.Add(new ZabbixProblemRow(tag, p.Name, $"{SeverityName(p.Severity)} · {ZabbixSnapshot.Age(p.Since, now)}, {ack}"));
         }
         if (h.Problems.Count > 8)
             SelectedProblems.Add(new ZabbixProblemRow("info", $"and {h.Problems.Count - 8} more", "Open in Zabbix to see them all"));

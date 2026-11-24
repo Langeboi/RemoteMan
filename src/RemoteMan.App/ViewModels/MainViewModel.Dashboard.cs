@@ -370,7 +370,7 @@ public sealed partial class MainViewModel
     {
         if (ZabbixSnapshot is not { } snap) return;
         var enabled = snap.Hosts.Where(h => h.Enabled && !h.InMaintenance).Select(h => h.HostId).ToHashSet();
-        var open = snap.Problems.Where(p => !p.Suppressed && enabled.Contains(p.HostId)).ToList();
+        var open = snap.Problems.Where(p => enabled.Contains(p.HostId)).ToList();
         var high = open.Count(p => p.Severity >= ZabbixSeverity.High);
         var warn = open.Count(p => p.Severity >= ZabbixSeverity.Warning && p.Severity < ZabbixSeverity.High);
         if (DashboardCharts.Sample(_settings.ZabbixTrend, new ProblemSample(snap.FetchedAt, warn, high))) TrySaveSettings();
@@ -414,7 +414,7 @@ public sealed partial class MainViewModel
 
         var now = DateTimeOffset.UtcNow;
         var enabled = snap.Hosts.Where(h => h.Enabled && !h.InMaintenance).ToDictionary(h => h.HostId);
-        var problems = snap.Problems.Where(p => !p.Suppressed && enabled.ContainsKey(p.HostId))
+        var problems = snap.Problems.Where(p => enabled.ContainsKey(p.HostId))
             .OrderByDescending(p => p.Severity).ThenByDescending(p => p.Since).ToList();
         foreach (var p in problems.Take(6))
         {

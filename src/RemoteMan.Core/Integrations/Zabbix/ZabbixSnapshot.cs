@@ -12,10 +12,11 @@ public sealed class ZabbixSnapshot
         ZabbixMatchOptions? options = null)
     {
         Hosts = hosts;
-        Problems = problems;
+        // Suppressed problems never count: not on entry badges, counts, the dashboard or notifications.
+        Problems = problems.Where(p => !p.Suppressed).ToList();
         FetchedAt = fetchedAt;
         _matcher = new ZabbixMatcher(hosts, options);
-        _problemsByHost = problems.ToLookup(p => p.HostId);
+        _problemsByHost = Problems.ToLookup(p => p.HostId);
     }
 
     public IReadOnlyList<ZabbixHost> Hosts { get; }
@@ -37,8 +38,7 @@ public sealed class ZabbixSnapshot
             .OrderByDescending(p => p.Severity).ThenByDescending(p => p.Since).ToList();
         if (!host.Enabled) return new ZabbixHealth(ZabbixHealthState.None, host, reason, problems);
 
-        var active = problems.Where(p => !p.Suppressed).ToList();
-        var worst = active.Count > 0 ? active.Max(p => p.Severity) : ZabbixSeverity.NotClassified;
+        var worst = problems.Count > 0 ? problems.Max(p => p.Severity) : ZabbixSeverity.NotClassified;
         var state =
             host.InMaintenance ? ZabbixHealthState.Maintenance :
             worst >= ZabbixSeverity.High ? ZabbixHealthState.High :
