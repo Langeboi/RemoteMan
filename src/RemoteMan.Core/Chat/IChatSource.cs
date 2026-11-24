@@ -29,6 +29,15 @@ public interface IChatSource
     /// <summary>Everyone who has used chat on this data source (they get a read row for Everyone when they start).</summary>
     Task<IReadOnlyList<string>> GetChatUsersAsync(CancellationToken ct = default);
 
-    /// <summary>Deletes messages sent before <paramref name="before"/>; returns how many.</summary>
+    /// <summary>Whether files can be sent (the files table exists here).</summary>
+    bool SupportsChatFiles => false;
+
+    /// <summary>Stores a file's encrypted bytes (sent before the message that links to it).</summary>
+    Task PostChatFileAsync(StoredChatFile file, CancellationToken ct = default) => throw new NotSupportedException("This database can't store chat files.");
+
+    /// <summary>A stored file; null when it is gone (deleted with old messages).</summary>
+    Task<StoredChatFile?> GetChatFileAsync(Guid id, CancellationToken ct = default) => Task.FromResult<StoredChatFile?>(null);
+
+    /// <summary>Deletes messages (and files) sent before <paramref name="before"/>; returns how many.</summary>
     Task<int> DeleteChatMessagesAsync(DateTimeOffset before, CancellationToken ct = default);
 }

@@ -68,6 +68,7 @@ public sealed partial class ChatViewModel : ObservableObject
         hub.MessageArrived += OnHubMessage;
         await hub.StartAsync();
         IsAvailable = true;
+        OnPropertyChanged(nameof(CanSendFiles));
         Refresh();
     }
 
@@ -120,7 +121,7 @@ public sealed partial class ChatViewModel : ObservableObject
     {
         if (!_resetting) _main.ChatOpenChanged(value);
         if (value) { Toasts.Clear(); if (Current is not null) MarkRead(); }
-        else IsPickerOpen = false;
+        else { IsPickerOpen = false; IsGifPickerOpen = false; }
     }
 
     partial void OnFilterChanged(string value) => RefreshContacts();
@@ -252,7 +253,7 @@ public sealed partial class ChatViewModel : ObservableObject
         FocusComposer?.Invoke(this, EventArgs.Empty);
     }
 
-    [RelayCommand] private void Back() { IsPickerOpen = false; Current = null; Messages.Clear(); RefreshContacts(); }
+    [RelayCommand] private void Back() { IsPickerOpen = false; IsGifPickerOpen = false; Current = null; Messages.Clear(); RefreshContacts(); }
 
     /// <summary>Opens the direct conversation with someone (clicking their avatar in the title bar).</summary>
     public void OpenDirect(string user)
@@ -345,6 +346,12 @@ public sealed partial class ChatViewModel : ObservableObject
             {
                 var parts = ChatLink.Parse(lines[i]);
                 var only = parts.Where(p => p.Link is not null || p.Text.Trim().Length > 0).ToList();
+                if (only.Count == 1 && only[0].Link is { Kind: ChatLink.File } fl && ChatFileRef.From(fl) is { } file)
+                {
+                    FlushText();
+                    blocks.Add(new ChatFileBlock(file, this));
+                    continue;
+                }
                 if (only.Count == 1 && only[0].Link is { Kind: ChatLink.Invite } inv)
                 {
                     FlushText();

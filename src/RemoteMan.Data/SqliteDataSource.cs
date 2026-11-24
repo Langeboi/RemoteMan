@@ -69,6 +69,11 @@ public sealed class SqliteDataSource : SqlDataSource
         ("ALTER TABLE remoteman_entries ADD COLUMN created_by TEXT NULL", true),
     ];
 
+    protected override string? ChatFilesTableSql => """
+        CREATE TABLE IF NOT EXISTS remoteman_chat_files (
+            id TEXT PRIMARY KEY, room_id TEXT NOT NULL, sender TEXT NOT NULL, sent_at INTEGER NOT NULL, size INTEGER NOT NULL, data BLOB NOT NULL)
+        """;
+
     protected override string? SettingsTableSql => """
         CREATE TABLE IF NOT EXISTS remoteman_settings (
             name TEXT PRIMARY KEY, value TEXT NOT NULL, updated_at INTEGER NOT NULL, updated_by TEXT NULL)

@@ -305,7 +305,7 @@ function renderOverview() {
     $("#chSize").innerHTML = g;
   }
   const tbl = (live.tables || []).slice(0, 6), tmax = Math.max(1, ...tbl.map(t => t.bytes));
-  const pretty = n => ({ remoteman_entries: "Entries", remoteman_presence: "Who's where", remoteman_chat_messages: "Team chat", remoteman_chat_rooms: "Chat rooms", remoteman_shares: "Shared sessions", remoteman_meta: "Counters", remoteman_chat_reads: "Chat read marks" }[n] || n);
+  const pretty = n => ({ remoteman_entries: "Entries", remoteman_presence: "Who's where", remoteman_chat_messages: "Team chat", remoteman_chat_rooms: "Chat rooms", remoteman_shares: "Shared sessions", remoteman_meta: "Counters", remoteman_chat_reads: "Chat read marks", remoteman_chat_files: "Chat files" }[n] || n);
   $("#tbls").innerHTML = tbl.map(t => `<div class="tb"><span title="${esc(t.name)}">${esc(pretty(t.name))}<small>${fmtNum(t.rows)} rows</small></span><div class="bar"><i style="width:${(t.bytes / tmax * 100).toFixed(1)}%"></i></div><b class="num">${fmtBytes(t.bytes)}</b></div>`).join("") || `<p class="empty">RemoteMan hasn't created its tables yet.</p>`;
 
   // relay

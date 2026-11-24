@@ -6,6 +6,7 @@
              xmlns:vm="clr-namespace:RemoteMan.App.ViewModels"
              xmlns:views="clr-namespace:RemoteMan.App.Views"
              xmlns:local="clr-namespace:RemoteMan.App"
+             xmlns:gif="http://wpfanimatedgif.codeplex.com"
              Background="{StaticResource Panel}">
     <UserControl.Resources>
         <BooleanToVisibilityConverter x:Key="BoolVis" />
@@ -194,6 +195,46 @@
         </DataTemplate>
 
         <!-- Shared-session invite: Join opens the session in a tab (checked for expiry on click) -->
+        <!-- A file on a line of its own: images and GIFs show (and animate) inline, anything else is a card with Open and Save -->
+        <DataTemplate DataType="{x:Type vm:ChatFileBlock}">
+            <StackPanel Margin="0,4,0,2" HorizontalAlignment="Left">
+                <Border x:Name="pic" HorizontalAlignment="Left" CornerRadius="4" BorderBrush="{StaticResource BorderSoft}" BorderThickness="1" Background="{StaticResource Work}"
+                        Visibility="{Binding ShowImage, Converter={StaticResource BoolVis}}" Cursor="Hand" ToolTip="{Binding Name}">
+                    <Border.InputBindings>
+                        <MouseBinding Gesture="LeftDoubleClick" Command="{Binding OpenCommand}" />
+                    </Border.InputBindings>
+                    <Border.ContextMenu>
+                        <ContextMenu>
+                            <MenuItem Header="Open" Command="{Binding OpenCommand}" />
+                            <MenuItem Header="Copy picture" Command="{Binding CopyImageCommand}" />
+                            <MenuItem Header="Save as…" Command="{Binding SaveCommand}" />
+                        </ContextMenu>
+                    </Border.ContextMenu>
+                    <Image gif:ImageBehavior.AnimatedSource="{Binding Image}" MaxWidth="260" MaxHeight="220" Stretch="Uniform" StretchDirection="DownOnly"
+                           RenderOptions.BitmapScalingMode="HighQuality" Margin="0" />
+                </Border>
+                <TextBlock Text="{Binding Status}" Foreground="{StaticResource Faint}" FontSize="11" Margin="0,2,0,0"
+                           Visibility="{Binding Status, Converter={StaticResource NonEmptyVis}}" />
+                <Border Background="{StaticResource Depth.Card}" BorderBrush="{StaticResource Depth.CardBorder}" BorderThickness="1" CornerRadius="4" MinWidth="220" MaxWidth="290"
+                        Visibility="{Binding IsFile, Converter={StaticResource BoolVis}}" Margin="0,2,0,0">
+                    <DockPanel Margin="8,7">
+                        <Border DockPanel.Dock="Left" Width="34" Height="34" CornerRadius="3" Background="{StaticResource Inset}" BorderBrush="{StaticResource BorderSoft}" BorderThickness="1" Margin="0,0,9,0">
+                            <TextBlock Text="{Binding Badge}" FontFamily="{StaticResource MonoFont}" FontSize="9.5" FontWeight="SemiBold" Foreground="{StaticResource Accent}"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Margin="0,4,0,0">
+                            <Button Style="{StaticResource FlatButton}" Content="Open" Foreground="{StaticResource Link}" Padding="0" Margin="0,0,14,0" Command="{Binding OpenCommand}" />
+                            <Button Style="{StaticResource FlatButton}" Content="Save as…" Foreground="{StaticResource Link}" Padding="0" Command="{Binding SaveCommand}" />
+                        </StackPanel>
+                        <StackPanel VerticalAlignment="Center">
+                            <TextBlock Text="{Binding Name}" FontWeight="SemiBold" Foreground="{StaticResource TextStrong}" TextTrimming="CharacterEllipsis" ToolTip="{Binding Name}" />
+                            <TextBlock Text="{Binding Detail}" Foreground="{StaticResource Muted}" FontSize="11" />
+                        </StackPanel>
+                    </DockPanel>
+                </Border>
+            </StackPanel>
+        </DataTemplate>
+
         <DataTemplate DataType="{x:Type vm:ChatInviteBlock}">
             <Border Margin="0,4,0,2" Background="{StaticResource Depth.Card}" BorderBrush="{StaticResource Warn}" BorderThickness="1"
                     CornerRadius="4" DataContext="{Binding Link}">
@@ -313,12 +354,60 @@
                             </TextBlock.Style>
                         </TextBlock>
                     </Grid>
+                    <TextBlock Text="{Binding SendingText}" Foreground="{StaticResource Muted}" FontSize="11" Margin="2,5,0,0" TextTrimming="CharacterEllipsis"
+                               Visibility="{Binding IsSending, Converter={StaticResource BoolVis}}" />
                     <DockPanel Margin="0,6,0,0">
                         <Button DockPanel.Dock="Right" Content="Send" Style="{StaticResource PrimaryButton}" MinHeight="22" Command="{Binding SendCommand}" />
+                        <Button DockPanel.Dock="Left" Style="{StaticResource FlatButton}" Width="26" Height="22" Padding="0" Margin="-4,0,6,0" Command="{Binding AttachCommand}"
+                                ToolTip="Send a file, picture or GIF (or drop it here, or paste it)" AutomationProperties.Name="Send a file"
+                                Visibility="{Binding CanSendFiles, Converter={StaticResource BoolVis}}">
+                            <Path Data="M10.5,4.5 L5.2,9.8 A1.6,1.6 0 0 0 7.5,12.1 L13,6.6 A3,3 0 0 0 8.8,2.4 L3.2,8 A4.4,4.4 0 0 0 9.4,14.2 L13.5,10.1"
+                                  Stroke="{StaticResource Soft}" StrokeThickness="1.3" StrokeLineJoin="Round" StrokeStartLineCap="Round" StrokeEndLineCap="Round" />
+                        </Button>
+                        <Button x:Name="GifButton" DockPanel.Dock="Left" Style="{StaticResource FlatButton}" Height="22" Padding="4,0" Margin="0,0,6,0" Command="{Binding ToggleGifPickerCommand}"
+                                ToolTip="Search GIPHY for a GIF" AutomationProperties.Name="Send a GIF"
+                                Visibility="{Binding CanUseGiphy, Converter={StaticResource BoolVis}}">
+                            <Border BorderBrush="{StaticResource Soft}" BorderThickness="1.2" CornerRadius="3" Padding="3,0">
+                                <TextBlock Text="GIF" FontSize="9.5" FontWeight="Bold" Foreground="{StaticResource Soft}" />
+                            </Border>
+                        </Button>
                         <TextBlock Text="#  link     ```  code     Enter  send     Shift+Enter  new line" Foreground="{StaticResource Faint}" FontSize="11" VerticalAlignment="Center" />
                     </DockPanel>
                 </StackPanel>
             </Border>
+
+            <!-- GIPHY picker: search, a grid of animated previews, click one to send it -->
+            <Popup x:Name="GifPicker" IsOpen="{Binding IsGifPickerOpen}" PlacementTarget="{Binding ElementName=Composer}" Placement="Top" StaysOpen="True"
+                   AllowsTransparency="False" Width="{Binding ActualWidth, ElementName=Composer}">
+                <Border Background="{StaticResource ButtonBg}" BorderBrush="{StaticResource ButtonBorder}" BorderThickness="1">
+                    <DockPanel Margin="8">
+                        <TextBox x:Name="GifSearch" DockPanel.Dock="Top" Text="{Binding GifQuery, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="Search GIFs"
+                                 PreviewKeyDown="OnGifSearchKeyDown" ToolTip="Search GIPHY; empty shows what's trending" />
+                        <DockPanel DockPanel.Dock="Bottom" Margin="0,6,0,0">
+                            <TextBlock DockPanel.Dock="Right" Text="Powered by GIPHY" FontSize="10" FontWeight="SemiBold" Foreground="{StaticResource Faint}" />
+                            <TextBlock Text="{Binding GifStatus}" FontSize="11" Foreground="{StaticResource Muted}" TextTrimming="CharacterEllipsis" />
+                        </DockPanel>
+                        <ScrollViewer Height="260" Margin="0,8,0,0" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                            <ItemsControl ItemsSource="{Binding GifResults}">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate DataType="{x:Type vm:GifPickItem}">
+                                        <Button Style="{StaticResource FlatButton}" Padding="0" Margin="0,0,4,4" Width="96" Height="80" ToolTip="{Binding Title}"
+                                                AutomationProperties.Name="{Binding Title}"
+                                                Command="{Binding DataContext.PickGifCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}" CommandParameter="{Binding}">
+                                            <Border Background="{StaticResource Work}" Width="96" Height="80" ClipToBounds="True">
+                                                <Image gif:ImageBehavior.AnimatedSource="{Binding Preview}" Stretch="UniformToFill" />
+                                            </Border>
+                                        </Button>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </ScrollViewer>
+                    </DockPanel>
+                </Border>
+            </Popup>
 
             <Popup x:Name="Picker" IsOpen="{Binding IsPickerOpen}" PlacementTarget="{Binding ElementName=Composer}" Placement="Top" StaysOpen="True"
                    AllowsTransparency="False" Focusable="False" Width="{Binding ActualWidth, ElementName=Composer}">
@@ -362,7 +451,8 @@
             </Popup>
 
             <Grid>
-                <ScrollViewer x:Name="MessagesScroll" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" PreviewMouseWheel="OnMessagesWheel">
+                <ScrollViewer x:Name="MessagesScroll" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" PreviewMouseWheel="OnMessagesWheel"
+                              AllowDrop="True" DragOver="OnFilesDragOver" DragEnter="OnFilesDragOver" Drop="OnFilesDrop">
                     <ItemsControl ItemsSource="{Binding Messages}" Margin="10,6,10,10" Focusable="False">
                         <ItemsControl.ItemTemplate>
                             <DataTemplate DataType="{x:Type vm:ChatMessageItem}">

@@ -109,6 +109,9 @@ public sealed class RedundantDataSource : IDataSource, IChatSource
     public Task<IReadOnlyDictionary<Guid, long>> GetChatReadsAsync(string user, CancellationToken ct = default) => Run(m => ChatOf(m).GetChatReadsAsync(user, ct));
     public Task SetChatReadAsync(string user, Guid roomId, long seq, CancellationToken ct = default) => Run(m => ChatOf(m).SetChatReadAsync(user, roomId, seq, ct));
     public Task<IReadOnlyList<string>> GetChatUsersAsync(CancellationToken ct = default) => Run(m => ChatOf(m).GetChatUsersAsync(ct));
+    public bool SupportsChatFiles => Active is IChatSource { SupportsChatFiles: true };
+    public Task PostChatFileAsync(StoredChatFile file, CancellationToken ct = default) => Run(m => ChatOf(m).PostChatFileAsync(file, ct));
+    public Task<StoredChatFile?> GetChatFileAsync(Guid id, CancellationToken ct = default) => Run(m => ChatOf(m).GetChatFileAsync(id, ct));
     public Task<int> DeleteChatMessagesAsync(DateTimeOffset before, CancellationToken ct = default) => Run(m => ChatOf(m).DeleteChatMessagesAsync(before, ct));
 
     public Task StartChangeFeedAsync(CancellationToken ct = default)

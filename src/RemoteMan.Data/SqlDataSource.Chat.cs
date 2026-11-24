@@ -12,6 +12,50 @@ namespace RemoteMan.Data;
 public abstract partial class SqlDataSource : IChatSource
 {
     public virtual bool SupportsChat => true;
+
+    /// <summary>Creates <c>remoteman_chat_files</c>; null where files aren't offered. Run apart from the other tables,
+    /// so a login that may not create tables still works (without files) until someone who may has connected once.</summary>
+    protected virtual string? ChatFilesTableSql => null;
+    protected bool ChatFilesReady { get; private set; }
+    public bool SupportsChatFiles => SupportsChat && ChatFilesTableSql is not null && ChatFilesReady;
+
+    private async Task InitializeChatFilesAsync(DbConnection c, CancellationToken ct)
+    {
+        if (ChatFilesTableSql is not { } sql) return;
+        try { await using var cmd = Cmd(c, sql); await cmd.ExecuteNonQueryAsync(ct); ChatFilesReady = true; }
+        catch (DbException)
+        {
+            try { await using var probe = Cmd(c, "SELECT COUNT(*) FROM remoteman_chat_files WHERE 1 = 0"); await probe.ExecuteScalarAsync(ct); ChatFilesReady = true; }
+            catch (DbException) { ChatFilesReady = false; }
+        }
+    }
+
+    public async Task PostChatFileAsync(StoredChatFile f, CancellationToken ct = default)
+    {
+        if (!SupportsChatFiles) throw new NotSupportedException("This database can't store chat files yet: someone who may create tables has to connect once.");
+        try
+        {
+            await using var c = await OpenAsync(ct);
+            await using var ins = Cmd(c, "INSERT INTO remoteman_chat_files (id, room_id, sender, sent_at, size, data) VALUES (@id, @room, @sender, @at, @size, @data)", null,
+                ("@id", f.Id.ToString()), ("@room", f.RoomId.ToString()), ("@sender", f.Sender), ("@at", f.SentAt.ToUnixTimeMilliseconds()),
+                ("@size", (long)f.Blob.Length), ("@data", f.Blob));
+            await ins.ExecuteNonQueryAsync(ct);
+        }
+        catch (DbException ex) when (IsPermissionDenied(ex))
+        {
+            throw new UnauthorizedAccessException($"Your database login{(DatabaseUser is { } u ? $" ({u})" : "")} can't send files.");
+        }
+    }
+
+    public async Task<StoredChatFile?> GetChatFileAsync(Guid id, CancellationToken ct = default)
+    {
+        if (!SupportsChatFiles) return null;
+        await using var c = await OpenAsync(ct);
+        await using var cmd = Cmd(c, "SELECT room_id, sender, sent_at, data FROM remoteman_chat_files WHERE id = @id", null, ("@id", id.ToString()));
+        await using var r = await cmd.ExecuteReaderAsync(ct);
+        if (!await r.ReadAsync(ct)) return null;
+        return new StoredChatFile(id, Guid.Parse(r.GetString(0)), r.GetString(1), DateTimeOffset.FromUnixTimeMilliseconds(Convert.ToInt64(r.GetValue(2))), (byte[])r.GetValue(3));
+    }
     protected virtual string? AfterChatWriteSql => null;
 
     private static string Members(IReadOnlyList<string> m) => string.Join("\n", m);
@@ -157,6 +201,11 @@ public abstract partial class SqlDataSource : IChatSource
     public async Task<int> DeleteChatMessagesAsync(DateTimeOffset before, CancellationToken ct = default)
     {
         await using var c = await OpenAsync(ct);
+        if (SupportsChatFiles)
+        {
+            try { await using var files = Cmd(c, "DELETE FROM remoteman_chat_files WHERE sent_at < @at", null, ("@at", before.ToUnixTimeMilliseconds())); await files.ExecuteNonQueryAsync(ct); }
+            catch (DbException ex) when (IsPermissionDenied(ex)) { }
+        }
         await using var cmd = Cmd(c, "DELETE FROM remoteman_chat_messages WHERE sent_at < @at", null, ("@at", before.ToUnixTimeMilliseconds()));
         try { return await cmd.ExecuteNonQueryAsync(ct); }
         catch (DbException ex) when (IsPermissionDenied(ex)) { return 0; }

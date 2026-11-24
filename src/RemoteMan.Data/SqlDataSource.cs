@@ -162,6 +162,7 @@ public abstract partial class SqlDataSource : IDataSource
             DatabaseUser = (await cmd.ExecuteScalarAsync(ct))?.ToString();
         }
         await InitializeSettingsAsync(c, ct);
+        await InitializeChatFilesAsync(c, ct);
     }
 
     // ---------------- shared-session invites ----------------

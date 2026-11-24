@@ -97,6 +97,12 @@ public sealed class PostgresDataSource : SqlDataSource
             updated_at BIGINT NOT NULL, expires_at BIGINT NOT NULL, payload TEXT NULL)
         """;
 
+    protected override string? ChatFilesTableSql => """
+        CREATE TABLE IF NOT EXISTS remoteman_chat_files (
+            id VARCHAR(36) PRIMARY KEY, room_id VARCHAR(36) NOT NULL, sender VARCHAR(200) NOT NULL,
+            sent_at BIGINT NOT NULL, size BIGINT NOT NULL, data BYTEA NOT NULL)
+        """;
+
     protected override string? SettingsTableSql => """
         CREATE TABLE IF NOT EXISTS remoteman_settings (
             name VARCHAR(100) PRIMARY KEY, value TEXT NOT NULL, updated_at BIGINT NOT NULL, updated_by VARCHAR(200) NULL)

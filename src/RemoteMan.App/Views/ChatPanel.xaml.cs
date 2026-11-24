@@ -26,9 +26,10 @@ public partial class ChatPanel : UserControl
         IsVisibleChanged += (_, _) =>
         {
             if (IsVisible) Dispatcher.BeginInvoke(FocusBest, DispatcherPriority.Input);
-            else if (_vm is not null) _vm.IsPickerOpen = false;
+            else if (_vm is not null) { _vm.IsPickerOpen = false; _vm.IsGifPickerOpen = false; }
         };
         // The picker is a popup (it floats above other apps): close it when the message box loses focus to another window.
+        CommandManager.AddPreviewExecutedHandler(Input, OnInputPaste);
         Input.LostKeyboardFocus += (_, e) => { if (_vm is not null && e.NewFocus is null) _vm.IsPickerOpen = false; };
     }
 
@@ -39,6 +40,7 @@ public partial class ChatPanel : UserControl
             _vm.PropertyChanged -= OnVmChanged;
             _vm.FocusComposer -= OnFocusComposer;
             _vm.ScrollToEnd -= OnScrollToEnd;
+            _vm.FocusGifSearch -= OnFocusGifSearch;
             _vm.People.CollectionChanged -= OnListsChanged;
             _vm.Messages.CollectionChanged -= OnListsChanged;
         }
@@ -47,6 +49,7 @@ public partial class ChatPanel : UserControl
         vm.PropertyChanged += OnVmChanged;
         vm.FocusComposer += OnFocusComposer;
         vm.ScrollToEnd += OnScrollToEnd;
+        vm.FocusGifSearch += OnFocusGifSearch;
         vm.People.CollectionChanged += OnListsChanged;
         vm.Messages.CollectionChanged += OnListsChanged;
         UpdateEmptyStates();
@@ -80,6 +83,17 @@ public partial class ChatPanel : UserControl
         Input.CaretIndex = Math.Min(_vm.CaretAfterInsert > 0 ? _vm.CaretAfterInsert : Input.Text.Length, Input.Text.Length);
         _settingCaret = false;
     }, DispatcherPriority.Input);
+
+    private void OnFocusGifSearch(object? sender, EventArgs e) =>
+        Dispatcher.BeginInvoke(() => { GifSearch.Focus(); GifSearch.SelectAll(); }, DispatcherPriority.Input);
+
+    /// <summary>In the GIF search: Esc closes the picker, Enter sends the first GIF.</summary>
+    private void OnGifSearchKeyDown(object sender, KeyEventArgs e)
+    {
+        if (_vm is null) return;
+        if (e.Key == Key.Escape) { _vm.IsGifPickerOpen = false; Input.Focus(); e.Handled = true; }
+        else if (e.Key == Key.Enter && _vm.GifResults.FirstOrDefault() is { } first) { _vm.PickGifCommand.Execute(first); e.Handled = true; }
+    }
 
     private void FocusBest()
     {
@@ -185,8 +199,48 @@ public partial class ChatPanel : UserControl
     private static Guid? DraggedEntry(DragEventArgs e) =>
         e.Data.GetData(EntryDragFormat) is string s && Guid.TryParse(s, out var id) ? id : null;
 
+    private static string[]? DroppedFiles(DragEventArgs e) =>
+        e.Data.GetDataPresent(DataFormats.FileDrop) ? e.Data.GetData(DataFormats.FileDrop) as string[] : null;
+
+    /// <summary>Files from Explorer dropped on the conversation or the message box are sent.</summary>
+    private void OnFilesDragOver(object sender, DragEventArgs e)
+    {
+        if (DroppedFiles(e) is null || _vm is not { CanSendFiles: true, Current: not null }) return;
+        e.Effects = DragDropEffects.Copy;
+        e.Handled = true;
+    }
+
+    private void OnFilesDrop(object sender, DragEventArgs e)
+    {
+        if (DroppedFiles(e) is not { } files || _vm is null) return;
+        e.Handled = true;
+        _ = _vm.SendFilesAsync(files);
+    }
+
+    /// <summary>Paste: files copied in Explorer, or a picture (a screenshot), are sent after asking; text pastes as usual.</summary>
+    private void OnInputPaste(object sender, ExecutedRoutedEventArgs e)
+    {
+        if (e.Command != ApplicationCommands.Paste || _vm is not { CanSendFiles: true, Current: not null }) return;
+        try
+        {
+            if (Clipboard.ContainsFileDropList())
+            {
+                var files = Clipboard.GetFileDropList().Cast<string>().ToList();
+                e.Handled = true;
+                _ = _vm.SendFilesAsync(files, ask: true);
+            }
+            else if (!Clipboard.ContainsText() && Clipboard.ContainsImage() && Clipboard.GetImage() is { } img)
+            {
+                e.Handled = true;
+                _ = _vm.SendClipboardImageAsync(img);
+            }
+        }
+        catch (Exception) { /* clipboard busy: paste as usual */ }
+    }
+
     private void OnInputDragOver(object sender, DragEventArgs e)
     {
+        if (DroppedFiles(e) is not null) { OnFilesDragOver(sender, e); return; }
         if (DraggedEntry(e) is null) return;   // text drags work as usual
         e.Effects = DragDropEffects.Link;
         e.Handled = true;
@@ -194,6 +248,7 @@ public partial class ChatPanel : UserControl
 
     private void OnInputDrop(object sender, DragEventArgs e)
     {
+        if (DroppedFiles(e) is not null) { OnFilesDrop(sender, e); return; }
         if (DraggedEntry(e) is not { } id || ResolveEntry?.Invoke(id) is not { } entry) return;
         _vm?.ShareEntry(entry);
         e.Handled = true;
