@@ -167,6 +167,36 @@ public class ZabbixTests
     }
 
     [Fact]
+    public async Task Suppressed_problems_are_left_out()
+    {
+        // 903 is suppressed (maintenance or manual suppression) on an enabled trigger.
+        var handler = new FakeZabbix("7.0.5", "hostgroups");
+        using var c = new ZabbixClient("https://z", "TOKEN", handler: handler);
+        var problems = await c.GetProblemsAsync(ZabbixSeverity.Warning);
+        Assert.DoesNotContain(problems, p => p.EventId == "903");
+    }
+
+    [Fact]
+    public void Suppressed_problems_raise_no_alarm()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var hosts = new[] { Host("1", "a", "10.0.0.1"), Host("2", "b", "10.0.0.2") };
+        var problems = new[]
+        {
+            new ZabbixProblem("e1", "1", "Disk full", ZabbixSeverity.Disaster, now, false, null, true),
+            new ZabbixProblem("e2", "2", "Load high", ZabbixSeverity.Warning, now, false, null, false),
+            new ZabbixProblem("e3", "2", "Reboot", ZabbixSeverity.High, now, false, null, true),
+        };
+        var s = new ZabbixSnapshot(hosts, problems, now);
+        Assert.Equal(ZabbixHealthState.Ok, s.HealthFor(Ssh("a", "10.0.0.1")).State);
+        Assert.Empty(s.HealthFor(Ssh("a", "10.0.0.1")).Problems);
+        Assert.Equal(ZabbixHealthState.Warning, s.HealthFor(Ssh("b", "10.0.0.2")).State);
+        Assert.Equal("1 open problem", s.HealthFor(Ssh("b", "10.0.0.2")).Summary);
+        Assert.Equal(["e2"], s.Problems.Select(p => p.EventId));
+        Assert.Equal(1, s.ProblemHostCount);
+    }
+
+    [Fact]
     public async Task Client_reports_api_errors_readably()
     {
         var handler = new FakeZabbix("7.0.0", "hostgroups") { FailAuth = true };
@@ -211,7 +241,7 @@ public class ZabbixTests
                 "host.get" => JsonNode.Parse($$"""[{"hostid":"10512","host":"DC01","name":"DC01","status":"0","maintenance_status":"0","interfaces":[{"ip":"10.0.20.5","dns":"","useip":"1","port":"10050","type":"1","main":"1","available":"2"}],"{{groupsKey}}":[{"groupid":"5","name":"Homelab"}],"parentTemplates":[{"templateid":"1","name":"Windows by Zabbix agent"}]}]""")!,
                 "problem.get" when !body["params"]!["selectAcknowledges"]!.AsArray().All(f => AckFields.Contains(f!.GetValue<string>())) =>
                     throw new InvalidOperationException("Invalid parameter \"/selectAcknowledges\": unknown field"),
-                "problem.get" => JsonNode.Parse("""[{"eventid":"901","objectid":"77","name":"Disk full","severity":"4","clock":"1795150000","acknowledged":"1","suppressed":"0","acknowledges":[{"userid":"3","action":"6","clock":"1795150100"}]},{"eventid":"902","objectid":"78","name":"Interface down","severity":"5","clock":"1795150200","acknowledged":"0","suppressed":"0","acknowledges":[]}]""")!,
+                "problem.get" => JsonNode.Parse("""[{"eventid":"901","objectid":"77","name":"Disk full","severity":"4","clock":"1795150000","acknowledged":"1","suppressed":"0","acknowledges":[{"userid":"3","action":"6","clock":"1795150100"}]},{"eventid":"902","objectid":"78","name":"Interface down","severity":"5","clock":"1795150200","acknowledged":"0","suppressed":"0","acknowledges":[]},{"eventid":"903","objectid":"77","name":"CPU high","severity":"4","clock":"1795150300","acknowledged":"0","suppressed":"1","acknowledges":[]}]""")!,
                 "user.get" when NoUserRights => throw new InvalidOperationException("No permissions"),
                 "user.get" => JsonNode.Parse("""[{"userid":"3","username":"mads","name":"Mads","surname":"J"}]""")!,
                 // Trigger 78 is disabled: Zabbix only returns it when "monitored" isn't asked for.

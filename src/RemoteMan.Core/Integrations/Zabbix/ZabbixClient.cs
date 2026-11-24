@@ -105,7 +105,7 @@ public sealed class ZabbixClient : IDisposable
 
     /// <summary>
     /// Open problems from the given severity up, with the host each one belongs to. Problems on disabled
-    /// triggers, disabled items or unmonitored hosts are left out.
+    /// triggers, disabled items or unmonitored hosts are left out, and so are suppressed problems.
     /// </summary>
     public async Task<IReadOnlyList<ZabbixProblem>> GetProblemsAsync(ZabbixSeverity minimum, CancellationToken ct = default)
     {
@@ -125,7 +125,9 @@ public sealed class ZabbixClient : IDisposable
             ["sortfield"] = new JsonArray("eventid"),
             ["sortorder"] = "DESC",
         }, auth: true, ct);
-        var list = problems.AsArray();
+        // Suppressed problems (by a maintenance window, or by hand in Zabbix 6.4+) are hidden from the
+        // Zabbix frontend's Problems view by default, so they raise no alarm here either.
+        var list = problems.AsArray().Where(p => Str(p!, "suppressed") != "1").ToList();
         if (list.Count == 0) return [];
 
         // problem.get doesn't say which host a problem is on; its trigger does. It also keeps returning
