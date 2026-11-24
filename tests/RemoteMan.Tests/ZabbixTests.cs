@@ -167,6 +167,14 @@ public class ZabbixTests
     }
 
     [Fact]
+    public async Task No_monitored_triggers_means_no_problems_not_an_error()
+    {
+        var handler = new FakeZabbix("8.0.0", "hostgroups") { NoMonitoredTriggers = true };
+        using var c = new ZabbixClient("https://z", "TOKEN", handler: handler);
+        Assert.Empty(await c.GetProblemsAsync(ZabbixSeverity.Warning));
+    }
+
+    [Fact]
     public async Task Suppressed_problems_are_left_out()
     {
         // 903 is suppressed (maintenance or manual suppression) on an enabled trigger.
@@ -212,6 +220,7 @@ public class ZabbixTests
             "new_severity", "suppress_until", "taskid", "maintenanceid", "details", "cep_ruleid"];
         public bool FailAuth { get; init; }
         public bool NoUserRights { get; init; }
+        public bool NoMonitoredTriggers { get; init; }
         public List<(string Method, string? Bearer, string? AuthField, JsonNode? Params)> Requests { get; } = new();
 
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
@@ -245,6 +254,8 @@ public class ZabbixTests
                 "user.get" when NoUserRights => throw new InvalidOperationException("No permissions"),
                 "user.get" => JsonNode.Parse("""[{"userid":"3","username":"mads","name":"Mads","surname":"J"}]""")!,
                 // Trigger 78 is disabled: Zabbix only returns it when "monitored" isn't asked for.
+                // Zabbix sends an empty result as [] even with preservekeys.
+                "trigger.get" when NoMonitoredTriggers => JsonNode.Parse("[]")!,
                 "trigger.get" when body["params"]!["monitored"] is null => JsonNode.Parse("""{"77":{"triggerid":"77","hosts":[{"hostid":"10512"}]},"78":{"triggerid":"78","hosts":[{"hostid":"10512"}]}}""")!,
                 "trigger.get" => JsonNode.Parse("""{"77":{"triggerid":"77","hosts":[{"hostid":"10512"}]}}""")!,
                 _ => JsonValue.Create("?")!,

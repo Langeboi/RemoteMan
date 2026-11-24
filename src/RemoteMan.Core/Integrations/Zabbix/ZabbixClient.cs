@@ -145,8 +145,16 @@ public sealed class ZabbixClient : IDisposable
             ["preservekeys"] = true,
         }, auth: true, ct);
         var hostsByTrigger = new Dictionary<string, List<string>>();
-        foreach (var (tid, t) in triggers.AsObject())
-            hostsByTrigger[tid] = t!["hosts"]?.AsArray().Select(h => Str(h!, "hostid")).ToList() ?? [];
+        // "preservekeys" gives an object keyed by trigger id, but an empty result comes back as [] (every problem
+        // left is on a disabled trigger, item or host), so read either shape.
+        var found = triggers switch
+        {
+            JsonObject o => o.Select(kv => kv.Value),
+            JsonArray a => a.AsEnumerable(),
+            _ => [],
+        };
+        foreach (var t in found.OfType<JsonNode>())
+            hostsByTrigger[Str(t, "triggerid")] = t["hosts"]?.AsArray().Select(h => Str(h!, "hostid")).ToList() ?? [];
 
         // action bit 2 = acknowledged; take the most recent update on each problem that did.
         var lastAck = new Dictionary<JsonNode, JsonNode>();
