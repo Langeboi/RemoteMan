@@ -121,7 +121,7 @@ public sealed partial class ChatViewModel : ObservableObject
     {
         if (!_resetting) _main.ChatOpenChanged(value);
         if (value) { Toasts.Clear(); if (Current is not null) MarkRead(); }
-        else IsPickerOpen = false;
+        else { IsPickerOpen = false; IsGifPickerOpen = false; }
     }
 
     partial void OnFilterChanged(string value) => RefreshContacts();
@@ -253,7 +253,7 @@ public sealed partial class ChatViewModel : ObservableObject
         FocusComposer?.Invoke(this, EventArgs.Empty);
     }
 
-    [RelayCommand] private void Back() { IsPickerOpen = false; Current = null; Messages.Clear(); RefreshContacts(); }
+    [RelayCommand] private void Back() { IsPickerOpen = false; IsGifPickerOpen = false; Current = null; Messages.Clear(); RefreshContacts(); }
 
     /// <summary>Opens the direct conversation with someone (clicking their avatar in the title bar).</summary>
     public void OpenDirect(string user)

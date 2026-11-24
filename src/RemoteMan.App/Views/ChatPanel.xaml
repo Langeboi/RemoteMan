@@ -364,10 +364,50 @@
                             <Path Data="M10.5,4.5 L5.2,9.8 A1.6,1.6 0 0 0 7.5,12.1 L13,6.6 A3,3 0 0 0 8.8,2.4 L3.2,8 A4.4,4.4 0 0 0 9.4,14.2 L13.5,10.1"
                                   Stroke="{StaticResource Soft}" StrokeThickness="1.3" StrokeLineJoin="Round" StrokeStartLineCap="Round" StrokeEndLineCap="Round" />
                         </Button>
+                        <Button x:Name="GifButton" DockPanel.Dock="Left" Style="{StaticResource FlatButton}" Height="22" Padding="4,0" Margin="0,0,6,0" Command="{Binding ToggleGifPickerCommand}"
+                                ToolTip="Search GIPHY for a GIF" AutomationProperties.Name="Send a GIF"
+                                Visibility="{Binding CanUseGiphy, Converter={StaticResource BoolVis}}">
+                            <Border BorderBrush="{StaticResource Soft}" BorderThickness="1.2" CornerRadius="3" Padding="3,0">
+                                <TextBlock Text="GIF" FontSize="9.5" FontWeight="Bold" Foreground="{StaticResource Soft}" />
+                            </Border>
+                        </Button>
                         <TextBlock Text="#  link     ```  code     Enter  send     Shift+Enter  new line" Foreground="{StaticResource Faint}" FontSize="11" VerticalAlignment="Center" />
                     </DockPanel>
                 </StackPanel>
             </Border>
+
+            <!-- GIPHY picker: search, a grid of animated previews, click one to send it -->
+            <Popup x:Name="GifPicker" IsOpen="{Binding IsGifPickerOpen}" PlacementTarget="{Binding ElementName=Composer}" Placement="Top" StaysOpen="True"
+                   AllowsTransparency="False" Width="{Binding ActualWidth, ElementName=Composer}">
+                <Border Background="{StaticResource ButtonBg}" BorderBrush="{StaticResource ButtonBorder}" BorderThickness="1">
+                    <DockPanel Margin="8">
+                        <TextBox x:Name="GifSearch" DockPanel.Dock="Top" Text="{Binding GifQuery, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="Search GIFs"
+                                 PreviewKeyDown="OnGifSearchKeyDown" ToolTip="Search GIPHY; empty shows what's trending" />
+                        <DockPanel DockPanel.Dock="Bottom" Margin="0,6,0,0">
+                            <TextBlock DockPanel.Dock="Right" Text="Powered by GIPHY" FontSize="10" FontWeight="SemiBold" Foreground="{StaticResource Faint}" />
+                            <TextBlock Text="{Binding GifStatus}" FontSize="11" Foreground="{StaticResource Muted}" TextTrimming="CharacterEllipsis" />
+                        </DockPanel>
+                        <ScrollViewer Height="260" Margin="0,8,0,0" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                            <ItemsControl ItemsSource="{Binding GifResults}">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate DataType="{x:Type vm:GifPickItem}">
+                                        <Button Style="{StaticResource FlatButton}" Padding="0" Margin="0,0,4,4" Width="96" Height="80" ToolTip="{Binding Title}"
+                                                AutomationProperties.Name="{Binding Title}"
+                                                Command="{Binding DataContext.PickGifCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}" CommandParameter="{Binding}">
+                                            <Border Background="{StaticResource Work}" Width="96" Height="80" ClipToBounds="True">
+                                                <Image gif:ImageBehavior.AnimatedSource="{Binding Preview}" Stretch="UniformToFill" />
+                                            </Border>
+                                        </Button>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </ScrollViewer>
+                    </DockPanel>
+                </Border>
+            </Popup>
 
             <Popup x:Name="Picker" IsOpen="{Binding IsPickerOpen}" PlacementTarget="{Binding ElementName=Composer}" Placement="Top" StaysOpen="True"
                    AllowsTransparency="False" Focusable="False" Width="{Binding ActualWidth, ElementName=Composer}">

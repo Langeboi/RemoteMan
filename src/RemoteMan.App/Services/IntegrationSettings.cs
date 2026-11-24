@@ -30,6 +30,7 @@ public sealed class IntegrationSettings
 {
     public const string ZabbixKey = "integration.zabbix";
     public const string OxidizedKey = "integration.oxidized";
+    public const string GiphyKey = "integration.giphy";
 
     private static readonly JsonSerializerOptions Json = new() { Converters = { new JsonStringEnumConverter() } };
 
@@ -63,6 +64,12 @@ public sealed class IntegrationSettings
     public OxidizedFeedInfo? OxidizedFeedInfo { get; private set; }
     /// <summary>Sealed logins, saved names and kept devices for Oxidized's device list, as last read.</summary>
     public SharedSetting? OxidizedSyncRow { get; private set; }
+
+    /// <summary>GIPHY for the chat GIF picker: the API key in plain text, or null when there is none.</summary>
+    public string? GiphyApiKey { get; private set; }
+    public string GiphyRating { get; private set; } = "g";
+    public SharedSetting? GiphyRow { get; private set; }
+    public string? GiphyProblem { get; private set; }
 
     /// <summary>Set when a saved secret is there but this PC can't decrypt it (a different vault passphrase).</summary>
     public string? ZabbixProblem { get; private set; }
@@ -165,6 +172,17 @@ public sealed class IntegrationSettings
             moved = $"Only database admins can change the Zabbix and Oxidized settings in {SourceName}, so your setup choices weren't saved there";
         if (live) TrySave();
 
+        // GIPHY (only ever shared: there were no per-PC settings before)
+        var gr = GiphyRow = rows.FirstOrDefault(r => r.Name == GiphyKey);
+        GiphyProblem = null;
+        if (gr is not null && Parse<GiphyConfig>(gr.Value) is { } gc)
+        {
+            GiphyApiKey = Decrypt(gc.ProtectedApiKey, out var badKey);
+            if (badKey) GiphyProblem = "The saved GIPHY key can't be decrypted with this data source's vault passphrase.";
+            GiphyRating = gc.Rating is "g" or "pg" or "pg-13" or "r" ? gc.Rating : "g";
+        }
+        else { GiphyApiKey = null; GiphyRating = "g"; }
+
         // Zabbix
         ZabbixRow = z;
         ZabbixProblem = null;
@@ -227,6 +245,20 @@ public sealed class IntegrationSettings
         OxidizedProblem = null;
         await RefreshCacheAsync(ct);
     }
+
+    /// <summary>Saves the GIPHY key and rating for everyone. <paramref name="newKey"/> null keeps the saved key; "" removes it.</summary>
+    public async Task SaveGiphyAsync(string? newKey, string rating, CancellationToken ct = default)
+    {
+        var key = newKey is null ? GiphyApiKey : newKey.Trim();
+        var cfg = new GiphyConfig { ProtectedApiKey = string.IsNullOrEmpty(key) ? null : _protector.Protect(key), Rating = rating };
+        GiphyRow = await PutAsync(GiphyKey, JsonSerializer.Serialize(cfg, Json), ct);
+        GiphyApiKey = string.IsNullOrEmpty(key) ? null : key;
+        GiphyRating = rating;
+        GiphyProblem = null;
+        await RefreshCacheAsync(ct);
+    }
+
+    public string GiphyStamp => GiphyApiKey + "\n" + GiphyRating;
 
     /// <summary>Saves Oxidized's device list data (sealed logins, names, kept devices) for the server.</summary>
     public async Task SaveOxidizedSyncAsync(string json, CancellationToken ct = default)
@@ -316,4 +348,12 @@ public sealed class IntegrationSettings
             catch (Exception) { }
         }
     }
+}
+
+/// <summary>The shared GIPHY settings (the key encrypted with the vault passphrase).</summary>
+public sealed class GiphyConfig
+{
+    public string? ProtectedApiKey { get; set; }
+    /// <summary>GIPHY's content rating: g, pg, pg-13 or r.</summary>
+    public string Rating { get; set; } = "g";
 }

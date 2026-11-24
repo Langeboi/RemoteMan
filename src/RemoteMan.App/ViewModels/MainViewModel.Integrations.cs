@@ -30,6 +30,7 @@ public sealed partial class MainViewModel
             store.SettingsChanged += (_, _) => OnUi(() => _ = ReloadIntegrationsAsync(announce: true));
             store.OnlineChanged += (_, up) => { if (up) OnUi(() => _ = ReloadIntegrationsAsync(announce: false)); };
         }
+        Chat.GiphyChanged();
         await StartZabbixAsync();
         await StartOxidizedAsync();
     }
@@ -53,8 +54,9 @@ public sealed partial class MainViewModel
         _reloadingIntegrations = true;
         try
         {
-            var (z, o) = (ints.ZabbixStamp, ints.OxidizedStamp);
+            var (z, o, g) = (ints.ZabbixStamp, ints.OxidizedStamp, ints.GiphyStamp);
             if (await ints.LoadAsync(null) is { } note) Message = note;
+            if (ints.GiphyStamp != g) Chat.GiphyChanged();
             if (ints.ZabbixStamp != z)
             {
                 await StartZabbixAsync();

@@ -26,7 +26,7 @@ public partial class ChatPanel : UserControl
         IsVisibleChanged += (_, _) =>
         {
             if (IsVisible) Dispatcher.BeginInvoke(FocusBest, DispatcherPriority.Input);
-            else if (_vm is not null) _vm.IsPickerOpen = false;
+            else if (_vm is not null) { _vm.IsPickerOpen = false; _vm.IsGifPickerOpen = false; }
         };
         // The picker is a popup (it floats above other apps): close it when the message box loses focus to another window.
         CommandManager.AddPreviewExecutedHandler(Input, OnInputPaste);
@@ -40,6 +40,7 @@ public partial class ChatPanel : UserControl
             _vm.PropertyChanged -= OnVmChanged;
             _vm.FocusComposer -= OnFocusComposer;
             _vm.ScrollToEnd -= OnScrollToEnd;
+            _vm.FocusGifSearch -= OnFocusGifSearch;
             _vm.People.CollectionChanged -= OnListsChanged;
             _vm.Messages.CollectionChanged -= OnListsChanged;
         }
@@ -48,6 +49,7 @@ public partial class ChatPanel : UserControl
         vm.PropertyChanged += OnVmChanged;
         vm.FocusComposer += OnFocusComposer;
         vm.ScrollToEnd += OnScrollToEnd;
+        vm.FocusGifSearch += OnFocusGifSearch;
         vm.People.CollectionChanged += OnListsChanged;
         vm.Messages.CollectionChanged += OnListsChanged;
         UpdateEmptyStates();
@@ -81,6 +83,17 @@ public partial class ChatPanel : UserControl
         Input.CaretIndex = Math.Min(_vm.CaretAfterInsert > 0 ? _vm.CaretAfterInsert : Input.Text.Length, Input.Text.Length);
         _settingCaret = false;
     }, DispatcherPriority.Input);
+
+    private void OnFocusGifSearch(object? sender, EventArgs e) =>
+        Dispatcher.BeginInvoke(() => { GifSearch.Focus(); GifSearch.SelectAll(); }, DispatcherPriority.Input);
+
+    /// <summary>In the GIF search: Esc closes the picker, Enter sends the first GIF.</summary>
+    private void OnGifSearchKeyDown(object sender, KeyEventArgs e)
+    {
+        if (_vm is null) return;
+        if (e.Key == Key.Escape) { _vm.IsGifPickerOpen = false; Input.Focus(); e.Handled = true; }
+        else if (e.Key == Key.Enter && _vm.GifResults.FirstOrDefault() is { } first) { _vm.PickGifCommand.Execute(first); e.Handled = true; }
+    }
 
     private void FocusBest()
     {

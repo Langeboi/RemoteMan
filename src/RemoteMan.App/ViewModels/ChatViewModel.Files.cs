@@ -78,6 +78,96 @@ public sealed partial class ChatViewModel
     internal async Task<byte[]?> FileBytesAsync(ChatFileRef f) => _hub is null ? null : await _hub.GetFileAsync(f);
 
     internal MainViewModel Main => _main;
+
+    // ---------------- GIPHY ----------------
+
+    /// <summary>The GIF button shows when files can be sent and a GIPHY key is set (More, Chat GIFs).</summary>
+    public bool CanUseGiphy => CanSendFiles && _main.Integrations?.GiphyApiKey is { Length: > 0 };
+    public System.Collections.ObjectModel.ObservableCollection<GifPickItem> GifResults { get; } = new();
+    [ObservableProperty] private bool _isGifPickerOpen;
+    [ObservableProperty] private string _gifQuery = "";
+    [ObservableProperty] private string _gifStatus = "";
+    private CancellationTokenSource? _gifSearch;
+
+    /// <summary>The window focuses the GIF search box when the picker opens.</summary>
+    public event EventHandler? FocusGifSearch;
+
+    public void GiphyChanged() { OnPropertyChanged(nameof(CanUseGiphy)); GifResults.Clear(); }
+
+    private GiphyClient? Giphy => _main.Integrations is { GiphyApiKey: { Length: > 0 } key } ints ? new GiphyClient(key, ints.GiphyRating) : null;
+
+    [RelayCommand]
+    private void ToggleGifPicker()
+    {
+        IsGifPickerOpen = !IsGifPickerOpen && CanUseGiphy && Current is not null;
+        if (!IsGifPickerOpen) return;
+        IsPickerOpen = false;
+        if (GifResults.Count == 0) _ = SearchGifsAsync(GifQuery, 0);
+        FocusGifSearch?.Invoke(this, EventArgs.Empty);
+    }
+
+    partial void OnGifQueryChanged(string value) => _ = SearchGifsAsync(value, 350);
+
+    private async Task SearchGifsAsync(string query, int delayMs)
+    {
+        _gifSearch?.Cancel();
+        var cts = _gifSearch = new CancellationTokenSource();
+        try
+        {
+            if (delayMs > 0) await Task.Delay(delayMs, cts.Token);
+            if (Giphy is not { } giphy) return;
+            GifStatus = "Searching…";
+            var gifs = await giphy.SearchAsync(query, 0, cts.Token);
+            if (cts.IsCancellationRequested) return;
+            GifResults.Clear();
+            foreach (var g in gifs) GifResults.Add(new GifPickItem(g, giphy));
+            GifStatus = gifs.Count == 0 ? "No GIFs found" : "";
+        }
+        catch (OperationCanceledException) { }
+        catch (Exception ex) { if (!cts.IsCancellationRequested) GifStatus = ex.Message; }
+    }
+
+    [RelayCommand]
+    private async Task PickGifAsync(GifPickItem? item)
+    {
+        if (item is null || Giphy is not { } giphy || Current is null) return;
+        IsGifPickerOpen = false;
+        SendingText = $"Getting {item.Gif.FileName} from GIPHY…";
+        byte[] data;
+        try { data = await giphy.DownloadAsync(item.Gif.SendUrl); }
+        catch (Exception ex) { SendingText = ""; _main.Message = $"Could not get the GIF: {ex.Message}"; return; }
+        await SendBytesAsync(item.Gif.FileName, data);
+        FocusComposer?.Invoke(this, EventArgs.Empty);
+    }
+}
+
+/// <summary>One GIF in the picker; its small animated preview loads when it is shown.</summary>
+public sealed partial class GifPickItem : ObservableObject
+{
+    public GifPickItem(GiphyGif gif, GiphyClient giphy)
+    {
+        Gif = gif;
+        _ = LoadAsync(giphy);
+    }
+
+    public GiphyGif Gif { get; }
+    public string Title => Gif.Title.Length > 0 ? Gif.Title : "GIF";
+    [ObservableProperty] private ImageSource? _preview;
+
+    private async Task LoadAsync(GiphyClient giphy)
+    {
+        try
+        {
+            var data = await giphy.DownloadAsync(Gif.PreviewUrl);
+            var bmp = new BitmapImage();
+            bmp.BeginInit();
+            bmp.StreamSource = new MemoryStream(data);
+            bmp.CacheOption = BitmapCacheOption.OnLoad;
+            bmp.EndInit();
+            Preview = bmp;
+        }
+        catch (Exception) { /* stays blank */ }
+    }
 }
 
 /// <summary>A file, image or GIF on a line of its own. Images load when shown; other files on Save or Open.</summary>
