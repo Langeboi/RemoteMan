@@ -88,9 +88,9 @@ WebView2 runtime ships with Windows 11 and current Windows 10.
   created and last modified, and by whom (shown in the properties pane).
 - Optional single sign-on: a shared database can use your Windows login (SQL Server integrated security,
   PostgreSQL/MySQL Kerberos), and RDP and web entries can log in as "(my Windows login)".
-- Offline mode: if the database drops, the Q turns red, entries keep working from memory (or from an
+- Offline mode: if the database drops, the database icon (stacked layers) in the status bar turns red, entries keep working from memory (or from an
   encrypted local cache at startup), edits wait, and RemoteMan retries every 15 s. When the database is
-  back the Q turns green and everything missed shows up live.
+  back the icon turns green and everything missed shows up live.
 
 ## Shared database server (Docker)
 
