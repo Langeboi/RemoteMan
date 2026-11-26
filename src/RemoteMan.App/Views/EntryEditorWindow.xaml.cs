@@ -240,6 +240,11 @@ public partial class EntryEditorWindow : Window
         Closed += (_, _) => _totpTimer.Stop();
         Loaded += (_, _) => { _loaded = true; UpdateSummaries(); UpdateTotp(); _totpTimer.Start(); NameBox.Focus(); NameBox.SelectAll(); };
         Loaded += (_, _) => ApplyTemplateUi();
+        PreviewKeyDown += (_, e) =>
+        {
+            if (e.Key == System.Windows.Input.Key.G && System.Windows.Input.Keyboard.Modifiers == System.Windows.Input.ModifierKeys.Control
+                && GeneratePasswordButton.IsVisible) { OnGeneratePassword(this, e); e.Handled = true; }
+        };
     }
 
     private void ApplyTemplateUi()
@@ -346,6 +351,26 @@ public partial class EntryEditorWindow : Window
     private void OnLoginChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e) => UpdateLoginUi();
     private void OnCredTypeChanged(object sender, RoutedEventArgs e) => UpdateLoginUi();
 
+    private string? _generated;
+
+    /// <summary>The key button (or Ctrl+G) next to Password: pick one from the generator and it goes straight into the box.</summary>
+    private void OnGeneratePassword(object sender, RoutedEventArgs e)
+    {
+        var gen = new PasswordGeneratorWindow(this);
+        if (gen.ShowDialog() != true || gen.Result is not { } pw) return;
+        _generated = pw;
+        PasswordBox.Password = pw;
+        var strength = RemoteMan.Core.Security.PasswordGenerator.Label(RemoteMan.Core.Security.PasswordGenerator.Rate(gen.ResultBits));
+        GeneratedHint.Text = $"✓ Generated · {pw.Length} characters · {strength} · saved when you press OK";
+        GeneratedHint.Visibility = Visibility.Visible;
+        PasswordBox.Focus();
+    }
+
+    private void OnPasswordTyped(object sender, RoutedEventArgs e)
+    {
+        if (_generated is not null && PasswordBox.Password != _generated) { _generated = null; GeneratedHint.Visibility = Visibility.Collapsed; }
+    }
+
     private void UpdateLoginUi()
     {
         if (!IsInitialized || LoginBox is null) return;
@@ -371,6 +396,8 @@ public partial class EntryEditorWindow : Window
         Show(CertRow, t == CredentialType.Certificate);
         Show(CertInfo, t == CredentialType.Certificate && CertInfo.Text.Length > 0);
         Show(PasswordRow, t is CredentialType.Password or CredentialType.Certificate or CredentialType.Secret);
+        Show(GeneratePasswordButton, t is CredentialType.Password or CredentialType.Secret);
+        if (t is not (CredentialType.Password or CredentialType.Secret)) Show(GeneratedHint, false);
         PasswordLabel.Text = t switch { CredentialType.Secret => "Secret", CredentialType.Certificate => "Password", _ => "Password" };
         Show(AskPasswordBox, t == CredentialType.Password);
         Show(TotpRow, t is CredentialType.Password or CredentialType.SshKey);

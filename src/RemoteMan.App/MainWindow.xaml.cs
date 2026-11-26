@@ -237,6 +237,9 @@ public partial class MainWindow : Window
         menu.Items.Add(new MenuItem { Header = "Close tab", Command = _vm.CloseSessionCommand, CommandParameter = _vm.ActiveSession, InputGestureText = "Ctrl+W" });
         menu.Items.Add(new Separator());
         menu.Items.Add(Click("Templates…", (_, _) => _vm.TemplatesDialog?.Invoke()));
+        var generator = Click("Password generator…", (_, _) => OpenPasswordGenerator());
+        generator.InputGestureText = "Ctrl+Shift+G";
+        menu.Items.Add(generator);
         menu.Items.Add(new Separator());
         menu.Items.Add(Click("Data sources…", OnDataSources));
         menu.Items.Add(Click("Import…", OnImport));
@@ -295,6 +298,9 @@ public partial class MainWindow : Window
         menu.Items.Add(Click("Exit", OnExit));
         menu.IsOpen = true;
     }
+
+    /// <summary>More > Password generator: the same dialog as in the entry editor, on its own, for copying a password.</summary>
+    private void OpenPasswordGenerator() => new PasswordGeneratorWindow(this, standalone: true).ShowDialog();
 
     /// <summary>More > Theme: pick a colour theme and shading; it applies after a restart, which can happen right away.</summary>
     private void OnTheme(object sender, RoutedEventArgs e)
@@ -604,6 +610,11 @@ public partial class MainWindow : Window
         else if (e.Key == Key.M && Keyboard.Modifiers == (ModifierKeys.Control | ModifierKeys.Shift) && _vm.Chat.IsAvailable)
         {
             _vm.Chat.IsOpen = !_vm.Chat.IsOpen;
+            e.Handled = true;
+        }
+        else if (e.Key == Key.G && Keyboard.Modifiers == (ModifierKeys.Control | ModifierKeys.Shift) && !(Keyboard.FocusedElement is DependencyObject gd && IsInSession(gd)))
+        {
+            OpenPasswordGenerator();
             e.Handled = true;
         }
         else if (e.Key == Key.K && Keyboard.Modifiers == ModifierKeys.Control)

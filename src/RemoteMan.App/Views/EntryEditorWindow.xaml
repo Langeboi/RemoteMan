@@ -238,8 +238,11 @@
                         </DockPanel>
                         <DockPanel x:Name="PasswordRow" Margin="0,2">
                             <TextBlock x:Name="PasswordLabel" Text="Password" Width="90" Style="{StaticResource Label}" />
-                            <PasswordBox x:Name="PasswordBox" ToolTip="Leave empty to keep the stored one" />
+                            <Button x:Name="GeneratePasswordButton" DockPanel.Dock="Right" Content="Generate…" Margin="6,0,0,0" Click="OnGeneratePassword"
+                                    ToolTip="Password generator (Ctrl+G)" AutomationProperties.Name="Password generator" />
+                            <PasswordBox x:Name="PasswordBox" ToolTip="Leave empty to keep the stored one" PasswordChanged="OnPasswordTyped" />
                         </DockPanel>
+                        <TextBlock x:Name="GeneratedHint" Style="{StaticResource MutedText}" FontSize="11" Margin="90,0,0,2" Visibility="Collapsed" />
                         <DockPanel x:Name="PassphraseRow" Margin="0,2">
                             <TextBlock Text="Passphrase" Width="90" Style="{StaticResource Label}" />
                             <PasswordBox x:Name="PassphraseBox" />
