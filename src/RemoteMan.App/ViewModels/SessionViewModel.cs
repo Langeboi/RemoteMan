@@ -61,6 +61,8 @@ public abstract partial class SessionViewModel : ObservableObject, IDisposable
     public int Column => Pane == 0 ? 0 : 2;
     /// <summary>Broadcast typing is on and this tab gets what is typed in the group (amber mark on the tab).</summary>
     [ObservableProperty] private bool _isBroadcasting;
+    /// <summary>The connection dropped and is being picked up again in the background (dimmed tab title).</summary>
+    [ObservableProperty] private bool _isReconnecting;
     /// <summary>Shown in the status bar while this tab is active.</summary>
     [ObservableProperty] private string _statusText = "";
     /// <summary>Set while this session is shared with teammates (the amber bar above it).</summary>

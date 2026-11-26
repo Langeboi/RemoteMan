@@ -33,6 +33,19 @@
             </StackPanel>
         </Grid>
 
+        <!-- Shown while a dropped session is picked up again in the background: a small ring and one quiet line.
+             It works for up to a minute; the desktop comes back on its own, or the tab closes. -->
+        <Grid x:Name="Reconnecting" Background="{StaticResource Work}" Visibility="Collapsed">
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
+                <Grid Width="14" Height="14" Margin="0,0,9,0" VerticalAlignment="Center" RenderTransformOrigin="0.5,0.5">
+                    <Grid.RenderTransform><RotateTransform x:Name="ReconnSpin" /></Grid.RenderTransform>
+                    <Ellipse Stroke="{StaticResource Border}" StrokeThickness="2" />
+                    <Path Data="M7,1 A6,6 0 0 1 13,7" Stroke="{StaticResource Accent}" StrokeThickness="2" StrokeStartLineCap="Round" StrokeEndLineCap="Round" />
+                </Grid>
+                <TextBlock x:Name="ReconnText" Foreground="{StaticResource Faint}" FontSize="12" VerticalAlignment="Center" Text="Reconnecting…" />
+            </StackPanel>
+        </Grid>
+
         <!-- Side strip: drop files here (or click) to send them to the remote session -->
         <Border x:Name="Strip" Grid.Column="1" Background="{StaticResource Panel}" BorderBrush="{StaticResource Border}" BorderThickness="1,0,0,0"
                 AllowDrop="True" Drop="OnDrop" DragOver="OnDragOver" DragLeave="OnDragLeave">

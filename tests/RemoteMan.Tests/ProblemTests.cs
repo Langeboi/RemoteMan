@@ -17,6 +17,22 @@ public class ProblemTests
         Assert.Contains("0x807", ConnectionProblem.FromRdpDisconnect(2055, null)!.Details);
     }
 
+    [Theory]
+    [InlineData(3, 0, true)]      // server ended the session (reboot, crash)
+    [InlineData(3, 3, true)]      // idle limit
+    [InlineData(2308, 0, true)]   // network lost
+    [InlineData(264, 0, true)]    // timed out
+    [InlineData(1, 0, false)]     // closed here
+    [InlineData(2, 12, false)]    // signed out in the session
+    [InlineData(3, 11, false)]    // Disconnect from the remote Start menu
+    [InlineData(3, 12, false)]    // signed out
+    [InlineData(3, 2, false)]     // logged off by an admin
+    [InlineData(3, 5, false)]     // another client took the session
+    [InlineData(2055, 0, false)]  // bad password
+    [InlineData(260, 0, false)]   // DNS
+    public void RdpReconnectsOnlyOnUnplannedDrops(int reason, int extended, bool retry)
+        => Assert.Equal(retry, RdpReconnect.ShouldRetry(reason, extended));
+
     [Fact]
     public void ExceptionsMapToPlainCauses()
     {
