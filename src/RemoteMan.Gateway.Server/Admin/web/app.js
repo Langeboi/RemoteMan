@@ -565,7 +565,7 @@
 
   function showConnectorSetup(m, siteName, res) {
     const tabs = [
-      ['install', 'One-line install', `<p class="muted" style="margin-bottom:8px">Paste on the Linux machine. Installs Docker if it's missing, then starts the connector. The link works once, within an hour.</p>${copyBox(res.install)}`],
+      ['install', 'One-line install', `<p class="muted" style="margin-bottom:8px">Paste on the Linux machine. Installs Docker if it's missing, then starts the connector. The link works until the connector is online, for up to a day.</p>${copyBox(res.install)}`],
       ['run', 'docker run', `<p class="muted" style="margin-bottom:8px">On a machine that already has Docker:</p>${copyBox(res.dockerRun)}`],
       ['compose', 'compose.yaml', `<p class="muted" style="margin-bottom:8px">Save as <code>compose.yaml</code> and run <code>docker compose up -d</code>:</p>${copyBox(res.compose)}`],
     ];
