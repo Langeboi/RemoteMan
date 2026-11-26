@@ -39,17 +39,29 @@ public static class DashboardCharts
         return grid;
     }
 
+    /// <summary>One calendar week (Monday to Sunday, local time) on the entries chart.</summary>
+    public sealed record Week(DateTime Start, int Added, int Total, IReadOnlyDictionary<EntryKind, int> AddedByKind);
+
     /// <summary>
-    /// Entries (connectable, not deleted) that existed at the end of each week, oldest first, ending now.
-    /// Entries without a creation time (made before it was recorded) count from the start.
+    /// Entries (connectable, not deleted or hidden) added in each calendar week and the total at the end of it,
+    /// oldest first, ending with the current week. Entries without a creation time (made before it was recorded)
+    /// count towards every total but are never "added".
     /// </summary>
-    public static IReadOnlyList<(DateTimeOffset End, int Total)> Growth(IEnumerable<Entry> entries, DateTimeOffset now, int weeks = 26)
+    public static IReadOnlyList<Week> Weekly(IEnumerable<Entry> entries, DateTimeOffset now, int weeks = 12)
     {
-        var created = entries.Where(e => !e.Deleted && e.IsConnectable).Select(e => e.CreatedAt).ToList();
+        var live = entries.Where(e => !e.Deleted && !e.IsHidden && e.IsConnectable)
+            .Select(e => (e.Kind, At: e.CreatedAt?.ToLocalTime().DateTime)).ToList();
+        var today = now.ToLocalTime().Date;
+        var monday = today.AddDays(-(((int)today.DayOfWeek + 6) % 7));
+        var first = monday.AddDays(-7 * (weeks - 1));
         return Enumerable.Range(0, weeks).Select(i =>
         {
-            var end = now - TimeSpan.FromDays(7 * (weeks - 1 - i));
-            return (end, created.Count(c => c is null || c <= end));
+            var start = first.AddDays(7 * i);
+            var end = start.AddDays(7);
+            var added = live.Where(e => e.At is { } t && t >= start && t < end).ToList();
+            var byKind = added.GroupBy(e => e.Kind).OrderByDescending(g => g.Count()).ThenBy(g => g.Key)
+                .ToDictionary(g => g.Key, g => g.Count());
+            return new Week(start, added.Count, live.Count(e => e.At is not { } t || t < end), byKind);
         }).ToList();
     }
 

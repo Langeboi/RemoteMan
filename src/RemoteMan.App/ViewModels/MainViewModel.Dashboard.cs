@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Globalization;
 using RemoteMan.Core.Integrations.Zabbix;
 using RemoteMan.Core.Model;
 using RemoteMan.Core.Storage;
@@ -144,10 +145,7 @@ public sealed partial class MainViewModel
         }
         else d.Tiles.Add(new DashTile("Favorites", FavoriteEntries(byId).Count().ToString(), "star an entry to pin it here"));
 
-        // Protocols
-        d.Protocols.Clear();
-        var maxKind = s.ByKind.Count > 0 ? s.ByKind[0].Count : 1;
-        foreach (var k in s.ByKind) d.Protocols.Add(new DashBar(null, EntryNode.KindTagFor(k.Kind), KindName(k.Kind), k.Count, (double)k.Count / maxKind));
+        // Protocols: the donut slices here, the table and the stats with the charts (they need the connection log)
         d.ProtocolTotal = $"{s.Entries} total";
         // Donut: the five biggest kinds, the rest folded into Other.
         var slices = s.ByKind.Take(s.ByKind.Count > 6 ? 5 : 6).Select((k, i) =>
@@ -155,6 +153,8 @@ public sealed partial class MainViewModel
         var rest = s.ByKind.Skip(slices.Count).ToList();
         if (rest.Count > 0) slices.Add(new ChartSlice("Other", rest.Sum(k => k.Count), DashChart.Other, string.Join(", ", rest.Select(k => KindName(k.Kind)))));
         d.ProtocolSlices = slices;
+        _protocolGroups = s.ByKind.Take(slices.Count - (rest.Count > 0 ? 1 : 0)).Select(k => (IReadOnlyList<EntryKind>)new[] { k.Kind }).ToList();
+        if (rest.Count > 0) _protocolGroups.Add(rest.Select(k => k.Kind).ToList());
 
         RefreshDashboardCharts(entries, now);
 
@@ -203,6 +203,50 @@ public sealed partial class MainViewModel
     }
 
 
+    /// <summary>The kinds behind each donut slice, in slice order (the last one is several kinds when it is Other).</summary>
+    private List<IReadOnlyList<EntryKind>> _protocolGroups = [];
+
+    /// <summary>
+    /// The table beside the protocol donut (share, added and opened in the last 30 days per slice) and the four
+    /// numbers under it.
+    /// </summary>
+    private void RefreshDashboardProtocols(List<Entry> entries, DateTimeOffset now, List<ConnectEvent> log)
+    {
+        var d = Dashboard;
+        var since = now - TimeSpan.FromDays(30);
+        var live = entries.Where(e => !e.Deleted && !e.IsHidden && e.IsConnectable).ToList();
+        var total = Math.Max(1, live.Count);
+        var addedByKind = live.Where(e => e.CreatedAt is { } c && c >= since && c <= now).GroupBy(e => e.Kind).ToDictionary(g => g.Key, g => g.Count());
+        var openedByTag = log.Where(e => e.At >= since && e.At <= now).GroupBy(e => e.Kind).ToDictionary(g => g.Key, g => g.Count());
+
+        d.ProtocolRows.Clear();
+        for (var i = 0; i < d.ProtocolSlices.Count && i < _protocolGroups.Count; i++)
+        {
+            var slice = d.ProtocolSlices[i];
+            var kinds = _protocolGroups[i];
+            var added = kinds.Sum(k => addedByKind.GetValueOrDefault(k));
+            var opened = kinds.Sum(k => openedByTag.GetValueOrDefault(EntryNode.KindTagFor(k)));
+            d.ProtocolRows.Add(new DashProtocol(slice.Name, slice.Brush, slice.Count, (double)slice.Count / total, added, opened, slice.Note));
+        }
+
+        var added30 = addedByKind.Values.Sum();
+        var opened30 = openedByTag.Values.Sum();
+        var topAdded = addedByKind.OrderByDescending(k => k.Value).Select(k => KindName(k.Key)).FirstOrDefault();
+        var topOpened = openedByTag.OrderByDescending(k => k.Value).FirstOrDefault();
+        var newest = live.Where(e => e.CreatedAt is not null).MaxBy(e => e.CreatedAt);
+        d.ProtocolStats.Clear();
+        d.ProtocolStats.Add(new DashTile("Added, 30 days", added30 > 0 ? $"+{added30}" : "0", topAdded is null ? "nothing new" : $"mostly {topAdded}"));
+        d.ProtocolStats.Add(new DashTile("Sessions, 30 days", opened30.ToString("N0"), opened30 == 0 ? "none opened" : $"{openedByTag.Count} protocol{(openedByTag.Count == 1 ? "" : "s")}"));
+        d.ProtocolStats.Add(new DashTile("Opened most", topOpened.Key is null ? "–" : TagTitle(topOpened.Key),
+            topOpened.Key is null ? "last 30 days" : $"{topOpened.Value} session{(topOpened.Value == 1 ? "" : "s")}"));
+        d.ProtocolStats.Add(new DashTile("Newest entry", newest is null ? "–" : KindName(newest.Kind),
+            newest is null ? "no dates yet" : $"{newest.Name} · {When(newest.CreatedAt!.Value, now)}"));
+    }
+
+    /// <summary>A session log tag (SSH, WEB, PVE…) as the protocol's display name.</summary>
+    private static string TagTitle(string tag) =>
+        Enum.GetValues<EntryKind>().Where(k => EntryNode.KindTagFor(k) == tag).Select(KindName).FirstOrDefault() ?? tag;
+
     private static string TagName(string tag) => tag switch
     {
         "WEB" => "web", "TEL" => "Telnet", "SER" => "serial", "PVE" => "Proxmox", "PS" => "PowerShell", "WBX" => "WinBox", _ => tag,
@@ -229,15 +273,22 @@ public sealed partial class MainViewModel
         d.Heat = heat;
         d.HasHeat = heat.Cast<int>().Any(v => v > 0);
 
-        var growth = DashboardCharts.Growth(entries, now);
-        d.Growth = growth.Select((g, i) =>
+        // Entries over time: added per calendar week, with the running total in the hover and the header.
+        var weeks = DashboardCharts.Weekly(entries, now);
+        d.Growth = weeks.Select((w, i) =>
         {
-            var weeksAgo = growth.Count - 1 - i;
-            var label = i == 0 || i == growth.Count - 1 || i % 5 == 0 ? g.End.ToLocalTime().ToString("MMM") : null;
-            return new ChartPoint([g.Total], label, $"{(weeksAgo == 0 ? "This week" : weeksAgo == 1 ? "Last week" : $"{weeksAgo} weeks ago")} · {g.Total} entries");
+            var current = i == weeks.Count - 1;
+            var label = current ? "this week" : (weeks.Count - 1 - i) % 2 == 0 ? w.Start.ToString("d MMM") : null;
+            var span = $"{w.Start:d MMM} – {w.Start.AddDays(6):d MMM}";
+            var head = current ? $"This week ({span})" : $"Week {ISOWeek.GetWeekOfYear(w.Start)} ({span})";
+            var detail = w.Added == 0 ? "nothing added" : $"+{w.Added}: " + string.Join(", ", w.AddedByKind.Select(k => $"{k.Value} {KindName(k.Key)}"));
+            return new ChartColumn(w.Added, label, $"{head}\n{detail}\n{w.Total} entries in total", current);
         }).ToList();
-        var added = growth[^1].Total - growth[0].Total;
-        d.GrowthMeta = added > 0 ? $"last 6 months · +{added}" : "last 6 months";
+        var addedTotal = weeks.Sum(w => w.Added);
+        d.HasGrowth = addedTotal > 0;
+        d.GrowthMeta = $"last {weeks.Count} weeks · +{addedTotal} · {weeks[^1].Total} total";
+
+        RefreshDashboardProtocols(entries, now, log);
 
         var trend = _settings.ZabbixTrend.Where(x => x.At >= now - TimeSpan.FromHours(24)).ToList();
         d.ZabbixTrend = trend.Select((x, i) =>
