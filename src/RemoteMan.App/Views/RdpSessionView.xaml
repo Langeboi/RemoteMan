@@ -9,7 +9,7 @@
             <ColumnDefinition Width="22" />
         </Grid.ColumnDefinitions>
         <TextBlock x:Name="State" Foreground="{StaticResource Muted}" HorizontalAlignment="Center" VerticalAlignment="Center" />
-        <wfi:WindowsFormsHost x:Name="Host" />
+        <wfi:WindowsFormsHost x:Name="Host" AllowDrop="True" DragEnter="OnHostDragOver" DragOver="OnHostDragOver" Drop="OnHostDrop" />
 
         <!-- Shown while the session connects. The RDP control is hidden meanwhile (WPF can't draw over it),
              then revealed once the remote desktop is ready to show. -->
@@ -51,7 +51,7 @@
                 AllowDrop="True" Drop="OnDrop" DragOver="OnDragOver" DragLeave="OnDragLeave">
             <StackPanel>
                 <Button Style="{StaticResource FlatButton}" Height="96" Padding="0" Click="OnSendFiles"
-                        ToolTip="Send files: drop files here or click to pick, then press Ctrl+V in the remote folder"
+                        ToolTip="Send files: drop files here or click to pick, then press Ctrl+V in the remote folder. Or drop them straight onto the remote desktop or folder."
                         AutomationProperties.Name="Send files to remote">
                     <TextBlock Text="Send files" FontSize="11">
                         <TextBlock.LayoutTransform><RotateTransform Angle="90" /></TextBlock.LayoutTransform>
