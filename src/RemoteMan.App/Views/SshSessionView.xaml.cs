@@ -93,7 +93,7 @@ public partial class SshSessionView : UserControl
     /// <summary>Keyboard into the terminal: the WebView2 window first, then xterm inside it.</summary>
     private void FocusTerminal()
     {
-        Web.Focus();
+        SessionFocus.Into(Web);
         Post(new { t = "focus" });
     }
 
