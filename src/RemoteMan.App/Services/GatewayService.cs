@@ -209,11 +209,19 @@ public sealed class GatewayService
     }
 
     public LocalForwarder Forwarder(string site, IReadOnlyList<string> targets, bool directFirst) =>
-        _forwarders.GetOrAdd(ForwarderKey(site, targets, directFirst), _ =>
+        _forwarders.GetOrAdd(ForwarderKey(site, targets, directFirst), key =>
         {
             var f = new LocalForwarder(Client, site, targets, directFirst);
             f.Failed += m => Problem?.Invoke(m);
             f.Used += direct => RecordPath(site, direct);
+            // Back on site: the database's connections still on the gateway are closed so it reconnects directly
+            // and the gateway goes idle. Sessions keep their tunnel until they close; their next connect is direct.
+            f.BackOnSite += () =>
+            {
+                RecordPath(site, true);
+                if (_dbKeys.ContainsKey(key) && f.Drop(direct: false) > 0) { _reroutedAt = DateTime.UtcNow; Rerouted?.Invoke(); }
+                Changed?.Invoke();
+            };
             f.Override = Override;
             return f;
         });
@@ -227,8 +235,8 @@ public sealed class GatewayService
     public void RecordPath(string site, bool direct) => _paths[site] = (DateTime.UtcNow, direct);
 
     /// <summary>
-    /// True when the last connection to <paramref name="site"/> (the database's forwarder retries directly every
-    /// minute, so it keeps this fresh) needed the gateway in the last 10 minutes: this PC is off-site, so entries
+    /// True when the last connection to <paramref name="site"/> (forwarders try the direct path every 15 seconds
+    /// while on the gateway, so it keeps this fresh) needed the gateway in the last 10 minutes: this PC is off-site, so entries
     /// skip the direct try and its timeout. Back on site, the next direct success flips it.
     /// </summary>
     public bool PreferGateway(string site) => Mode == GatewayMode.Connected ||

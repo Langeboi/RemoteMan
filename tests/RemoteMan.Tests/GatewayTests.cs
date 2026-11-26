@@ -140,6 +140,27 @@ public sealed class GatewayTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Coming_back_on_site_is_noticed_in_the_background()
+    {
+        using var client = Client();
+        bool? manual = true;
+        using var fwd = new LocalForwarder(client, "lab", [$"127.0.0.1:{EchoPort}"], directFirst: true)
+            { Override = () => manual, ProbeEvery = TimeSpan.FromMilliseconds(200) };
+        var back = 0;
+        fwd.BackOnSite += () => Interlocked.Increment(ref back);
+        Assert.Equal("a"u8.ToArray(), await RoundTrip(fwd.Port, "a"u8.ToArray()));
+        Assert.Equal($"127.0.0.1:{EchoPort} via lab", fwd.LastPath);     // off site: through the gateway
+        await Task.Delay(600);
+        Assert.Equal(0, back);                                            // switched on by hand: no probing
+        manual = null;                                                    // automatic: the direct path answers
+        await WaitUntil(() => Volatile.Read(ref back) > 0);
+        Assert.Equal("b"u8.ToArray(), await RoundTrip(fwd.Port, "b"u8.ToArray()));
+        Assert.Equal($"127.0.0.1:{EchoPort}", fwd.LastPath);              // the next connection goes directly at once
+        await Task.Delay(600);
+        Assert.Equal(1, back);                                            // once, not on every probe
+    }
+
+    [Fact]
     public async Task Many_connections_at_once_all_get_through()
     {
         // Four people with a few sessions each: tunnels are independent, so they open side by side.

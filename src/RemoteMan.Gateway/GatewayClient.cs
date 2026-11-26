@@ -170,6 +170,7 @@ public sealed class LocalForwarder : IDisposable
         _listener.Start();
         Port = ((IPEndPoint)_listener.LocalEndpoint).Port;
         _ = Task.Run(AcceptLoopAsync);
+        if (directFirst) _ = Task.Run(WatchForSiteAsync);
     }
 
     public string Site { get; }
@@ -182,6 +183,16 @@ public sealed class LocalForwarder : IDisposable
     /// connection now and then, so a short memory made every one of them wait out the direct try first).
     /// </summary>
     public TimeSpan OffSiteMemory { get; init; } = TimeSpan.FromMinutes(10);
+    /// <summary>
+    /// While connections go through the gateway, how often the direct path is tried in the background, so coming
+    /// back on site is noticed within seconds instead of after <see cref="OffSiteMemory"/>.
+    /// </summary>
+    public TimeSpan ProbeEvery { get; init; } = TimeSpan.FromSeconds(15);
+    /// <summary>
+    /// The direct path answers again after connections went through the gateway (this PC is back on site): new
+    /// connections go directly. Open gateway connections are left alone; <see cref="Drop"/> moves them.
+    /// </summary>
+    public event Action? BackOnSite;
     /// <summary>The target last reached, and whether it was direct ("10.0.0.5:5432 via lab").</summary>
     public string? LastPath { get; private set; }
     /// <summary>A connection that couldn't be forwarded (the local program sees it close).</summary>
@@ -324,6 +335,24 @@ public sealed class LocalForwarder : IDisposable
             }
             catch { }
             finally { _live.TryRemove(live, out _); }
+        }
+    }
+
+    private async Task WatchForSiteAsync()
+    {
+        var ct = _cts.Token;
+        while (!ct.IsCancellationRequested)
+        {
+            try { await Task.Delay(ProbeEvery, ct); } catch (OperationCanceledException) { return; }
+            if (_path is not { Direct: false } || Override?.Invoke() is not null) continue;
+            try
+            {
+                if (await DialDirectAsync(ct) is not var (tcp, _)) continue;
+                tcp.Dispose();
+                _path = (DateTime.UtcNow, true);
+                BackOnSite?.Invoke();
+            }
+            catch { }
         }
     }
 
