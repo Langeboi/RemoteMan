@@ -90,6 +90,17 @@ public sealed class InviteRecord
     public List<string> UsedBy { get; set; } = [];
 }
 
+/// <summary>A one-line connector install link (curl … | sudo sh). Kept in the file so a relay restart doesn't end it.</summary>
+public sealed class InstallRecord
+{
+    public string CodeHash { get; set; } = "";
+    public string Site { get; set; } = "";
+    /// <summary>The connector token the script carries; it is replaced each time the script is fetched.</summary>
+    public string TokenId { get; set; } = "";
+    public string Name { get; set; } = "";
+    public DateTimeOffset Expires { get; set; }
+}
+
 public sealed class SetupCode
 {
     public string Hash { get; set; } = "";
@@ -109,6 +120,7 @@ public sealed class RelayStore
         public List<DeviceRecord> Devices { get; set; } = [];
         public List<AdminRecord> Admins { get; set; } = [];
         public List<InviteRecord> Invites { get; set; } = [];
+        public List<InstallRecord> Installs { get; set; } = [];
         public SetupCode? Setup { get; set; }
     }
 
@@ -403,6 +415,54 @@ public sealed class RelayStore
             result = (name, token, inv);
         });
         return result;
+    }
+
+    // ---- one-line connector installs ----
+
+    /// <summary>A new install link code (shown once) for a connector token made with <see cref="AddConnectorToken"/>.</summary>
+    public string AddInstall(string site, string tokenId, string name, TimeSpan lifetime)
+    {
+        var code = NewToken()[..22];
+        Update(d =>
+        {
+            d.Installs.RemoveAll(i => i.Expires < DateTimeOffset.UtcNow);
+            d.Installs.Add(new InstallRecord { CodeHash = Hash(code), Site = site, TokenId = tokenId, Name = name, Expires = DateTimeOffset.UtcNow + lifetime });
+        });
+        return code;
+    }
+
+    /// <summary>
+    /// Fetching an install script: the link's connector token is replaced by a fresh one (only hashes are on file, so
+    /// the script needs a new token in the clear), which is returned with the link. Null when the link isn't valid:
+    /// unknown, expired, or its token was revoked.
+    /// </summary>
+    public (string Token, InstallRecord Install)? TakeInstall(string code)
+    {
+        var h = Hash(code);
+        (string, InstallRecord)? result = null;
+        Update(d =>
+        {
+            d.Installs.RemoveAll(i => i.Expires < DateTimeOffset.UtcNow);
+            if (d.Installs.FirstOrDefault(i => FixedEquals(i.CodeHash, h)) is not { } inst) return;
+            if (Find(d.Sites, inst.Site)?.ConnectorTokens.FirstOrDefault(t => t.Id == inst.TokenId) is not { } t)
+            {
+                d.Installs.Remove(inst);   // the site or the token is gone
+                return;
+            }
+            var token = NewToken();
+            t.Hash = Hash(token);
+            result = (token, inst);
+        });
+        return result;
+    }
+
+    /// <summary>Ends the install links whose connector has come online.</summary>
+    public void EndInstalls(Func<InstallRecord, bool> done)
+    {
+        Reload();
+        bool any;
+        lock (_lock) any = _data.Installs.Any(i => done(i) || i.Expires < DateTimeOffset.UtcNow);
+        if (any) Update(d => d.Installs.RemoveAll(i => done(i) || i.Expires < DateTimeOffset.UtcNow));
     }
 
     public bool RevokeInvite(string id)

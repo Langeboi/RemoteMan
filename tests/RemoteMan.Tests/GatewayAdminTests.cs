@@ -139,12 +139,16 @@ public sealed class GatewayAdminTests : IAsyncLifetime
         Assert.Contains(token, setup.GetProperty("dockerRun").GetString());
         Assert.Contains("/v1/install/", setup.GetProperty("install").GetString());
 
-        // The one-line install hands out the script once.
+        // The one-line install works until the connector is online (a failed first try can be run again); each
+        // fetch carries a fresh token, which replaces the one shown with the setup.
         var install = setup.GetProperty("install").GetString()!;
         var path = new Uri(install.Split(' ')[2]).AbsolutePath;
+        var first = await _http.GetStringAsync(path);
         var script = await _http.GetStringAsync(path);
-        Assert.Contains(token, script);
-        Assert.Equal(HttpStatusCode.Gone, (await _http.GetAsync(path)).StatusCode);
+        Assert.DoesNotContain(token, script);
+        token = System.Text.RegularExpressions.Regex.Match(script, "SITE_TOKEN=([A-Za-z0-9_-]+)").Groups[1].Value;
+        Assert.NotEqual("", token);
+        Assert.DoesNotContain(token, first);
 
         var connector = new Connector(new ConnectorOptions
         {
@@ -153,6 +157,8 @@ public sealed class GatewayAdminTests : IAsyncLifetime
         });
         _ = connector.RunAsync(_cts.Token);
         await WaitUntil(() => _relay.IsOnline("school"));
+        // Online: the install link has done its job.
+        Assert.Equal(HttpStatusCode.Gone, (await _http.GetAsync(path)).StatusCode);
 
         var site = (await SnapshotAsync()).GetProperty("sites")[0];
         var c = site.GetProperty("connectors")[0];

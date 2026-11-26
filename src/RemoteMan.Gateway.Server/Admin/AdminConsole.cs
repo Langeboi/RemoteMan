@@ -49,12 +49,12 @@ public sealed class AdminConsole
         public string? PendingTotp { get; set; }
     }
 
-    private sealed record Install(string Script, DateTimeOffset Expires);
+    /// <summary>How long a one-line install link works (until its connector comes online, at most this long).</summary>
+    private static readonly TimeSpan InstallFor = TimeSpan.FromHours(24);
 
     private readonly Relay _relay;
     private readonly AdminOptions _o;
     private readonly ConcurrentDictionary<string, Session> _sessions = new();
-    private readonly ConcurrentDictionary<string, Install> _installs = new();
     private readonly Throttle _throttle = new();
 
     public AdminConsole(Relay relay, AdminOptions options)
@@ -139,8 +139,7 @@ public sealed class AdminConsole
             var cname = Str(b, "name") ?? NextConnectorName(site);
             var (token, id) = Store.AddConnectorToken(site.Name, cname);
             var relayUrl = PublicUrl(c);
-            var installCode = RelayStore.NewToken()[..22];
-            _installs[RelayStore.Hash(installCode)] = new Install(ConnectorSetup.Script(relayUrl, token, cname, _o.ConnectorImage), DateTimeOffset.UtcNow.AddHours(1));
+            var installCode = Store.AddInstall(site.Name, id, cname, InstallFor);
             Audit(s, "connector.token", site.Name, cname, $"Connector token {cname} made for {site.Name}");
             await Task.CompletedTask;
             return Results.Json(new
@@ -148,7 +147,8 @@ public sealed class AdminConsole
                 id, name = cname, token, relayUrl, publicUrlSet = _o.PublicUrl is not null,
                 dockerRun = ConnectorSetup.DockerRun(relayUrl, token, cname, _o.ConnectorImage),
                 compose = ConnectorSetup.Compose(relayUrl, token, cname, _o.ConnectorImage),
-                install = $"curl -fsSL {relayUrl}/v1/install/{installCode} | sudo sh",
+                // No -f: when the link no longer works, the relay answers with a script that says why, and sh prints it.
+                install = $"curl -sSL {relayUrl}/v1/install/{installCode} | sudo sh",
             }, GatewayProtocol.Json);
         }));
         api.MapDelete("/sites/{name}/tokens/{id}", (HttpContext c, string name, string id) => Authed(c, async s =>
@@ -438,12 +438,17 @@ public sealed class AdminConsole
 
     private IResult TakeInstall(HttpContext c, string code)
     {
-        foreach (var kv in _installs.Where(kv => kv.Value.Expires < DateTimeOffset.UtcNow)) _installs.TryRemove(kv.Key, out _);
-        if (!_installs.TryRemove(RelayStore.Hash(code), out var inst))
-            return Results.Text("echo 'This install link has expired or was already used. Make a new one in the admin console.' >&2; exit 1\n", "text/x-shellscript", statusCode: 410);
-        Activity.Add(new GatewayEvent(DateTimeOffset.UtcNow, "connector.install", null, null, $"Connector install script fetched from {ClientIp(c)}"));
+        // A link keeps working until its connector has come online (so a first try that failed half-way, say on
+        // Docker, can simply be run again), its token is revoked, or a day has passed. Each fetch gives the
+        // connector a fresh token, so an older copy of the script stops working.
+        var online = _relay.Snapshot().Connectors.Select(x => (x.Site.ToLowerInvariant(), x.TokenId)).ToHashSet();
+        Store.EndInstalls(i => online.Contains((i.Site.ToLowerInvariant(), i.TokenId)));
+        if (Store.TakeInstall(code) is not var (token, inst))
+            return Results.Text("echo 'This install link no longer works: its connector is already online, it is over a day old, or its token was revoked. Make a new one in the admin console (Sites > Add connector).' >&2; exit 1\n",
+                "text/x-shellscript", statusCode: 410);
+        Activity.Add(new GatewayEvent(DateTimeOffset.UtcNow, "connector.install", inst.Site, inst.Name, $"Connector install script for {inst.Name} fetched from {ClientIp(c)}"));
         c.Response.Headers.CacheControl = "no-store";
-        return Results.Text(inst.Script, "text/x-shellscript");
+        return Results.Text(ConnectorSetup.Script(PublicUrl(c), token, inst.Name, _o.ConnectorImage), "text/x-shellscript");
     }
 
     // ---- what the console shows ----
