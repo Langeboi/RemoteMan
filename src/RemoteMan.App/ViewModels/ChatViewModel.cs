@@ -68,7 +68,9 @@ public sealed partial class ChatViewModel : ObservableObject
         hub.MessageArrived += OnHubMessage;
         await hub.StartAsync();
         IsAvailable = true;
+        // The GIPHY settings load before chat starts: the GIF button only knows files work from here on.
         OnPropertyChanged(nameof(CanSendFiles));
+        GiphyChanged();
         Refresh();
     }
 

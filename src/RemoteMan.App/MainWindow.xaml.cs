@@ -149,9 +149,21 @@ public partial class MainWindow : Window
 
     // ---------------- team chat ----------------
 
+    /// <summary>More, Chat GIFs (GIPHY), also opened by the chat's GIF button while no key is set.</summary>
+    private void OpenGiphySettings()
+    {
+        if (_vm.Integrations is not { } ints) { _vm.Message = "Open a shared data source first"; return; }
+        if (new GiphySettingsWindow(this, ints).ShowDialog() == true)
+        {
+            _vm.Chat.GiphyChanged();
+            _vm.Message = ints.GiphyApiKey is null ? "GIF search is off for everyone" : "GIF search is on for everyone on this database";
+        }
+    }
+
     private void SetUpChat()
     {
         var chat = _vm.Chat;
+        chat.GiphySetupRequested += (_, _) => OpenGiphySettings();
         chat.NewGroupDialog = users =>
         {
             var w = new NewChatGroupWindow(this, users);
@@ -263,15 +275,7 @@ public partial class MainWindow : Window
                 keep.Items.Add(item);
             }
             menu.Items.Add(keep);
-            menu.Items.Add(Click("Chat GIFs (GIPHY)…", (_, _) =>
-            {
-                if (_vm.Integrations is not { } ints) { _vm.Message = "Open a shared data source first"; return; }
-                if (new GiphySettingsWindow(this, ints).ShowDialog() == true)
-                {
-                    _vm.Chat.GiphyChanged();
-                    _vm.Message = ints.GiphyApiKey is null ? "GIF search is off for everyone" : "GIF search is on for everyone on this database";
-                }
-            }));
+            menu.Items.Add(Click("Chat GIFs (GIPHY)…", (_, _) => OpenGiphySettings()));
         }
         menu.Items.Add(new Separator());
         var updates = RemoteMan.App.Updates.UpdateService.Instance;
