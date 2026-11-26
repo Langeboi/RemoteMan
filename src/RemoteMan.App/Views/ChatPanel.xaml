@@ -334,45 +334,90 @@
                 </DockPanel>
             </Border>
 
-            <!-- Composer: # opens the link picker; Enter sends, Shift+Enter is a new line; entries can be dropped here from the tree -->
+            <!-- Composer: one rounded field with attach and GIF on the left and a round Send on the right.
+                 # opens the link picker; Enter sends, Shift+Enter is a new line; entries and files can be dropped here. -->
             <Border x:Name="Composer" DockPanel.Dock="Bottom" BorderBrush="{StaticResource Border}" BorderThickness="0,1,0,0" Padding="10,8,10,10">
                 <StackPanel>
-                    <Grid>
-                        <TextBox x:Name="Input" Text="{Binding Draft, UpdateSourceTrigger=PropertyChanged}" AcceptsReturn="True" TextWrapping="Wrap"
-                                 MinHeight="40" MaxHeight="140" VerticalScrollBarVisibility="Auto" VerticalContentAlignment="Top" Padding="4,5"
-                                 AutomationProperties.Name="Message" AllowDrop="True"
-                                 PreviewKeyDown="OnInputKeyDown" TextChanged="OnInputTextChanged" SelectionChanged="OnInputSelectionChanged"
-                                 PreviewDragOver="OnInputDragOver" PreviewDragEnter="OnInputDragOver" PreviewDrop="OnInputDrop" />
-                        <TextBlock Text="Write a message. Type # to link an entry." Foreground="{StaticResource Faint}" IsHitTestVisible="False" Margin="9,7,0,0">
-                            <TextBlock.Style>
-                                <Style TargetType="TextBlock">
-                                    <Setter Property="Visibility" Value="Collapsed" />
-                                    <Style.Triggers>
-                                        <DataTrigger Binding="{Binding Text, ElementName=Input}" Value=""><Setter Property="Visibility" Value="Visible" /></DataTrigger>
-                                    </Style.Triggers>
-                                </Style>
-                            </TextBlock.Style>
-                        </TextBlock>
-                    </Grid>
-                    <TextBlock Text="{Binding SendingText}" Foreground="{StaticResource Muted}" FontSize="11" Margin="2,5,0,0" TextTrimming="CharacterEllipsis"
+                    <TextBlock Text="{Binding SendingText}" Foreground="{StaticResource Muted}" FontSize="11" Margin="4,0,0,6" TextTrimming="CharacterEllipsis"
                                Visibility="{Binding IsSending, Converter={StaticResource BoolVis}}" />
-                    <DockPanel Margin="0,6,0,0">
-                        <Button DockPanel.Dock="Right" Content="Send" Style="{StaticResource PrimaryButton}" MinHeight="22" Command="{Binding SendCommand}" />
-                        <Button DockPanel.Dock="Left" Style="{StaticResource FlatButton}" Width="26" Height="22" Padding="0" Margin="-4,0,6,0" Command="{Binding AttachCommand}"
-                                ToolTip="Send a file, picture or GIF (or drop it here, or paste it)" AutomationProperties.Name="Send a file"
-                                Visibility="{Binding CanSendFiles, Converter={StaticResource BoolVis}}">
-                            <Path Data="M10.5,4.5 L5.2,9.8 A1.6,1.6 0 0 0 7.5,12.1 L13,6.6 A3,3 0 0 0 8.8,2.4 L3.2,8 A4.4,4.4 0 0 0 9.4,14.2 L13.5,10.1"
-                                  Stroke="{StaticResource Soft}" StrokeThickness="1.3" StrokeLineJoin="Round" StrokeStartLineCap="Round" StrokeEndLineCap="Round" />
-                        </Button>
-                        <Button x:Name="GifButton" DockPanel.Dock="Left" Style="{StaticResource FlatButton}" Height="22" Padding="4,0" Margin="0,0,6,0" Command="{Binding ToggleGifPickerCommand}"
-                                ToolTip="Search GIPHY for a GIF" AutomationProperties.Name="Send a GIF"
-                                Visibility="{Binding CanUseGiphy, Converter={StaticResource BoolVis}}">
-                            <Border BorderBrush="{StaticResource Soft}" BorderThickness="1.2" CornerRadius="3" Padding="3,0">
-                                <TextBlock Text="GIF" FontSize="9.5" FontWeight="Bold" Foreground="{StaticResource Soft}" />
-                            </Border>
-                        </Button>
-                        <TextBlock Text="#  link     ```  code     Enter  send     Shift+Enter  new line" Foreground="{StaticResource Faint}" FontSize="11" VerticalAlignment="Center" />
-                    </DockPanel>
+                    <Border x:Name="Field" Background="{StaticResource Work}" BorderThickness="1" CornerRadius="10" Padding="4,3,4,3">
+                        <Border.Style>
+                            <Style TargetType="Border">
+                                <Setter Property="BorderBrush" Value="{StaticResource InputBorder}" />
+                                <Style.Triggers>
+                                    <Trigger Property="IsKeyboardFocusWithin" Value="True"><Setter Property="BorderBrush" Value="{StaticResource Accent}" /></Trigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Border.Style>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" /><ColumnDefinition Width="Auto" /><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <Button Grid.Column="0" Style="{StaticResource FlatButton}" Width="28" Height="28" Padding="0" VerticalAlignment="Bottom" Command="{Binding AttachCommand}"
+                                    ToolTip="Send a file or picture (you can also drop or paste it here)" AutomationProperties.Name="Send a file"
+                                    Visibility="{Binding CanSendFiles, Converter={StaticResource BoolVis}}">
+                                <Path Data="M10.5,4.5 L5.2,9.8 A1.6,1.6 0 0 0 7.5,12.1 L13,6.6 A3,3 0 0 0 8.8,2.4 L3.2,8 A4.4,4.4 0 0 0 9.4,14.2 L13.5,10.1"
+                                      Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" StrokeThickness="1.3"
+                                      StrokeLineJoin="Round" StrokeStartLineCap="Round" StrokeEndLineCap="Round" />
+                            </Button>
+                            <Button x:Name="GifButton" Grid.Column="1" Style="{StaticResource FlatButton}" Height="28" Padding="5,0" VerticalAlignment="Bottom" Command="{Binding ToggleGifPickerCommand}"
+                                    ToolTip="Search GIPHY for a GIF" AutomationProperties.Name="Send a GIF"
+                                    Visibility="{Binding CanUseGiphy, Converter={StaticResource BoolVis}}">
+                                <Border BorderBrush="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" BorderThickness="1.2" CornerRadius="3" Padding="3,0,3,1">
+                                    <TextBlock Text="GIF" FontSize="9" FontWeight="Bold" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
+                                </Border>
+                            </Button>
+                            <Grid Grid.Column="2" Margin="2,0">
+                                <TextBox x:Name="Input" Text="{Binding Draft, UpdateSourceTrigger=PropertyChanged}" AcceptsReturn="True" TextWrapping="Wrap"
+                                         MinHeight="28" MaxHeight="140" VerticalScrollBarVisibility="Auto" VerticalContentAlignment="Center" Padding="2,5"
+                                         Background="Transparent" BorderThickness="0" Foreground="{StaticResource Text}" CaretBrush="{StaticResource Text}"
+                                         AutomationProperties.Name="Message" AllowDrop="True"
+                                         ToolTip="Enter sends · Shift+Enter new line · # links an entry · ``` starts a code block"
+                                         PreviewKeyDown="OnInputKeyDown" TextChanged="OnInputTextChanged" SelectionChanged="OnInputSelectionChanged"
+                                         PreviewDragOver="OnInputDragOver" PreviewDragEnter="OnInputDragOver" PreviewDrop="OnInputDrop">
+                                    <TextBox.Template>
+                                        <!-- No box of its own: the rounded field around it is the box -->
+                                        <ControlTemplate TargetType="TextBox">
+                                            <ScrollViewer x:Name="PART_ContentHost" Focusable="False" Padding="{TemplateBinding Padding}"
+                                                          VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+                                                          VerticalScrollBarVisibility="{TemplateBinding VerticalScrollBarVisibility}" HorizontalScrollBarVisibility="Disabled" />
+                                        </ControlTemplate>
+                                    </TextBox.Template>
+                                </TextBox>
+                                <TextBlock Foreground="{StaticResource Faint}" IsHitTestVisible="False" Margin="4,0,0,0" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
+                                           Text="{Binding Current.ShortTitle, StringFormat='Message {0}  ·  # to link'}">
+                                    <TextBlock.Style>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="Visibility" Value="Collapsed" />
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding Text, ElementName=Input}" Value=""><Setter Property="Visibility" Value="Visible" /></DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </TextBlock.Style>
+                                </TextBlock>
+                            </Grid>
+                            <Button Grid.Column="3" Width="28" Height="28" VerticalAlignment="Bottom" Command="{Binding SendCommand}" Cursor="Hand" Tag="{Binding Text, ElementName=Input}"
+                                    ToolTip="Send (Enter)" AutomationProperties.Name="Send" Focusable="False">
+                                <Button.Template>
+                                    <ControlTemplate TargetType="Button">
+                                        <Grid>
+                                            <Ellipse x:Name="dot" Fill="{StaticResource Accent}" />
+                                            <Path Data="M1,7 L13,1 L9.5,13 L7,8 Z M7,8 L13,1" Fill="{StaticResource OnAccent}" Stroke="{StaticResource OnAccent}" StrokeThickness="0.8"
+                                                  StrokeLineJoin="Round" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="-1,1,0,0" />
+                                        </Grid>
+                                        <ControlTemplate.Triggers>
+                                            <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="dot" Property="Opacity" Value="0.85" /></Trigger>
+                                            <!-- Tag is the draft: a grey dot while there is nothing to send -->
+                                            <DataTrigger Binding="{Binding Tag, RelativeSource={RelativeSource TemplatedParent}}" Value="">
+                                                <Setter TargetName="dot" Property="Fill" Value="{StaticResource BorderSoft}" />
+                                                <Setter Property="Cursor" Value="Arrow" />
+                                            </DataTrigger>
+                                        </ControlTemplate.Triggers>
+                                    </ControlTemplate>
+                                </Button.Template>
+                            </Button>
+                        </Grid>
+                    </Border>
                 </StackPanel>
             </Border>
 
