@@ -26,7 +26,7 @@ public sealed class SecureChannel
     private const int PubLen = 65, NonceLen = 32, TagLen = 16;
     private static readonly byte[] Info = "remoteman-gateway v1"u8.ToArray();
 
-    private readonly WebSocket _ws;
+    private readonly IMessagePipe _pipe;
     private readonly AesGcm _send, _recv;
     private ulong _sendCounter, _recvCounter;
     private readonly SemaphoreSlim _sendLock = new(1, 1);
@@ -35,9 +35,9 @@ public sealed class SecureChannel
     private readonly byte[] _sendFrame = new byte[MaxPlaintext + TagLen];
     private readonly byte[] _sendNonce = new byte[12];
 
-    private SecureChannel(WebSocket ws, byte[] sendKey, byte[] recvKey)
+    private SecureChannel(IMessagePipe pipe, byte[] sendKey, byte[] recvKey)
     {
-        _ws = ws;
+        _pipe = pipe;
         _send = new AesGcm(sendKey, TagLen);
         _recv = new AesGcm(recvKey, TagLen);
     }
@@ -46,14 +46,18 @@ public sealed class SecureChannel
     public static string Fingerprint(byte[] spki) => Convert.ToHexString(SHA256.HashData(spki))[..32].ToLowerInvariant();
 
     /// <summary>Client side. <paramref name="acceptKey"/> gets the connector's static key (SPKI) and says whether to trust it.</summary>
-    public static async Task<(SecureChannel Channel, byte[] ConnectorKey)> ClientAsync(WebSocket ws, Func<byte[], bool> acceptKey, CancellationToken ct)
+    public static Task<(SecureChannel Channel, byte[] ConnectorKey)> ClientAsync(WebSocket ws, Func<byte[], bool> acceptKey, CancellationToken ct) =>
+        ClientAsync(new WebSocketPipe(ws), acceptKey, ct);
+
+    /// <inheritdoc cref="ClientAsync(WebSocket, Func{byte[], bool}, CancellationToken)"/>
+    public static async Task<(SecureChannel Channel, byte[] ConnectorKey)> ClientAsync(IMessagePipe ws, Func<byte[], bool> acceptKey, CancellationToken ct)
     {
         using var eph = ECDiffieHellman.Create(ECCurve.NamedCurves.nistP256);
         var hello = new byte[1 + PubLen + NonceLen];
         hello[0] = Version;
         PublicPoint(eph).CopyTo(hello, 1);
         RandomNumberGenerator.Fill(hello.AsSpan(1 + PubLen, NonceLen));
-        await ws.SendAsync(hello, WebSocketMessageType.Binary, true, ct);
+        await ws.SendAsync(hello, ct);
 
         var reply = await ReceiveWholeAsync(ws, 4096, ct) ?? throw new GatewayException("The connector closed the connection during the handshake.");
         if (reply.Length < 1 + PubLen + NonceLen + 4 || reply[0] != Version) throw new GatewayException("The connector answered with an unknown handshake.");
@@ -80,7 +84,11 @@ public sealed class SecureChannel
     }
 
     /// <summary>Connector side: answers the client's hello and signs with the connector's static key.</summary>
-    public static async Task<SecureChannel> ConnectorAsync(WebSocket ws, ECDsa staticKey, CancellationToken ct)
+    public static Task<SecureChannel> ConnectorAsync(WebSocket ws, ECDsa staticKey, CancellationToken ct) =>
+        ConnectorAsync(new WebSocketPipe(ws), staticKey, ct);
+
+    /// <inheritdoc cref="ConnectorAsync(WebSocket, ECDsa, CancellationToken)"/>
+    public static async Task<SecureChannel> ConnectorAsync(IMessagePipe ws, ECDsa staticKey, CancellationToken ct)
     {
         var hello = await ReceiveWholeAsync(ws, 1024, ct) ?? throw new GatewayException("The client went away during the handshake.");
         if (hello.Length != 1 + PubLen + NonceLen || hello[0] != Version) throw new GatewayException("Unknown handshake from the client.");
@@ -100,7 +108,7 @@ public sealed class SecureChannel
         spki.CopyTo(reply, at); at += spki.Length;
         BinaryPrimitives.WriteUInt16BigEndian(reply.AsSpan(at), (ushort)sig.Length); at += 2;
         sig.CopyTo(reply, at);
-        await ws.SendAsync(reply, WebSocketMessageType.Binary, true, ct);
+        await ws.SendAsync(reply, ct);
 
         var (c2n, n2c) = DeriveKeys(eph, hello.AsSpan(1, PubLen).ToArray(), transcript);
         return new SecureChannel(ws, n2c, c2n);
@@ -117,7 +125,7 @@ public sealed class SecureChannel
                 var frame = _sendFrame.AsMemory(0, chunk.Length + TagLen);
                 BinaryPrimitives.WriteUInt64BigEndian(_sendNonce.AsSpan(4), _sendCounter++);
                 _send.Encrypt(_sendNonce, chunk.Span, frame.Span[..chunk.Length], frame.Span[chunk.Length..]);
-                await _ws.SendAsync(frame, WebSocketMessageType.Binary, true, ct);
+                await _pipe.SendAsync(frame, ct);
             }
             finally { _sendLock.Release(); }
             if (plaintext.Length == 0) break;
@@ -149,15 +157,8 @@ public sealed class SecureChannel
 
     private async Task<int> ReceiveSealedAsync(CancellationToken ct)
     {
-        var n = 0;
-        while (true)
-        {
-            if (n == _recvBuffer.Length) throw new GatewayException("Frame too large.");
-            var r = await _ws.ReceiveAsync(_recvBuffer.AsMemory(n), ct);
-            if (r.MessageType == WebSocketMessageType.Close) return -1;
-            n += r.Count;
-            if (r.EndOfMessage) break;
-        }
+        var n = await _pipe.ReceiveAsync(_recvBuffer, ct);
+        if (n < 0) return -1;
         if (n < TagLen) throw new GatewayException("Frame too short.");
         return n;
     }
@@ -170,16 +171,8 @@ public sealed class SecureChannel
         catch (CryptographicException) { throw new GatewayException("A frame failed its integrity check; the connection was tampered with."); }
     }
 
-    public async Task CloseAsync()
-    {
-        try
-        {
-            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(2));
-            if (_ws.State is WebSocketState.Open or WebSocketState.CloseReceived)
-                await _ws.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, null, cts.Token);
-        }
-        catch { }
-    }
+    /// <summary>Nothing more will be sent; the other side sees the end and can still answer.</summary>
+    public Task CloseAsync() => _pipe.CloseOutputAsync();
 
     private static byte[] PublicPoint(ECDiffieHellman k)
     {
@@ -214,18 +207,11 @@ public sealed class SecureChannel
         return (okm[..32], okm[32..]);
     }
 
-    internal static async Task<byte[]?> ReceiveWholeAsync(WebSocket ws, int max, CancellationToken ct)
+    internal static async Task<byte[]?> ReceiveWholeAsync(IMessagePipe pipe, int max, CancellationToken ct)
     {
         var buf = new byte[max];
-        var n = 0;
-        while (true)
-        {
-            if (n == max) throw new GatewayException("Message too large.");
-            var r = await ws.ReceiveAsync(buf.AsMemory(n), ct);
-            if (r.MessageType == WebSocketMessageType.Close) return null;
-            n += r.Count;
-            if (r.EndOfMessage) return buf[..n];
-        }
+        var n = await pipe.ReceiveAsync(buf, ct);
+        return n < 0 ? null : buf[..n];
     }
 }
 

@@ -57,6 +57,9 @@ public sealed class GatewayService
             _cfg = cfg;
             var token = cfg.Token.StartsWith("D1", StringComparison.Ordinal) ? new DpapiSecretProtector().Unprotect(cfg.Token) : cfg.Token;
             _client = new GatewayClient(new Uri(cfg.Url), token);
+            // A connector (or the relay link) died under open sessions: they reconnect at once, even with
+            // auto-reconnect off, and land on the site's other connector; the database clears its dead pool.
+            _client.TunnelsLost += () => { _reroutedAt = DateTime.UtcNow; Rerouted?.Invoke(); };
             Device = cfg.Device;
         }
         catch (Exception) { _client = null; }   // another Windows user's file, or a damaged one: not set up
@@ -85,7 +88,10 @@ public sealed class GatewayService
 
     private DateTime _reroutedAt;
 
-    /// <summary>The switch closed connections in the last few seconds (sessions that dropped should just reconnect).</summary>
+    /// <summary>
+    /// Connections were closed on purpose in the last few seconds (the switch was flipped, or a connector went away
+    /// and another can take over): sessions that dropped should just reconnect.
+    /// </summary>
     public bool JustRerouted => DateTime.UtcNow - _reroutedAt < TimeSpan.FromSeconds(5);
 
     /// <summary>

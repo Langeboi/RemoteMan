@@ -20,6 +20,8 @@ public sealed class ConnectorOptions
     /// <summary>Sent to the relay so its admin console can show it (the image's version).</summary>
     public string? Version { get; init; }
     public TimeSpan ConnectTimeout { get; init; } = TimeSpan.FromSeconds(3);
+    /// <summary>Offer the relay tunnels as streams on the control connection (off: one WebSocket per tunnel, as before).</summary>
+    public bool Multiplex { get; init; } = true;
     public Action<string> Log { get; init; } = Console.WriteLine;
 }
 
@@ -77,6 +79,7 @@ public sealed class Connector
                 ws.Options.SetRequestHeader(GatewayProtocol.NameHeader, _o.Name);
                 ws.Options.SetRequestHeader(GatewayProtocol.AllowHeader, _o.Allow.ToString());
                 if (_o.Version is { Length: > 0 and <= 64 } v) ws.Options.SetRequestHeader(GatewayProtocol.ConnectorVersionHeader, v);
+                if (_o.Multiplex) ws.Options.SetRequestHeader(GatewayProtocol.MuxHeader, "1");
                 await RelayRefusedException.ConnectAsync(ws, GatewayProtocol.WebSocketUri(_o.Relay, GatewayProtocol.ConnectorPath), ct);
                 Connected = true;
                 _o.Log($"Connected to the relay {_o.Relay.Host} as {_o.Name} (key {Fingerprint})");
@@ -124,50 +127,63 @@ public sealed class Connector
 
     private async Task ControlLoopAsync(ClientWebSocket ws, CancellationToken ct)
     {
-        var buf = new byte[4096];
-        var msg = new MemoryStream();
-        while (ws.State == WebSocketState.Open)
+        // Text lines are the control protocol; binary frames are tunnels the relay opens as streams on this same
+        // connection (only when this connector offered it; an older relay never sends any).
+        using var mux = new MuxEndpoint(ws, isWebSocketClient: true)
         {
-            WebSocketReceiveResult r;
-            try { r = await ws.ReceiveAsync(buf, ct); }
-            catch (WebSocketException) { return; }
-            if (r.MessageType == WebSocketMessageType.Close) return;
-            if (msg.Length + r.Count <= 64 * 1024) msg.Write(buf, 0, r.Count);
-            if (!r.EndOfMessage) continue;
-            var line = Encoding.UTF8.GetString(msg.GetBuffer(), 0, (int)msg.Length);
-            msg.SetLength(0);
-            if (r.MessageType != WebSocketMessageType.Text) continue;
-            if (line.StartsWith("open ", StringComparison.Ordinal))
+            OnText = line => OnControlLine(line, ct),
+            Incoming = (stream, _) => ServeChannelAsync(stream, $"s{stream.Id}", ct),
+        };
+        await mux.RunAsync(ct);
+    }
+
+    private void OnControlLine(string line, CancellationToken ct)
+    {
+        if (line.StartsWith("open ", StringComparison.Ordinal))
+        {
+            var id = line[5..].Trim();
+            _ = Task.Run(() => ServeTunnelAsync(id, ct), ct);
+        }
+        else if (line.StartsWith("allow", StringComparison.Ordinal))
+        {
+            var spec = line[5..].Trim();
+            try
             {
-                var id = line[5..].Trim();
-                _ = Task.Run(() => ServeTunnelAsync(id, ct), ct);
+                var next = spec.Length == 0 ? null : new AllowList(spec);
+                var before = Volatile.Read(ref _siteAllow)?.ToString();
+                Volatile.Write(ref _siteAllow, next);
+                if (before != next?.ToString())
+                    _o.Log(next is null ? "The site has no resources set on the relay; ALLOW alone decides" : $"Site resources from the relay: {next} (also limited by ALLOW={_o.Allow})");
             }
-            else if (line.StartsWith("allow", StringComparison.Ordinal))
-            {
-                var spec = line[5..].Trim();
-                try
-                {
-                    var next = spec.Length == 0 ? null : new AllowList(spec);
-                    var before = Volatile.Read(ref _siteAllow)?.ToString();
-                    Volatile.Write(ref _siteAllow, next);
-                    if (before != next?.ToString())
-                        _o.Log(next is null ? "The site has no resources set on the relay; ALLOW alone decides" : $"Site resources from the relay: {next} (also limited by ALLOW={_o.Allow})");
-                }
-                catch (FormatException ex) { _o.Log($"Ignoring the site's resources from the relay: {ex.Message}"); }
-            }
+            catch (FormatException ex) { _o.Log($"Ignoring the site's resources from the relay: {ex.Message}"); }
         }
     }
 
+    /// <summary>A tunnel the relay asked for on its own WebSocket (relays without multiplexing).</summary>
     private async Task ServeTunnelAsync(string id, CancellationToken ct)
     {
-        Interlocked.Increment(ref _active);
         try
         {
             using var ws = NewSocket();
             await RelayRefusedException.ConnectAsync(ws, GatewayProtocol.WebSocketUri(_o.Relay, GatewayProtocol.AcceptPath + Uri.EscapeDataString(id)), ct);
+            using var pipe = new WebSocketPipe(ws);
+            await ServeChannelAsync(pipe, id, ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
+        {
+            _o.Log($"Tunnel {id}: {ex.GetBaseException().Message}");
+        }
+    }
+
+    /// <summary>The end-to-end handshake, the open request and the pump, on either kind of tunnel.</summary>
+    private async Task ServeChannelAsync(IMessagePipe pipe, string id, CancellationToken ct)
+    {
+        Interlocked.Increment(ref _active);
+        try
+        {
             using var hs = CancellationTokenSource.CreateLinkedTokenSource(ct);
             hs.CancelAfter(TimeSpan.FromSeconds(15));
-            var channel = await SecureChannel.ConnectorAsync(ws, _o.Key, hs.Token);
+            var channel = await SecureChannel.ConnectorAsync(pipe, _o.Key, hs.Token);
             var req = await channel.ReceiveAsync(hs.Token) is { } raw ? GatewayProtocol.Decode<OpenRequest>(raw) : null;
             if (req?.Targets is not { Count: > 0 }) { await channel.CloseAsync(); return; }
 
@@ -242,16 +258,18 @@ public sealed class RelayRefusedException(HttpStatusCode status, string message)
         catch (WebSocketException) when (ws.HttpStatusCode is not 0 and not HttpStatusCode.SwitchingProtocols)
         {
             var status = ws.HttpStatusCode;
-            throw new RelayRefusedException(status, status switch
-            {
-                HttpStatusCode.Unauthorized => "The relay doesn't accept this token. It may have been removed; ask for a new invite.",
-                HttpStatusCode.Forbidden => "This device isn't allowed to use that site.",
-                HttpStatusCode.NotFound => "The relay doesn't know that site.",
-                HttpStatusCode.ServiceUnavailable => "The site's connector isn't online.",
-                HttpStatusCode.Conflict => "The relay has a different key on file for this site.",
-                HttpStatusCode.GatewayTimeout => "The site's connector didn't answer in time.",
-                _ => $"The relay answered {(int)status} {status}.",
-            });
+            throw new RelayRefusedException(status, Describe(status));
         }
     }
+
+    public static string Describe(HttpStatusCode status) => status switch
+    {
+        HttpStatusCode.Unauthorized => "The relay doesn't accept this token. It may have been removed; ask for a new invite.",
+        HttpStatusCode.Forbidden => "This device isn't allowed to use that site.",
+        HttpStatusCode.NotFound => "The relay doesn't know that site.",
+        HttpStatusCode.ServiceUnavailable => "The site's connector isn't online.",
+        HttpStatusCode.Conflict => "The relay has a different key on file for this site.",
+        HttpStatusCode.GatewayTimeout => "The site's connector didn't answer in time.",
+        _ => $"The relay answered {(int)status} {status}.",
+    };
 }

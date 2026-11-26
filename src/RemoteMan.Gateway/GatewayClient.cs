@@ -65,31 +65,21 @@ public sealed class GatewayClient : IDisposable
     {
         if (targets.Count == 0) throw new ArgumentException("No target", nameof(targets));
         var keys = await KeysAsync(site, false, ct);
-        var ws = new ClientWebSocket();
+        IMessagePipe? pipe = null;
         try
         {
-            ws.Options.SetRequestHeader("Authorization", "Bearer " + _token);
-            ws.Options.SetRequestHeader(GatewayProtocol.VersionHeader, GatewayProtocol.Version.ToString());
-            ws.Options.KeepAliveInterval = GatewayProtocol.KeepAliveInterval;
-            ws.Options.KeepAliveTimeout = GatewayProtocol.KeepAliveTimeout;
             using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
             cts.CancelAfter(TimeSpan.FromSeconds(20));
-            try
-            {
-                await RelayRefusedException.ConnectAsync(ws, GatewayProtocol.WebSocketUri(Relay, $"{GatewayProtocol.ConnectPath}?site={Uri.EscapeDataString(site)}"), cts.Token);
-            }
-            catch (Exception ex) when (ex is WebSocketException or HttpRequestException && !ct.IsCancellationRequested)
-            {
-                throw new GatewayException($"Can't reach the gateway relay {Relay.Host}: {ex.GetBaseException().Message}");
-            }
+            // A stream on the shared connection when the relay has it (one round trip), else a WebSocket of its own.
+            pipe = await MuxAsync(cts.Token) is { } mux ? mux.Open(site) : await ConnectLegacyAsync(site, ct, cts.Token);
 
             // A connector that was just replaced has a key the cached list doesn't have yet: refresh once.
             byte[]? seen = null;
             SecureChannel channel;
-            try { (channel, _) = await SecureChannel.ClientAsync(ws, k => keys.Contains(Convert.ToBase64String(seen = k)), cts.Token); }
+            try { (channel, _) = await SecureChannel.ClientAsync(pipe, k => keys.Contains(Convert.ToBase64String(seen = k)), cts.Token); }
             catch (GatewayException) when (!retried && seen is not null && !keys.Contains(Convert.ToBase64String(seen)))
             {
-                ws.Dispose();
+                pipe.Dispose();
                 if (!(await KeysAsync(site, true, ct)).Contains(Convert.ToBase64String(seen))) throw;
                 return await OpenAsync(site, targets, ct, retried: true);
             }
@@ -98,18 +88,116 @@ public sealed class GatewayClient : IDisposable
             var reply = await channel.ReceiveAsync(cts.Token) is { } raw ? GatewayProtocol.Decode<OpenReply>(raw) : null;
             if (reply is null) throw new GatewayException($"The connector for {site} closed the tunnel.");
             if (!reply.Ok) throw new GatewayException($"Through {site}: {reply.Error}");
-            return new GatewayTunnel(ws, channel, reply.Target ?? targets[0], site);
+            return new GatewayTunnel(pipe, channel, reply.Target ?? targets[0], site);
         }
         catch (OperationCanceledException) when (!ct.IsCancellationRequested)
         {
-            ws.Dispose();
+            pipe?.Dispose();
             throw new GatewayException($"The gateway didn't open a tunnel through {site} in time.");
+        }
+        catch
+        {
+            pipe?.Dispose();
+            throw;
+        }
+    }
+
+    private async Task<IMessagePipe> ConnectLegacyAsync(string site, CancellationToken ct, CancellationToken timeout)
+    {
+        var ws = NewSocket();
+        try
+        {
+            await RelayRefusedException.ConnectAsync(ws, GatewayProtocol.WebSocketUri(Relay, $"{GatewayProtocol.ConnectPath}?site={Uri.EscapeDataString(site)}"), timeout);
+            return new WebSocketPipe(ws);
+        }
+        catch (Exception ex) when (ex is WebSocketException or HttpRequestException && !ct.IsCancellationRequested)
+        {
+            ws.Dispose();
+            throw new GatewayException($"Can't reach the gateway relay {Relay.Host}: {ex.GetBaseException().Message}");
         }
         catch
         {
             ws.Dispose();
             throw;
         }
+    }
+
+    private ClientWebSocket NewSocket()
+    {
+        var ws = new ClientWebSocket();
+        ws.Options.SetRequestHeader("Authorization", "Bearer " + _token);
+        ws.Options.SetRequestHeader(GatewayProtocol.VersionHeader, GatewayProtocol.Version.ToString());
+        ws.Options.KeepAliveInterval = GatewayProtocol.KeepAliveInterval;
+        ws.Options.KeepAliveTimeout = GatewayProtocol.KeepAliveTimeout;
+        return ws;
+    }
+
+    // ── The shared connection ─────────────────────────────────────────────────────────────────────────────────
+    private readonly object _muxLock = new();
+    private readonly CancellationTokenSource _disposed = new();
+    private MuxEndpoint? _mux;
+    private Task<MuxEndpoint?>? _muxConnecting;
+    private DateTime _noMuxUntil;
+
+    /// <summary>
+    /// Carry tunnels as streams on one WebSocket to the relay (opened on first use, reopened when it drops). Off,
+    /// or with a relay that predates it (checked again every 5 minutes), each tunnel opens a WebSocket of its own.
+    /// </summary>
+    public bool Multiplex { get; init; } = true;
+
+    /// <summary>
+    /// Open tunnels were cut because a connector or the connection to the relay went away (not closed by either
+    /// end): sessions should reconnect at once, and will land on another connector.
+    /// </summary>
+    public event Action? TunnelsLost;
+
+    /// <summary>Whether tunnels go over the shared connection right now (for the status box).</summary>
+    public bool Multiplexed => _mux is { IsOpen: true };
+
+    private async Task<MuxEndpoint?> MuxAsync(CancellationToken ct)
+    {
+        if (!Multiplex || DateTime.UtcNow < _noMuxUntil) return null;
+        Task<MuxEndpoint?> t;
+        lock (_muxLock)
+        {
+            if (_mux is { IsOpen: true } m) return m;
+            if (_muxConnecting is not { IsCompleted: false }) _muxConnecting = ConnectMuxAsync();
+            t = _muxConnecting;
+        }
+        return await t.WaitAsync(ct);
+    }
+
+    private async Task<MuxEndpoint?> ConnectMuxAsync()
+    {
+        var ws = NewSocket();
+        try
+        {
+            using var cts = CancellationTokenSource.CreateLinkedTokenSource(_disposed.Token);
+            cts.CancelAfter(TimeSpan.FromSeconds(20));
+            try { await RelayRefusedException.ConnectAsync(ws, GatewayProtocol.WebSocketUri(Relay, GatewayProtocol.MuxPath), cts.Token); }
+            catch (RelayRefusedException ex) when (ex.Status != HttpStatusCode.Unauthorized)
+            {
+                // An older relay (404) or a proxy that won't pass it: one WebSocket per tunnel, as before.
+                ws.Dispose();
+                _noMuxUntil = DateTime.UtcNow.AddMinutes(5);
+                return null;
+            }
+            catch (Exception ex) when (ex is WebSocketException or HttpRequestException or OperationCanceledException && !_disposed.IsCancellationRequested)
+            {
+                ws.Dispose();
+                throw new GatewayException($"Can't reach the gateway relay {Relay.Host}: {ex.GetBaseException().Message}");
+            }
+            var mux = new MuxEndpoint(ws, isWebSocketClient: true);
+            mux.Lost += () => TunnelsLost?.Invoke();
+            lock (_muxLock) _mux = mux;
+            _ = mux.RunAsync(_disposed.Token).ContinueWith(_ =>
+            {
+                ws.Dispose();
+                lock (_muxLock) if (_mux == mux) _mux = null;
+            }, TaskScheduler.Default);
+            return mux;
+        }
+        catch when (ws.State != WebSocketState.Open) { ws.Dispose(); throw; }
     }
 
     /// <summary>Which target the site's connector reaches first, without keeping the tunnel.</summary>
@@ -129,11 +217,16 @@ public sealed class GatewayClient : IDisposable
         return s.Keys.ToHashSet();
     }
 
-    public void Dispose() => _http.Dispose();
+    public void Dispose()
+    {
+        _disposed.Cancel();
+        lock (_muxLock) _mux?.Dispose();
+        _http.Dispose();
+    }
 }
 
 /// <summary>One open tunnel: the encrypted channel and which target the connector reached.</summary>
-public sealed class GatewayTunnel(WebSocket ws, SecureChannel channel, string target, string site) : IDisposable
+public sealed class GatewayTunnel(IMessagePipe pipe, SecureChannel channel, string target, string site) : IDisposable
 {
     public SecureChannel Channel { get; } = channel;
     public string Target { get; } = target;
@@ -144,7 +237,7 @@ public sealed class GatewayTunnel(WebSocket ws, SecureChannel channel, string ta
         using (GatewayActivity.BeginTunnel(Site)) await Pump.RunAsync(local, Channel, ct, count: true);
     }
 
-    public void Dispose() => ws.Dispose();
+    public void Dispose() => pipe.Dispose();
 }
 
 /// <summary>

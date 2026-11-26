@@ -258,6 +258,85 @@ public sealed class GatewayTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Tunnels_share_one_connection_and_carry_more_than_a_window()
+    {
+        using var client = Client();
+        using var fwd = new LocalForwarder(client, "lab", [$"127.0.0.1:{EchoPort}"]);
+        var payload = RandomNumberGenerator.GetBytes(3 * 1024 * 1024);    // three windows: credit has to flow back
+        var results = await Task.WhenAll(RoundTrip(fwd.Port, payload), RoundTrip(fwd.Port, "x"u8.ToArray()));
+        Assert.Equal(payload, results[0]);
+        Assert.True(client.Multiplexed);
+    }
+
+    [Fact]
+    public async Task A_client_without_multiplexing_still_works()
+    {
+        using var client = new GatewayClient(_relayUri, _deviceToken) { Multiplex = false };
+        using var fwd = new LocalForwarder(client, "lab", [$"127.0.0.1:{EchoPort}"]);
+        Assert.Equal("old"u8.ToArray(), await RoundTrip(fwd.Port, "old"u8.ToArray()));
+        Assert.False(client.Multiplexed);
+    }
+
+    [Fact]
+    public async Task An_older_connector_is_bridged_onto_the_shared_connection()
+    {
+        var token = _relay.Store.AddSite("old");
+        var device = _relay.Store.AddDevice("both", ["lab", "old"]);
+        using var stop = new CancellationTokenSource();
+        var old = new Connector(new ConnectorOptions
+        {
+            Relay = _relayUri, SiteToken = token, Key = ECDsa.Create(ECCurve.NamedCurves.nistP256),
+            Allow = new AllowList("127.0.0.1"), Name = "old-1", Log = Log, Multiplex = false,
+        });
+        _ = old.RunAsync(stop.Token);
+        await WaitUntil(() => _relay.IsOnline("old"));
+        using var client = Client(device);
+        using var fwd = new LocalForwarder(client, "old", [$"127.0.0.1:{EchoPort}"]);
+        var payload = RandomNumberGenerator.GetBytes(3 * 1024 * 1024);
+        Assert.Equal(payload, await RoundTrip(fwd.Port, payload));
+        Assert.True(client.Multiplexed);
+        stop.Cancel();
+    }
+
+    [Fact]
+    public async Task Sessions_are_told_to_reconnect_when_their_connector_goes_away()
+    {
+        var token = _relay.Store.AddSite("pair");
+        var device = _relay.Store.AddDevice("pairs", ["pair"]);
+        var stops = new[] { new CancellationTokenSource(), new CancellationTokenSource() };
+        var connectors = stops.Select((stop, i) =>
+        {
+            var c = new Connector(new ConnectorOptions
+            {
+                Relay = _relayUri, SiteToken = token, Key = ECDsa.Create(ECCurve.NamedCurves.nistP256),
+                Allow = new AllowList("127.0.0.1"), Name = $"pair-{i + 1}", Log = Log,
+            });
+            _ = c.RunAsync(stop.Token);
+            return c;
+        }).ToArray();
+        await WaitUntil(() => connectors.All(c => c.Connected));
+        using var client = Client(device);
+        var lost = 0;
+        client.TunnelsLost += () => Interlocked.Increment(ref lost);
+        using var fwd = new LocalForwarder(client, "pair", [$"127.0.0.1:{EchoPort}"]);
+        using var tcp = new TcpClient();
+        await tcp.ConnectAsync(IPAddress.Loopback, fwd.Port);
+        var s = tcp.GetStream();
+        await s.WriteAsync("a"u8.ToArray());
+        var buf = new byte[1];
+        Assert.Equal(1, await s.ReadAsync(buf));
+        var serving = Array.FindIndex(connectors, c => c.ActiveTunnels == 1);
+        Assert.InRange(serving, 0, 1);
+        stops[serving].Cancel();                                   // that connector dies
+        await WaitUntil(() => Volatile.Read(ref lost) > 0);        // the session hears it should reconnect
+        int n;
+        try { n = await s.ReadAsync(buf).AsTask().WaitAsync(TimeSpan.FromSeconds(10)); } catch (IOException) { n = 0; }
+        Assert.Equal(0, n);
+        Assert.Equal("b"u8.ToArray(), await RoundTrip(fwd.Port, "b"u8.ToArray()));   // and lands on the other one
+        foreach (var stop in stops) stop.Cancel();
+    }
+
+    [Fact]
     public async Task A_second_connector_takes_over_when_the_first_one_stops()
     {
         using var stop = new CancellationTokenSource();

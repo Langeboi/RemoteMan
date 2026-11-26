@@ -11,10 +11,13 @@ namespace RemoteMan.Gateway;
 /// end-to-end encrypted, so it never sees the traffic. Hosting (Kestrel, TLS, auth headers) lives in
 /// RemoteMan.Gateway.Server; this class only needs authenticated WebSockets.
 /// </summary>
-public sealed class Relay
+public sealed partial class Relay
 {
-    private sealed class Link(string site, string name, string key, WebSocket control, string? from)
+    private sealed class Link(string site, string name, string key, MuxSession session, string? from)
     {
+        /// <summary>The connector takes tunnels as streams on its control connection.</summary>
+        public bool Mux { get; init; }
+        public MuxSession Session { get; } = session;
         public string? From { get; } = from;
         public string? Version { get; init; }
         public string? Allow { get; init; }
@@ -22,8 +25,6 @@ public sealed class Relay
         public string Site { get; } = site;
         public string Name { get; } = name;
         public string Key { get; } = key;
-        public WebSocket Control { get; } = control;
-        public SemaphoreSlim SendLock { get; } = new(1, 1);
         public int Active;
         public DateTimeOffset Since { get; } = DateTimeOffset.UtcNow;
     }
@@ -60,7 +61,7 @@ public sealed class Relay
 
     /// <summary>A connector's control connection. Returns when it goes away.</summary>
     public async Task ServeConnectorAsync(SiteRecord site, string name, string key, WebSocket ws, CancellationToken ct, string? from = null,
-        string? version = null, string? allow = null, string? tokenId = null)
+        string? version = null, string? allow = null, string? tokenId = null, bool mux = false)
     {
         if (_store.AddKey(site.Name, key))
         {
@@ -68,30 +69,23 @@ public sealed class Relay
             Emit("connector.key", site.Name, name, $"New connector key {SecureChannel.Fingerprint(Convert.FromBase64String(key))[..16]} recorded for {site.Name}");
         }
         _store.RecordConnector(site.Name, name, key, from, version, allow, tokenId);
-        var link = new Link(site.Name, name, key, ws, from) { Version = version, Allow = allow, TokenId = tokenId ?? "site" };
+        var session = new MuxSession(ws, isWebSocketClient: false);
+        var link = new Link(site.Name, name, key, session, from) { Version = version, Allow = allow, TokenId = tokenId ?? "site", Mux = mux };
+        session.OnFrame = (op, id, payload) => FromConnector(link, op, id, payload);
         var list = _links.GetOrAdd(site.Name, _ => []);
         lock (list) list.Add(link);
         _log($"Site {site.Name}: connector {name} online{(from is null ? "" : $" from {from}")}");
         Emit("connector.online", site.Name, name, $"Connector {name} online{(from is null ? "" : $" from {from}")}");
         // The site's resources from the console; a connector that predates them ignores the message.
-        if (_store.Site(site.Name)?.Resources is { } res) await SendControlAsync(link, "allow " + res, ct);
-        try
-        {
-            var buf = new byte[64];
-            while (ws.State == WebSocketState.Open)
-            {
-                var r = await ws.ReceiveAsync(buf, ct);
-                if (r.MessageType == WebSocketMessageType.Close) break;
-            }
-        }
-        catch (Exception ex) when (ex is WebSocketException or OperationCanceledException) { }
+        if (_store.Site(site.Name)?.Resources is { } res) SendControl(link, "allow " + res);
+        try { await session.RunAsync(ct); }
         finally
         {
             lock (list) list.Remove(link);
+            ConnectorGone(link);
             _store.RecordConnector(site.Name, name, key, from, version, allow, tokenId, leaving: true);
             _log($"Site {site.Name}: connector {name} offline");
             Emit("connector.offline", site.Name, name, $"Connector {name} offline");
-            await CloseQuietly(ws);
         }
     }
 
@@ -100,32 +94,28 @@ public sealed class Relay
     {
         if (!_links.TryGetValue(site, out var list)) return;
         var res = _store.Site(site)?.Resources ?? "";
-        foreach (var link in Snapshot(list)) await SendControlAsync(link, "allow " + res, CancellationToken.None);
+        foreach (var link in Snapshot(list)) SendControl(link, "allow " + res);
+        await Task.CompletedTask;
     }
 
     /// <summary>Closes the control connections of a site's connectors (after its token was revoked or the site removed).</summary>
     public async Task DisconnectAsync(string site, string? tokenId = null)
     {
         if (!_links.TryGetValue(site, out var list)) return;
-        foreach (var link in Snapshot(list).Where(l => tokenId is null || l.TokenId == tokenId)) await CloseQuietly(link.Control);
+        foreach (var link in Snapshot(list).Where(l => tokenId is null || l.TokenId == tokenId)) link.Session.Close();
+        await Task.CompletedTask;
     }
 
     /// <summary>Ends the tunnels a device has open (after it was removed or paused).</summary>
     public void DropDevice(string device)
     {
         foreach (var t in _live.Values.Where(t => string.Equals(t.Device, device, StringComparison.OrdinalIgnoreCase))) t.Stop();
+        // Its shared connection too: it reconnects, and the relay refuses it if it's no longer allowed.
+        foreach (var (s, d) in _deviceSessions)
+            if (string.Equals(d, device, StringComparison.OrdinalIgnoreCase)) s.Abort();
     }
 
-    private static async Task SendControlAsync(Link link, string text, CancellationToken ct)
-    {
-        try
-        {
-            await link.SendLock.WaitAsync(ct);
-            try { await link.Control.SendAsync(Encoding.UTF8.GetBytes(text), WebSocketMessageType.Text, true, ct); }
-            finally { link.SendLock.Release(); }
-        }
-        catch (Exception ex) when (ex is WebSocketException or OperationCanceledException or ObjectDisposedException) { }
-    }
+    private static void SendControl(Link link, string text) => link.Session.SendText(text);
 
     /// <summary>
     /// Asks one of the site's connectors (the least busy) for a tunnel. Null when none is online or none answers
@@ -139,28 +129,31 @@ public sealed class Relay
     {
         if (!_links.TryGetValue(site, out var list)) return null;
         foreach (var link in Snapshot(list).OrderBy(l => Volatile.Read(ref l.Active)).Take(2))
-        {
-            var id = Convert.ToHexString(RandomNumberGenerator.GetBytes(12)).ToLowerInvariant();
-            var p = new Pending(site, new(TaskCreationOptions.RunContinuationsAsynchronously), new(TaskCreationOptions.RunContinuationsAsynchronously));
-            _pending[id] = p;
-            try
-            {
-                await link.SendLock.WaitAsync(ct);
-                try { await link.Control.SendAsync(Encoding.ASCII.GetBytes("open " + id), WebSocketMessageType.Text, true, ct); }
-                finally { link.SendLock.Release(); }
-                var socket = await p.Socket.Task.WaitAsync(PairTimeout, ct);
-                Interlocked.Increment(ref link.Active);
-                _ = p.Done.Task.ContinueWith(_ => Interlocked.Decrement(ref link.Active), TaskScheduler.Default);
-                return (socket, p.Done, link.Name);
-            }
-            catch (Exception ex) when (ex is TimeoutException or WebSocketException)
-            {
-                _log($"Site {site}: connector {link.Name} didn't answer");
-                p.Done.TrySetResult();
-            }
-            finally { _pending.TryRemove(id, out _); }
-        }
+            if (await RequestFromAsync(link, ct) is var (socket, done)) return (socket, done, link.Name);
         return null;
+    }
+
+    /// <summary>A WebSocket of its own from one connector (the original protocol: "open &lt;id&gt;", then /v1/accept/&lt;id&gt;).</summary>
+    private async Task<(WebSocket Socket, TaskCompletionSource Done)?> RequestFromAsync(Link link, CancellationToken ct)
+    {
+        var id = Convert.ToHexString(RandomNumberGenerator.GetBytes(12)).ToLowerInvariant();
+        var p = new Pending(link.Site, new(TaskCreationOptions.RunContinuationsAsynchronously), new(TaskCreationOptions.RunContinuationsAsynchronously));
+        _pending[id] = p;
+        try
+        {
+            if (!link.Session.SendText("open " + id)) throw new WebSocketException("The connector's control connection is closed.");
+            var socket = await p.Socket.Task.WaitAsync(PairTimeout, ct);
+            Interlocked.Increment(ref link.Active);
+            _ = p.Done.Task.ContinueWith(_ => Interlocked.Decrement(ref link.Active), TaskScheduler.Default);
+            return (socket, p.Done);
+        }
+        catch (Exception ex) when (ex is TimeoutException or WebSocketException)
+        {
+            _log($"Site {link.Site}: connector {link.Name} didn't answer");
+            p.Done.TrySetResult();
+            return null;
+        }
+        finally { _pending.TryRemove(id, out _); }
     }
 
     /// <summary>A connector's end of a tunnel. Returns when the tunnel is over (the request must stay open until then).</summary>
@@ -290,7 +283,7 @@ public sealed class TunnelInfo
     private long _bytes;
     public string? Device { get; init; }
     public string? Site { get; init; }
-    public string? Connector { get; init; }
+    public string? Connector { get; set; }
     public string? From { get; init; }
     public DateTimeOffset Started { get; } = DateTimeOffset.UtcNow;
     public long BytesTotal => Interlocked.Read(ref _bytes);

@@ -61,7 +61,8 @@ public static class RelayHost
             var from = c.Request.Headers["X-Forwarded-For"].ToString().Split(',')[0].Trim() is { Length: > 0 and <= 64 } fwd ? fwd : c.Connection.RemoteIpAddress?.ToString();
             var version = Header(c, GatewayProtocol.ConnectorVersionHeader, 64);
             var allow = Header(c, GatewayProtocol.AllowHeader, 2000);
-            await relay.ServeConnectorAsync(site, name, key, ws, c.RequestAborted, from, version, allow, token?.Id);
+            var mux = c.Request.Headers[GatewayProtocol.MuxHeader].ToString() == "1";
+            await relay.ServeConnectorAsync(site, name, key, ws, c.RequestAborted, from, version, allow, token?.Id, mux);
         });
 
         app.Map(GatewayProtocol.AcceptPath + "{id}", async (HttpContext c, string id) =>
@@ -70,6 +71,18 @@ public static class RelayHost
             if (!c.WebSockets.IsWebSocketRequest) { c.Response.StatusCode = 400; return; }
             using var ws = await c.WebSockets.AcceptWebSocketAsync();
             await relay.ServeAcceptAsync(site, id, ws);
+        });
+
+        // A device's shared connection: all its tunnels as streams (sites are checked per stream).
+        app.Map(GatewayProtocol.MuxPath, async (HttpContext c) =>
+        {
+            var token = Bearer(c);
+            if (relay.Store.DeviceByToken(token) is not { } device) { c.Response.StatusCode = 401; return; }
+            if (!c.WebSockets.IsWebSocketRequest) { c.Response.StatusCode = 400; return; }
+            var ip = AdminConsole.ClientIp(c);
+            relay.Store.TouchDevice(device.Name, ip);
+            using var ws = await c.WebSockets.AcceptWebSocketAsync();
+            await relay.ServeDeviceAsync(token!, device.Name, ws, ip, c.RequestAborted);
         });
 
         app.Map(GatewayProtocol.ConnectPath, async (HttpContext c) =>

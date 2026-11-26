@@ -11,17 +11,28 @@ namespace RemoteMan.Gateway;
 /// connector → relay  GET /v1/connector          (WebSocket, Bearer site token)  control: relay sends "open &lt;id&gt;"
 /// connector → relay  GET /v1/accept/&lt;id&gt;         (WebSocket, Bearer site token)  the connector's end of one tunnel
 /// RemoteMan → relay  GET /v1/connect?site=&lt;name&gt;  (WebSocket, Bearer device token) RemoteMan's end of one tunnel
+/// RemoteMan → relay  GET /v1/mux                (WebSocket, Bearer device token) all of this device's tunnels as streams
 /// RemoteMan → relay  GET /v1/sites              (Bearer device token) the sites this device may use, online state, keys
 /// </code>
 /// The relay splices the two ends message for message; inside, <see cref="SecureChannel"/> runs end to end, then
 /// RemoteMan sends an <see cref="OpenRequest"/>, the connector answers with an <see cref="OpenReply"/>, and from then
 /// on the frames carry the TCP stream's bytes.
+/// <para>
+/// Multiplexed (newer relays and connectors): RemoteMan keeps one WebSocket to /v1/mux and a connector that sends
+/// <see cref="MuxHeader"/> gets its tunnels on its control connection, both as streams (<see cref="MuxOp"/>), so a
+/// tunnel costs one round trip instead of two new TLS and WebSocket handshakes. Each side falls back on its own:
+/// an older relay answers /v1/mux with 404, and the relay bridges streams to older connectors over /v1/accept.
+/// </para>
 /// </summary>
 public static class GatewayProtocol
 {
     public const string ConnectorPath = "/v1/connector";
     public const string AcceptPath = "/v1/accept/";
     public const string ConnectPath = "/v1/connect";
+    /// <summary>RemoteMan → relay: one WebSocket that carries all of this device's tunnels as streams.</summary>
+    public const string MuxPath = "/v1/mux";
+    /// <summary>A connector that sends this ("1") takes tunnels as streams on its control connection.</summary>
+    public const string MuxHeader = "X-RemoteMan-Mux";
     public const string SitesPath = "/v1/sites";
     public const string StatusPath = "/v1/status";
     public const string KeyHeader = "X-RemoteMan-Connector-Key";
@@ -156,7 +167,8 @@ internal static class Pump
                     if (count) GatewayActivity.Sent(n);
                 }
             }
-            catch (Exception ex) when (ex is IOException or SocketException or OperationCanceledException or ObjectDisposedException or System.Net.WebSockets.WebSocketException) { }
+            catch (Exception ex) when (ex is IOException or SocketException or OperationCanceledException or ObjectDisposedException
+                                           or System.Net.WebSockets.WebSocketException or GatewayException or RelayRefusedException) { }
             await channel.CloseAsync();
         });
         var down = Task.Run(async () =>
@@ -173,7 +185,7 @@ internal static class Pump
                 }
             }
             catch (Exception ex) when (ex is IOException or SocketException or OperationCanceledException or ObjectDisposedException
-                                           or System.Net.WebSockets.WebSocketException or GatewayException) { }
+                                           or System.Net.WebSockets.WebSocketException or GatewayException or RelayRefusedException) { }
             // The far end is done sending: half-close so the local program sees EOF but can still answer.
             if (tcp is NetworkStream ns) { try { ns.Socket.Shutdown(SocketShutdown.Send); } catch { } }
         });
