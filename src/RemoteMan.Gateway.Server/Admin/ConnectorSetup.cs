@@ -32,7 +32,7 @@ public static class ConnectorSetup
     /// A shell script for a Linux box that may not have Docker yet: installs it (Docker's own get.docker.com script)
     /// when it's missing, then starts the connector. Pipe it to sh.
     /// </summary>
-    public static string Script(string relayUrl, string token, string name, string image) => $"""
+    public static string Script(string relayUrl, string token, string name, string image, string? allow = null) => $"""
         #!/bin/sh
         # RemoteMan gateway connector for {name}. Run as root (or with sudo) on a Linux machine inside the network.
         set -e
@@ -41,7 +41,7 @@ public static class ConnectorSetup
           curl -fsSL https://get.docker.com | sh
         fi
         docker rm -f remoteman-connector >/dev/null 2>&1 || true
-        {DockerRun(relayUrl, token, name, image)}
+        {DockerRun(relayUrl, token, name, image, allow)}
         echo "Connector {name} started. It shows as online in the admin console within a few seconds."
         echo "Logs: docker logs -f remoteman-connector"
         """;

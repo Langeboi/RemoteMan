@@ -145,8 +145,10 @@ public sealed class AdminConsole
             return Results.Json(new
             {
                 id, name = cname, token, relayUrl, publicUrlSet = _o.PublicUrl is not null,
-                dockerRun = ConnectorSetup.DockerRun(relayUrl, token, cname, _o.ConnectorImage),
-                compose = ConnectorSetup.Compose(relayUrl, token, cname, _o.ConnectorImage),
+                // The connector's own ALLOW starts out as the site's resources, so what the console allows is what it
+                // opens (without resources it keeps its default: the private ranges).
+                dockerRun = ConnectorSetup.DockerRun(relayUrl, token, cname, _o.ConnectorImage, site.Resources),
+                compose = ConnectorSetup.Compose(relayUrl, token, cname, _o.ConnectorImage, site.Resources),
                 // No -f: when the link no longer works, the relay answers with a script that says why, and sh prints it.
                 install = $"curl -sSL {relayUrl}/v1/install/{installCode} | sudo sh",
             }, GatewayProtocol.Json);
@@ -448,7 +450,7 @@ public sealed class AdminConsole
                 "text/x-shellscript", statusCode: 410);
         Activity.Add(new GatewayEvent(DateTimeOffset.UtcNow, "connector.install", inst.Site, inst.Name, $"Connector install script for {inst.Name} fetched from {ClientIp(c)}"));
         c.Response.Headers.CacheControl = "no-store";
-        return Results.Text(ConnectorSetup.Script(PublicUrl(c), token, inst.Name, _o.ConnectorImage), "text/x-shellscript");
+        return Results.Text(ConnectorSetup.Script(PublicUrl(c), token, inst.Name, _o.ConnectorImage, Store.Site(inst.Site)?.Resources), "text/x-shellscript");
     }
 
     // ---- what the console shows ----

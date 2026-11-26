@@ -76,6 +76,16 @@ public sealed class GatewayAdminTests : IAsyncLifetime
     }
 
     [Fact]
+    public void Connector_setup_carries_the_site_resources_as_its_allow_list()
+    {
+        var run = ConnectorSetup.DockerRun("https://r", "T", "c1", "img", "10.0.0.0/8, 192.0.2.0/24");
+        Assert.Contains("-e ALLOW=10.0.0.0/8,192.0.2.0/24", run);
+        Assert.Contains("ALLOW: 10.0.0.0/8,192.0.2.0/24", ConnectorSetup.Compose("https://r", "T", "c1", "img", "10.0.0.0/8, 192.0.2.0/24"));
+        Assert.Contains("-e ALLOW=192.0.2.0/24", ConnectorSetup.Script("https://r", "T", "c1", "img", "192.0.2.0/24"));
+        Assert.DoesNotContain("ALLOW=", ConnectorSetup.DockerRun("https://r", "T", "c1", "img"));
+    }
+
+    [Fact]
     public async Task Setup_needs_the_one_time_code_and_works_once()
     {
         Assert.Equal(HttpStatusCode.BadRequest, (await Post(_http, "/setup", new { code = "guess-guess-guess", user = "x", password = "0123456789" })).StatusCode);
