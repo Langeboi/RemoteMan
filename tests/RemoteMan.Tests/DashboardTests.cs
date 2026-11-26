@@ -116,15 +116,22 @@ public class DashboardChartTests
     }
 
     [Fact]
-    public void Growth_counts_entries_without_a_date_from_the_start()
+    public void Weekly_buckets_start_on_monday_and_count_additions()
     {
         var old = new Entry { Kind = EntryKind.Ssh, Name = "old" };
         var mid = new Entry { Kind = EntryKind.Rdp, Name = "mid", CreatedAt = Now.AddDays(-30) };
-        var folder = new Entry { Kind = EntryKind.Folder, Name = "f" };
-        var g = DashboardCharts.Growth([old, mid, folder], Now);
-        Assert.Equal(26, g.Count);
-        Assert.Equal(1, g[0].Total);
-        Assert.Equal(2, g[^1].Total);
+        var fresh = new Entry { Kind = EntryKind.Ssh, Name = "fresh", CreatedAt = Now.AddHours(-1) };
+        var gone = new Entry { Kind = EntryKind.Ssh, Name = "gone", CreatedAt = Now.AddDays(-2), Deleted = true };
+        var folder = new Entry { Kind = EntryKind.Folder, Name = "f", CreatedAt = Now.AddDays(-3) };
+        var w = DashboardCharts.Weekly([old, mid, fresh, gone, folder], Now);
+        Assert.Equal(12, w.Count);
+        Assert.All(w, x => Assert.Equal(DayOfWeek.Monday, x.Start.DayOfWeek));
+        Assert.Equal(TimeSpan.FromDays(7), w[1].Start - w[0].Start);
+        Assert.True(w[^1].Start <= Now.ToLocalTime().DateTime && Now.ToLocalTime().DateTime < w[^1].Start.AddDays(7));
+        Assert.Equal(2, w.Sum(x => x.Added));
+        Assert.Equal(1, w[0].Total);
+        Assert.Equal(3, w[^1].Total);
+        Assert.Equal(1, w[^1].AddedByKind[EntryKind.Ssh]);
     }
 
     [Fact]

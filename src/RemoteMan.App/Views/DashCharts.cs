@@ -186,6 +186,9 @@ public sealed class ColumnChart : DashChart
         new FrameworkPropertyMetadata(null, FrameworkPropertyMetadataOptions.AffectsRender, Changed));
     public IReadOnlyList<ChartColumn>? Columns { get => (IReadOnlyList<ChartColumn>?)GetValue(ColumnsProperty); set => SetValue(ColumnsProperty, value); }
 
+    /// <summary>The unit in the average line's label: "avg 2.5/day".</summary>
+    public string AverageUnit { get; set; } = "day";
+
     private const double Pl = 24, Pr = 4, Pt = 8, Pb = 18;
     // The theme's accent, or its lighter link colour when the accent is too close to the columns' own blue to stand out.
     private static readonly Brush Highlight = Services.Themes.GetBrush(Services.Themes.IsNear(Services.Themes.GetColor("Accent"), Color.FromRgb(0x39, 0x87, 0xE5)) ? "Link" : "Accent");
@@ -226,13 +229,18 @@ public sealed class ColumnChart : DashChart
                 dc.DrawGeometry(c.Highlight ? Highlight : Series[0], null, g);
                 dc.Pop();
             }
-            if (c.Label is { } l) DrawText(dc, l, x + bw / 2, ActualHeight - 14, 10, Faint, 0.5);
+            // The last label ends at the right edge so a longer one ("this week") isn't cut off.
+            if (c.Label is { } l)
+            {
+                if (i == cols.Count - 1) DrawText(dc, l, ActualWidth - Pr, ActualHeight - 14, 10, Faint, 1);
+                else DrawText(dc, l, x + bw / 2, ActualHeight - 14, 10, Faint, 0.5);
+            }
         }
         var avg = cols.Average(c => c.Value);
         if (avg > 0)
         {
             dc.DrawLine(new Pen(Muted, 1) { DashStyle = new DashStyle([3, 3], 0) }, new Point(Pl, Y(avg)), new Point(ActualWidth - Pr, Y(avg)));
-            DrawText(dc, $"avg {avg:0.#}/day", Pl + 4, Y(avg) - 15, 10, Muted);
+            DrawText(dc, $"avg {avg:0.#}/{AverageUnit}", Pl + 4, Y(avg) - 15, 10, Muted);
         }
         if (Hover >= 0 && Hover < cols.Count)
             DrawTip(dc, cols[Hover].Hover, Pl + Hover * slot + slot / 2, Y(cols[Hover].Value));

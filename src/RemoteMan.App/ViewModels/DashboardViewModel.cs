@@ -16,6 +16,19 @@ public sealed record DashBar(Guid? Id, string Tag, string Name, int Count, doubl
     public GridLength Rest => new(Math.Max(1 - Fraction, 0.0001), GridUnitType.Star);
 }
 
+/// <summary>
+/// A row in the table beside the protocol donut: one slice (a protocol, or Other), its share of all entries, how many
+/// were added and how many sessions were opened in the last 30 days. Note lists the kinds folded into Other.
+/// </summary>
+public sealed record DashProtocol(string Name, System.Windows.Media.Brush Brush, int Count, double Share, int Added, int Opened, string? Note)
+{
+    public string Percent => Share >= 0.995 ? "100%" : Share > 0 && Share < 0.01 ? "<1%" : $"{Math.Round(Share * 100)}%";
+    public string AddedText => Added > 0 ? $"+{Added}" : "–";
+    public string OpenedText => Opened > 0 ? Opened.ToString("N0") : "–";
+    public GridLength Fill => new(Math.Max(Share, 0.0001), GridUnitType.Star);
+    public GridLength Rest => new(Math.Max(1 - Share, 0.0001), GridUnitType.Star);
+}
+
 /// <summary>An entry on the dashboard (favorites, recent, a housekeeping hit). Health is the Zabbix glyph tag, or null.</summary>
 public sealed record DashEntry(Guid Id, string Name, string Tag, string Detail, string Side, string? Health = null);
 
@@ -105,7 +118,10 @@ public sealed partial class DashboardViewModel : SessionViewModel
     [ObservableProperty] private string _updated = "";
 
     public ObservableCollection<DashTile> Tiles { get; } = new();
-    public ObservableCollection<DashBar> Protocols { get; } = new();
+    /// <summary>The table beside the protocol donut, one row per slice.</summary>
+    public ObservableCollection<DashProtocol> ProtocolRows { get; } = new();
+    /// <summary>The four numbers under the protocol donut.</summary>
+    public ObservableCollection<DashTile> ProtocolStats { get; } = new();
     public ObservableCollection<DashBar> Folders { get; } = new();
     public ObservableCollection<DashEntry> Favorites { get; } = new();
     public ObservableCollection<DashEntry> Recent { get; } = new();
@@ -121,8 +137,10 @@ public sealed partial class DashboardViewModel : SessionViewModel
     [ObservableProperty] private bool _hasConnections;
     [ObservableProperty] private int[,]? _heat;
     [ObservableProperty] private bool _hasHeat;
-    [ObservableProperty] private IReadOnlyList<RemoteMan.App.Views.ChartPoint> _growth = [];
+    [ObservableProperty] private IReadOnlyList<RemoteMan.App.Views.ChartColumn> _growth = [];
     [ObservableProperty] private string _growthMeta = "";
+    /// <summary>Something was added in the weeks the chart covers; otherwise it shows a hint instead of empty columns.</summary>
+    [ObservableProperty] private bool _hasGrowth;
     [ObservableProperty] private IReadOnlyList<RemoteMan.App.Views.ChartPoint> _zabbixTrend = [];
     [ObservableProperty] private bool _hasZabbixTrend;
     [ObservableProperty] private bool _hasFavorites;

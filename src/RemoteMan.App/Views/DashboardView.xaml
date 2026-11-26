@@ -236,27 +236,80 @@
                                 <TextBlock Text="Entries by protocol" Style="{StaticResource WidgetTitle}" />
                             </DockPanel>
                         </Border>
-                        <!-- Donut and legend as one centred group. The card can be much wider
-                             (maximized window) and taller (matches the Zabbix card) than the chart
-                             needs, so the pair sits in the middle instead of stretching apart;
-                             the Viewbox only ever shrinks it when the card gets narrow. -->
-                        <Viewbox Margin="16,12" Stretch="Uniform" StretchDirection="DownOnly"
-                                 HorizontalAlignment="Center" VerticalAlignment="Center">
-                            <StackPanel Orientation="Horizontal">
-                                <views:DonutChart Width="150" Height="150" Slices="{Binding ProtocolSlices}" VerticalAlignment="Center" />
-                                <ItemsControl ItemsSource="{Binding ProtocolSlices}" Focusable="False" Width="170" Margin="28,0,0,0" VerticalAlignment="Center">
+                        <!-- Four numbers along the bottom, in the same boxes as the Zabbix card -->
+                        <ItemsControl DockPanel.Dock="Bottom" ItemsSource="{Binding ProtocolStats}" Focusable="False" Margin="12,0,6,12">
+                            <ItemsControl.ItemsPanel><ItemsPanelTemplate><UniformGrid Rows="1" /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate DataType="{x:Type vm:DashTile}">
+                                    <Border Background="{StaticResource Panel2}" BorderBrush="{StaticResource BorderSoft}" BorderThickness="1"
+                                            CornerRadius="{StaticResource Radius}" Padding="8,5" Margin="0,0,6,0" ToolTip="{Binding Sub}">
+                                        <StackPanel>
+                                            <TextBlock Text="{Binding Value}" FontSize="18" FontWeight="SemiBold" Foreground="{StaticResource TextStrong}" TextTrimming="CharacterEllipsis" />
+                                            <TextBlock Text="{Binding Label}" Style="{StaticResource WidgetMeta}" />
+                                            <TextBlock Text="{Binding Sub}" Style="{StaticResource WidgetMeta}" Foreground="{StaticResource Muted}" />
+                                        </StackPanel>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                        <!-- Donut on the left, a table of the same slices on the right: share bar, count, percent,
+                             added and opened in the last 30 days. Hover Other for the protocols folded into it. -->
+                        <Grid Margin="16,12,12,12">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <views:DonutChart Width="132" Height="132" Slices="{Binding ProtocolSlices}" VerticalAlignment="Center" Margin="0,0,20,0" />
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                <Grid Margin="0,0,0,4">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" MinWidth="70" />
+                                        <ColumnDefinition Width="1.2*" />
+                                        <ColumnDefinition Width="40" />
+                                        <ColumnDefinition Width="40" />
+                                        <ColumnDefinition Width="46" />
+                                        <ColumnDefinition Width="50" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Text="share" Grid.Column="1" Style="{StaticResource WidgetMeta}" />
+                                    <TextBlock Text="entries" Grid.Column="2" Style="{StaticResource WidgetMeta}" HorizontalAlignment="Right" />
+                                    <TextBlock Text="%" Grid.Column="3" Style="{StaticResource WidgetMeta}" HorizontalAlignment="Right" />
+                                    <TextBlock Text="added" Grid.Column="4" Style="{StaticResource WidgetMeta}" HorizontalAlignment="Right" ToolTip="Entries added in the last 30 days" />
+                                    <TextBlock Text="opened" Grid.Column="5" Style="{StaticResource WidgetMeta}" HorizontalAlignment="Right" ToolTip="Sessions you opened in the last 30 days" />
+                                </Grid>
+                                <ItemsControl ItemsSource="{Binding ProtocolRows}" Focusable="False">
                                     <ItemsControl.ItemTemplate>
-                                        <DataTemplate DataType="{x:Type views:ChartSlice}">
-                                            <DockPanel Margin="0,3" ToolTip="{Binding Note}">
-                                                <Border Width="10" Height="10" CornerRadius="2" Background="{Binding Brush}" Margin="0,0,8,0" VerticalAlignment="Center" />
-                                                <TextBlock DockPanel.Dock="Right" Text="{Binding Count}" Style="{StaticResource MutedText}" FontSize="12" Margin="12,0,0,0" VerticalAlignment="Center" />
-                                                <TextBlock Text="{Binding Name}" FontSize="12" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
-                                            </DockPanel>
+                                        <DataTemplate DataType="{x:Type vm:DashProtocol}">
+                                            <Grid Height="24" ToolTip="{Binding Note}">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*" MinWidth="70" />
+                                                    <ColumnDefinition Width="1.2*" />
+                                                    <ColumnDefinition Width="40" />
+                                                    <ColumnDefinition Width="40" />
+                                                    <ColumnDefinition Width="46" />
+                                                    <ColumnDefinition Width="50" />
+                                                </Grid.ColumnDefinitions>
+                                                <DockPanel VerticalAlignment="Center" Margin="0,0,10,0">
+                                                    <Border Width="10" Height="10" CornerRadius="2" Background="{Binding Brush}" Margin="0,0,8,0" VerticalAlignment="Center" />
+                                                    <TextBlock Text="{Binding Name}" FontSize="12" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                                                </DockPanel>
+                                                <Grid Grid.Column="1" Height="6" VerticalAlignment="Center">
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="{Binding Fill}" />
+                                                        <ColumnDefinition Width="{Binding Rest}" />
+                                                    </Grid.ColumnDefinitions>
+                                                    <Border Grid.ColumnSpan="2" Background="{StaticResource BorderSoft}" CornerRadius="3" />
+                                                    <Border Background="{Binding Brush}" CornerRadius="3" />
+                                                </Grid>
+                                                <TextBlock Grid.Column="2" Text="{Binding Count}" FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource TextStrong}" HorizontalAlignment="Right" VerticalAlignment="Center" />
+                                                <TextBlock Grid.Column="3" Text="{Binding Percent}" Style="{StaticResource MutedText}" FontSize="12" HorizontalAlignment="Right" VerticalAlignment="Center" />
+                                                <TextBlock Grid.Column="4" Text="{Binding AddedText}" Style="{StaticResource MutedText}" FontSize="12" HorizontalAlignment="Right" VerticalAlignment="Center" />
+                                                <TextBlock Grid.Column="5" Text="{Binding OpenedText}" Style="{StaticResource MutedText}" FontSize="12" HorizontalAlignment="Right" VerticalAlignment="Center" />
+                                            </Grid>
                                         </DataTemplate>
                                     </ItemsControl.ItemTemplate>
                                 </ItemsControl>
                             </StackPanel>
-                        </Viewbox>
+                        </Grid>
                     </DockPanel>
                 </Border>
 
@@ -557,7 +610,11 @@
                             <TextBlock Text="Entries over time" Style="{StaticResource WidgetTitle}" />
                         </DockPanel>
                     </Border>
-                    <views:AreaChart Margin="12,10,12,10" Height="150" Points="{Binding Growth}" FromMinimum="True" VerticalAlignment="Top" />
+                    <Grid Margin="12,10,12,10" VerticalAlignment="Top">
+                        <views:ColumnChart Height="150" Columns="{Binding Growth}" AverageUnit="week" />
+                        <TextBlock Text="Entries you add show up here, week by week." Style="{StaticResource Empty}" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                   Visibility="{Binding HasGrowth, Converter={StaticResource InvBoolVis}}" />
+                    </Grid>
                 </DockPanel>
             </Border>
             <Border Style="{StaticResource Widget}" Visibility="{Binding ShowChecks, Converter={StaticResource BoolVis}}">
