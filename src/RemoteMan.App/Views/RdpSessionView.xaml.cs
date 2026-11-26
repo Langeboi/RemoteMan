@@ -10,6 +10,8 @@ namespace RemoteMan.App.Views;
 /// Embedded RDP. File transfer uses RDP's own clipboard channel, which carries files both ways:
 /// copy files in Explorer on either side and paste on the other. Dropping files on the side strip
 /// puts them on the clipboard and focuses the session, so one Ctrl+V in the remote folder finishes it.
+/// Dropping files on the remote desktop itself does the paste too: a click where they were dropped, then
+/// Ctrl+V, so they land in the remote folder or on the desktop under the pointer (<see cref="DropPaste"/>).
 /// </summary>
 public partial class RdpSessionView : UserControl
 {
@@ -124,6 +126,21 @@ public partial class RdpSessionView : UserControl
             _copy = new CopyOnSelect(rdp);
             if (!vm.IsActive) _copy.Enabled = false;
         }
+
+        // Files dragged from this PC onto the remote desktop. The ActiveX control's own windows don't take drops,
+        // so Windows hands the drop to the nearest window up the chain that does: this control.
+        try
+        {
+            rdp.AllowDrop = true;
+            rdp.DragEnter += OnSessionDragOver;
+            rdp.DragOver += OnSessionDragOver;
+            rdp.DragDrop += (_, e) =>
+            {
+                if (e.Data?.GetData(System.Windows.Forms.DataFormats.FileDrop) is string[] files)
+                    DropOnSession(files, new System.Drawing.Point(e.X, e.Y));
+            };
+        }
+        catch (Exception) { /* no drop on this control: the side strip still sends files */ }
         return rdp;
     }
 
@@ -379,6 +396,62 @@ public partial class RdpSessionView : UserControl
         if (e.Data.GetData(DataFormats.FileDrop) is string[] files) Send(files);
     }
 
+    // ---- Dropping files onto the remote desktop ----
+
+    /// <summary>The session is showing and signed in: a drop on it can be pasted there.</summary>
+    private bool CanDropOnSession =>
+        _vm is not null && _rdp is { IsHandleCreated: true } && _signedIn && _reconnectAttempt == 0
+        && Host.Visibility == Visibility.Visible && _vm.IsActive;
+
+    private void OnSessionDragOver(object? sender, System.Windows.Forms.DragEventArgs e) =>
+        e.Effect = CanDropOnSession && e.Data?.GetDataPresent(System.Windows.Forms.DataFormats.FileDrop) == true
+            ? System.Windows.Forms.DragDropEffects.Copy : System.Windows.Forms.DragDropEffects.None;
+
+    // The same through WPF, for the case where Windows gives the drop to the window around the control instead.
+    private void OnHostDragOver(object sender, DragEventArgs e)
+    {
+        e.Effects = CanDropOnSession && e.Data.GetDataPresent(DataFormats.FileDrop) ? DragDropEffects.Copy : DragDropEffects.None;
+        e.Handled = true;
+    }
+
+    private void OnHostDrop(object sender, DragEventArgs e)
+    {
+        e.Handled = true;
+        if (e.Data.GetData(DataFormats.FileDrop) is not string[] files) return;
+        var p = Host.PointToScreen(e.GetPosition(Host));   // physical pixels, as the input calls want
+        DropOnSession(files, new System.Drawing.Point((int)Math.Round(p.X), (int)Math.Round(p.Y)));
+    }
+
+    private bool _dropping;
+
+    /// <summary>
+    /// Files dropped at <paramref name="screen"/> on the remote desktop: on the clipboard, then a click on that spot
+    /// and Ctrl+V, so Explorer on the other side pastes them into the folder or desktop under the pointer.
+    /// The pauses let the new clipboard reach the server and the click settle before the paste.
+    /// If the click or the keys can't go to the session safely, the files stay on the clipboard to paste by hand.
+    /// </summary>
+    private async void DropOnSession(string[] files, System.Drawing.Point screen)
+    {
+        if (files.Length == 0 || !CanDropOnSession || _dropping) return;
+        if (!PutOnClipboard(files, out var what)) return;
+        _dropping = true;
+        try
+        {
+            var rdp = _rdp!;
+            _vm!.StatusText = $"Sending {what} to {_vm.Entry.Name}…";
+            await Task.Delay(150);
+            if (_rdp is null) return;   // tab closed meanwhile
+            if (!ReferenceEquals(rdp, _rdp) || !CanDropOnSession || !DropPaste.ClickAt(rdp, screen)) { ReadyToPaste(what); return; }
+            await Task.Delay(450);
+            if (_rdp is null) return;
+            if (!ReferenceEquals(rdp, _rdp) || !CanDropOnSession) { ReadyToPaste(what); return; }
+            rdp.Focus();
+            if (!DropPaste.Paste(rdp)) { ReadyToPaste(what); return; }
+            _vm.StatusText = $"{what} pasted where you dropped {(files.Length == 1 ? "it" : "them")}. Nothing there? Press Ctrl+V in a remote folder.";
+        }
+        finally { _dropping = false; }
+    }
+
     private void OnSendFiles(object sender, RoutedEventArgs e)
     {
         var dlg = new Microsoft.Win32.OpenFileDialog { Multiselect = true, Title = "Send files to the remote session" };
@@ -387,15 +460,23 @@ public partial class RdpSessionView : UserControl
 
     private void Send(IEnumerable<string> paths)
     {
-        if (_vm is null) return;
+        if (PutOnClipboard(paths.ToArray(), out var what)) ReadyToPaste(what);
+    }
+
+    /// <summary>
+    /// The files on the local clipboard, which RDP offers to the remote side. False (with a notice) when the
+    /// entry doesn't redirect the clipboard or the clipboard is busy. <paramref name="what"/> names them for messages.
+    /// </summary>
+    private bool PutOnClipboard(string[] files, out string what)
+    {
+        what = files.Length == 1 ? System.IO.Path.GetFileName(files[0]) : $"{files.Length} files";
+        if (_vm is null || files.Length == 0) return false;
         if (!_vm.Settings.RedirectClipboard)
         {
             ShowNotice("Files can't be sent from this entry",
                 "Clipboard redirection is off. Edit the entry, turn on \"Redirect clipboard\", and connect again.");
-            return;
+            return false;
         }
-        var files = paths.ToArray();
-        if (files.Length == 0) return;
         var list = new StringCollection();
         list.AddRange(files);
 
@@ -417,10 +498,15 @@ public partial class RdpSessionView : UserControl
         if (last is not null)
         {
             ShowNotice("Couldn't put the files on the clipboard", last.Message);
-            return;
+            return false;
         }
+        return true;
+    }
 
-        var what = files.Length == 1 ? System.IO.Path.GetFileName(files[0]) : $"{files.Length} files";
+    /// <summary>The files are on the clipboard: tell the user to paste them in a remote folder.</summary>
+    private void ReadyToPaste(string what)
+    {
+        if (_vm is null) return;
         ShowNotice($"{what} ready to paste",
             "Click into the remote session, open the folder you want them in, and press Ctrl+V (or right-click > Paste). " +
             "If Paste is greyed out, the server blocks clipboard file copy (policy \"Do not allow Clipboard redirection\").");
