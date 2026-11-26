@@ -237,6 +237,7 @@ public partial class EntryEditorWindow : Window
         _steps.CollectionChanged += (_, _) => UpdateSummaries();
         _fields.CollectionChanged += (_, _) => UpdateSummaries();
         _totpTimer.Tick += (_, _) => UpdateTotp();
+        HookTotpPaste();
         Closed += (_, _) => _totpTimer.Stop();
         Loaded += (_, _) => { _loaded = true; UpdateSummaries(); UpdateTotp(); _totpTimer.Start(); NameBox.Focus(); NameBox.SelectAll(); };
         Loaded += (_, _) => ApplyTemplateUi();
@@ -401,6 +402,7 @@ public partial class EntryEditorWindow : Window
         PasswordLabel.Text = t switch { CredentialType.Secret => "Secret", CredentialType.Certificate => "Password", _ => "Password" };
         Show(AskPasswordBox, t == CredentialType.Password);
         Show(TotpRow, t is CredentialType.Password or CredentialType.SshKey);
+        Show(TotpTools, t is CredentialType.Password or CredentialType.SshKey);
         Show(NotesRow, t == CredentialType.Secret || isCred);
     }
 
@@ -580,7 +582,7 @@ public partial class EntryEditorWindow : Window
         _e.Name = NameBox.Text.Trim();
         _e.Tags = string.IsNullOrWhiteSpace(TagsBox.Text) ? null : TagsBox.Text.Trim();
         if (_e.Kind == EntryKind.Ssh && JumpPath.Text.Contains("loop")) { TabAdvanced.IsChecked = true; SecJump.IsOpen = true; JumpBox.Focus(); return; }
-        if (TotpBox.Password.Trim().Length > 0 && !Totp.IsValid(TotpBox.Password)) { TabGeneral.IsChecked = true; TotpBox.Focus(); TotpNow.Text = "not a valid secret"; return; }
+        if (TotpBox.Password.Trim().Length > 0 && !Totp.IsValid(TotpBox.Password)) { TabGeneral.IsChecked = true; TotpBox.Focus(); UpdateTotp(); return; }
         if (!SaveMisc()) return;
         _e.ZabbixHostId = _zabbixHostId;
 
@@ -732,5 +734,6 @@ public partial class EntryEditorWindow : Window
         if (t == CredentialType.Certificate && _certBase64 is not null) c.ProtectedCertificate = _protector.Protect(_certBase64);
         if (t is not (CredentialType.Password or CredentialType.SshKey)) c.ProtectedTotpSecret = null;
         else if (TotpBox.Password.Trim().Length > 0) c.ProtectedTotpSecret = _protector.Protect(TotpBox.Password.Trim());
+        else if (_totpRemoved) c.ProtectedTotpSecret = null;
     }
 }

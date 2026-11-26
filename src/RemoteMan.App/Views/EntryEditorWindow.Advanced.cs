@@ -446,30 +446,118 @@ public partial class EntryEditorWindow
 
     // ---------- Two-factor code ----------
 
+    /// <summary>Remove was pressed: the stored secret goes on save unless a new one is entered.</summary>
+    private bool _totpRemoved;
+
     private string? StoredTotp()
     {
+        if (_totpRemoved) return null;
         var holder = _e.Kind == EntryKind.Credential ? _e : _e.Credential is null ? null : _e;
         if (holder?.Credential?.ProtectedTotpSecret is not { } p) return null;
         try { return _protector.Unprotect(p); } catch (Exception) { return null; }
     }
 
+    private bool HasStoredTotp => !_totpRemoved && _e.Credential?.ProtectedTotpSecret is not null;
+
     private string? CurrentTotpSecret() => TotpBox.Password.Trim() is { Length: > 0 } typed ? typed : StoredTotp();
 
-    private void OnTotpChanged(object sender, RoutedEventArgs e) => UpdateTotp();
+    private void OnTotpChanged(object sender, RoutedEventArgs e)
+    {
+        if (TotpBox.Password.Length > 0) _totpRemoved = false;
+        UpdateTotp();
+    }
 
     private void UpdateTotp()
     {
-        if (TotpNow is null) return;
+        if (TotpNow is null || TotpInfo is null) return;
+        var typed = TotpBox.Password.Trim().Length > 0;
         var secret = CurrentTotpSecret();
-        if (secret is null) { TotpNow.Text = ""; TotpCopy.IsEnabled = false; return; }
-        if (!Totp.IsValid(secret)) { TotpNow.Text = "not a valid secret"; TotpCopy.IsEnabled = false; return; }
-        TotpNow.Text = $"{Totp.Code(secret)}  {Totp.SecondsLeft(secret)}s";
+        TotpRemove.IsEnabled = typed || HasStoredTotp;
+        TotpInfo.Foreground = (Brush)FindResource("Muted");
+        if (secret is null)
+        {
+            TotpNow.Text = "";
+            TotpCopy.IsEnabled = false;
+            TotpInfo.Text = _totpRemoved ? "2FA is removed when you save."
+                : HasStoredTotp ? "A 2FA secret is stored but can't be read with this vault key. Enter it again to replace it."
+                : "Optional: the setup key or QR code a site shows when you turn on two-factor sign-in.";
+            return;
+        }
+        if (Totp.Validate(secret) is { } error)
+        {
+            TotpNow.Text = "";
+            TotpCopy.IsEnabled = false;
+            TotpInfo.Foreground = (Brush)FindResource("Warn");
+            TotpInfo.Text = error;
+            return;
+        }
+        TotpNow.Text = $"{Totp.Group(Totp.Code(secret))}  {Totp.SecondsLeft(secret)}s";
         TotpCopy.IsEnabled = true;
+        var label = Totp.Label(secret);
+        TotpInfo.Text = (typed ? HasStoredTotp ? "Replaces the stored secret" : "New" : "Stored") + (label.Length > 0 ? $" · {label}" : "");
     }
 
     private void OnCopyTotp(object sender, RoutedEventArgs e)
     {
-        if (CurrentTotpSecret() is { } secret && Totp.IsValid(secret)) Clipboard.SetText(Totp.Code(secret));
+        if (CurrentTotpSecret() is not { } secret || !Totp.IsValid(secret)) return;
+        CredentialClipboard.CopyText(Totp.CodeToCopy(secret, out var validFor), secret: true);
+        TotpInfo.Foreground = (Brush)FindResource("Muted");
+        TotpInfo.Text = $"Code copied, valid for {validFor} s";
+    }
+
+    private void OnTotpRemove(object sender, RoutedEventArgs e)
+    {
+        TotpBox.Password = "";
+        _totpRemoved = _e.Credential?.ProtectedTotpSecret is not null;
+        UpdateTotp();
+    }
+
+    /// <summary>Ctrl+V in the 2FA box with a screenshot on the clipboard reads its QR code instead.</summary>
+    private void HookTotpPaste() =>
+        System.Windows.Input.CommandManager.AddPreviewExecutedHandler(TotpBox, (_, e) =>
+        {
+            if (e.Command != System.Windows.Input.ApplicationCommands.Paste || Clipboard.ContainsText() || !QrDecoder.ClipboardHasImage()) return;
+            e.Handled = true;
+            OnTotpFromClipboard(TotpBox, new RoutedEventArgs());
+        });
+
+    private void OnTotpFromClipboard(object sender, RoutedEventArgs e)
+    {
+        string? text = null;
+        try
+        {
+            if (QrDecoder.ClipboardHasImage()) text = QrDecoder.DecodeClipboard();
+            else if (Clipboard.ContainsText() && Clipboard.GetText().Trim() is { Length: > 0 } t && Totp.IsValid(t)) text = t;
+            else { ShowTotpProblem("Copy the QR code first: Win+Shift+S and drag around it, then press Paste QR."); return; }
+        }
+        catch (Exception) { /* unreadable image: same message as no code */ }
+        UseScannedTotp(text, "the copied image");
+    }
+
+    private void OnTotpFromFile(object sender, RoutedEventArgs e)
+    {
+        var dlg = new Microsoft.Win32.OpenFileDialog
+        {
+            Title = "Image with the QR code",
+            Filter = "Images|*.png;*.jpg;*.jpeg;*.bmp;*.gif;*.tif;*.tiff|All files|*.*",
+        };
+        if (dlg.ShowDialog(this) != true) return;
+        string? text = null;
+        try { text = QrDecoder.DecodeFile(dlg.FileName); } catch (Exception) { /* not an image */ }
+        UseScannedTotp(text, System.IO.Path.GetFileName(dlg.FileName));
+    }
+
+    private void UseScannedTotp(string? text, string where)
+    {
+        if (text is null) { ShowTotpProblem($"No QR code found in {where}. Try a larger, sharper capture."); return; }
+        if (Totp.Validate(text) is { } error) { ShowTotpProblem($"That QR code isn't a 2FA setup code: {error}"); return; }
+        TotpBox.Password = text.Trim(); // OnTotpChanged shows the code and the issuer
+    }
+
+    private void ShowTotpProblem(string text)
+    {
+        TotpInfo.Foreground = (Brush)FindResource("Warn");
+        TotpInfo.Text = text;
     }
 
     // ---------- Summaries on the closed sections ----------

@@ -369,7 +369,7 @@
                                     <Path Style="{StaticResource Glyph}" Data="{StaticResource G.Copy}" />
                                 </Button>
                                 <StackPanel VerticalAlignment="Center">
-                                    <TextBlock Text="2FA code" FontSize="11.5" Foreground="{StaticResource Muted}" />
+                                    <TextBlock Text="{Binding TotpTitle}" FontSize="11.5" Foreground="{StaticResource Muted}" TextTrimming="CharacterEllipsis" />
                                     <StackPanel Orientation="Horizontal" Margin="0,1,0,0">
                                         <TextBlock Text="{Binding TotpCode}" FontFamily="{StaticResource MonoFont}" FontSize="17" Foreground="{StaticResource TextStrong}" VerticalAlignment="Center" />
                                         <Grid Width="18" Height="18" Margin="10,0,6,0" VerticalAlignment="Center">

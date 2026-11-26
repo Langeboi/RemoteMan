@@ -34,6 +34,8 @@
     <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="10.0.15" />
     <PackageReference Include="Velopack" Version="1.2.161" />
     <PackageReference Include="WpfAnimatedGif" Version="2.0.2" />
+    <!-- Reads 2FA setup QR codes from screenshots (Apache-2.0). -->
+    <PackageReference Include="ZXing.Net" Version="0.16.11" />
   </ItemGroup>
   <ItemGroup>
     <Content Include="Assets\terminal\**\*" CopyToOutputDirectory="PreserveNewest" />
