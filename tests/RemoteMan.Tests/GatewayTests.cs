@@ -76,7 +76,8 @@ public sealed class GatewayTests : IAsyncLifetime
 
     private static async Task WaitUntil(Func<bool> condition)
     {
-        for (var i = 0; i < 100 && !condition(); i++) await Task.Delay(50);
+        // Up to 15 s: on a busy CI runner the connector's first connect can miss and wait out its 1 s retry.
+        for (var i = 0; i < 300 && !condition(); i++) await Task.Delay(50);
         Assert.True(condition());
     }
 
