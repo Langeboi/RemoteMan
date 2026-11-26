@@ -1,6 +1,6 @@
 using CommunityToolkit.Mvvm.ComponentModel;
-using RemoteMan.Core.Ai;
 using RemoteMan.Core.Model;
+using RemoteMan.Core.Terminal;
 using RemoteMan.Protocols;
 
 namespace RemoteMan.App.ViewModels;
@@ -18,6 +18,9 @@ public abstract partial class SessionViewModel : ObservableObject, IDisposable
     }
 
     public Entry Entry { get; }
+
+    /// <summary>Short id AI clients use for this tab over MCP (list_sessions, read_terminal).</summary>
+    public string McpId { get; } = Guid.NewGuid().ToString("N")[..8];
 
     /// <summary>Colour stripe on the tab (entry's Misc > Tab colour); null = none.</summary>
     public System.Windows.Media.Brush? TabBrush => Entry.TabColor is { Length: > 0 } c
@@ -127,7 +130,7 @@ public sealed class SshSessionViewModel(Entry e, HostEndpoint ep, ResolvedCreden
         send(text);
         return true;
     }
-    /// <summary>Recent terminal output as plain text, for the AI assistant's session context.</summary>
+    /// <summary>Recent terminal output as plain text, for AI clients over MCP (read_terminal).</summary>
     public TerminalTail Tail { get; } = new();
 
     /// <summary>Types text into the shell (set by the view once connected). Nothing is sent with Enter.</summary>

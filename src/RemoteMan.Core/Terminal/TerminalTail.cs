@@ -1,11 +1,11 @@
 using System.Text;
 using System.Text.RegularExpressions;
 
-namespace RemoteMan.Core.Ai;
+namespace RemoteMan.Core.Terminal;
 
 /// <summary>
-/// Keeps the last part of a terminal's output as plain text (escape codes removed), so the
-/// assistant can be shown what is on screen without asking the terminal for it.
+/// Keeps the last part of a terminal's output as plain text (escape codes removed), so an
+/// AI client (over MCP) can be shown what is on screen without asking the terminal for it.
 /// </summary>
 public sealed partial class TerminalTail(int maxChars = 32_000)
 {
@@ -52,36 +52,5 @@ public sealed partial class TerminalTail(int maxChars = 32_000)
         var parts = all.Split('\n').Select(l => l.TrimEnd()).ToList();
         while (parts.Count > 0 && parts[^1].Length == 0) parts.RemoveAt(parts.Count - 1);
         return string.Join('\n', parts.Skip(Math.Max(0, parts.Count - lines)));
-    }
-}
-
-/// <summary>A piece of an assistant reply: prose, or a fenced code block.</summary>
-public sealed record ReplySegment(bool IsCode, string Text, string? Language)
-{
-    /// <summary>Splits Markdown on ``` fences. An unclosed fence (still streaming) counts as code.</summary>
-    public static IReadOnlyList<ReplySegment> Split(string text)
-    {
-        var result = new List<ReplySegment>();
-        var pos = 0;
-        while (pos < text.Length)
-        {
-            var open = text.IndexOf("```", pos, StringComparison.Ordinal);
-            if (open < 0) { AddProse(text[pos..]); break; }
-            AddProse(text[pos..open]);
-            var lineEnd = text.IndexOf('\n', open);
-            if (lineEnd < 0) break; // fence header still arriving
-            var lang = text[(open + 3)..lineEnd].Trim();
-            var close = text.IndexOf("```", lineEnd + 1, StringComparison.Ordinal);
-            var code = close < 0 ? text[(lineEnd + 1)..] : text[(lineEnd + 1)..close];
-            result.Add(new ReplySegment(true, code.TrimEnd('\n', '\r'), lang.Length > 0 ? lang : null));
-            pos = close < 0 ? text.Length : close + 3;
-        }
-        return result;
-
-        void AddProse(string s)
-        {
-            s = s.Trim('\n', '\r');
-            if (s.Length > 0) result.Add(new ReplySegment(false, s, null));
-        }
     }
 }

@@ -12,6 +12,14 @@ public static class Program
     [STAThread]
     public static void Main(string[] args)
     {
+        // Started by an AI app (Claude Desktop, Claude Code, VS Code…) as its MCP server: pass its stdio through to the
+        // running RemoteMan and exit when the app closes the pipe. No window, no update check, no crash marker.
+        if (args.Contains(Services.McpClients.Arg))
+        {
+            RunMcpBridge();
+            return;
+        }
+
         // Must run first: Velopack uses it to handle install, update and uninstall hooks,
         // and to finish an update that was downloaded before the last exit.
         VelopackApp.Build().Run();
@@ -39,6 +47,18 @@ public static class Program
         {
             ReportCrash(ex);
         }
+    }
+
+    private static void RunMcpBridge()
+    {
+        var version = Updates.UpdateService.ReadCurrentVersion();
+        try
+        {
+            using var stdin = Console.OpenStandardInput();
+            using var stdout = Console.OpenStandardOutput();
+            new RemoteMan.Core.Mcp.McpBridge(version).RunAsync(stdin, stdout).GetAwaiter().GetResult();
+        }
+        catch (Exception ex) { WriteLog(ex, "MCP bridge"); }
     }
 
     /// <summary>A startup failure would otherwise exit silently: save it and show it.</summary>

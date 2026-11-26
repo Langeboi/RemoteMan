@@ -76,11 +76,13 @@ WebView2 runtime ships with Windows 11 and current Windows 10.
   with the paperclip, by dropping them from Explorer or by pasting; pictures and GIFs show inline, other
   files get Open and Save. Each file is encrypted with a key of its own that only the message carries.
   With a GIPHY API key (More, Chat GIFs), a GIF button searches GIPHY; the picked GIF is sent as a file.
-- **AI assistant** (button at the top right, Ctrl+Shift+A): pick Claude, ChatGPT, Gemini, Mistral, a
-  local Ollama server or any OpenAI-compatible endpoint. Signed in, it waits on standby; the button opens
-  a chat box styled like the chosen provider. With an API key it can read the active SSH session's last
-  50 lines (toggle per message) and type a suggested command into the terminal without running it.
-  Account sign-in instead shows the provider's own chat page, without session access.
+- **AI apps over MCP** (AI button at the top right, Ctrl+Shift+A): RemoteMan is an MCP server for Claude
+  Desktop, Claude Code, VS Code and other MCP apps. Switch it on, then "Add to Claude Desktop" (writes its
+  config) or copy the setup for Claude Code, VS Code or anything else. The app can list and look up entries,
+  see open sessions, read an SSH, Telnet or serial terminal, type into it (you press Enter, unless you allow
+  running commands), open entries, see who on the team is where, and check Zabbix problems and Oxidized
+  backups (configs only if you allow it). Passwords, keys, stored usernames and secret fields are never
+  shared, and every tool call shows in the box's activity list.
 - Users are the database login (local files: your Windows account). Every entry records when it was
   created and last modified, and by whom (shown in the properties pane).
 - Optional single sign-on: a shared database can use your Windows login (SQL Server integrated security,

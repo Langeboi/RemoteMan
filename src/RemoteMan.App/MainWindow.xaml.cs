@@ -12,8 +12,8 @@ public partial class MainWindow : Window
 {
     private readonly MainViewModel _vm;
     private readonly AppSettings _settings;
-    private readonly AiAssistantViewModel _ai;
-    private AiAssistantWindow? _aiWindow;
+    private readonly McpViewModel _ai;
+    private McpWindow? _aiWindow;
 
     public MainWindow(AppSettings settings)
     {
@@ -72,12 +72,12 @@ public partial class MainWindow : Window
         DataContext = _vm;
         SetUpNotices();
 
-        // The Dashboard tab (and the entry overview inside it) isn't a connection: the assistant sees no session while it's showing.
-        _ai = new AiAssistantViewModel(settings, () => _vm.ActiveSession is { IsConnection: false } ? null : _vm.ActiveSession) { StatusMessage = m => _vm.Message = m };
+        // AI apps (Claude, VS Code…) reach RemoteMan over MCP while switched on in the AI box.
+        _ai = new McpViewModel(settings, _vm, Dispatcher) { StatusMessage = m => _vm.Message = m };
+        Closed += (_, _) => _ai.Dispose();
         _vm.RevealRequested += (_, node) => Dispatcher.BeginInvoke(() => RevealInTree(node), System.Windows.Threading.DispatcherPriority.Loaded);
         _vm.PropertyChanged += (_, e) => { if (e.PropertyName == nameof(MainViewModel.PanelMode)) SyncRail(); };
         AiButton.DataContext = _ai;
-        _vm.PropertyChanged += (_, e) => { if (e.PropertyName == nameof(MainViewModel.ActiveSession)) _ai.RefreshSession(); };
         LocationChanged += (_, _) => _aiWindow?.Reposition();
         SizeChanged += (_, _) => _aiWindow?.Reposition();
         StateChanged += (_, _) => { if (WindowState == WindowState.Minimized) _aiWindow?.HideBox(); else _aiWindow?.Reposition(); };
@@ -321,10 +321,11 @@ public partial class MainWindow : Window
         w.ShowDialog();
         // A new data source or new integration settings apply right away.
         if (DataSourceKey() != before || w.IntegrationsChanged) _ = _vm.ReloadDataSourceAsync();
+        _ai.Reload();
         if (w.ImportAfter is { } source) new ImportWindow(_vm, source) { Owner = this }.ShowDialog();
         if (!w.NeedsRestart) return;
         var choice = Views.ChoiceDialog.Show(this, "Restart to apply setup",
-            "The new theme or AI settings are used from the next start. Restart RemoteMan now? Open sessions are closed; you can reopen them when it starts.",
+            "The new theme is used from the next start. Restart RemoteMan now? Open sessions are closed; you can reopen them when it starts.",
             ["Restart now", "Later"], Views.DialogIcon.Question);
         if (choice == 0) RestartApp();
     }
@@ -940,10 +941,10 @@ public partial class MainWindow : Window
 
     private void OnAiButton(object sender, RoutedEventArgs e) => ToggleAi();
 
-    /// <summary>Opens the chat box under the AI button, or puts it back on standby.</summary>
+    /// <summary>Opens the AI apps box under the AI button, or hides it.</summary>
     private void ToggleAi()
     {
-        _aiWindow ??= new AiAssistantWindow(_ai) { Owner = this };
+        _aiWindow ??= new McpWindow(_ai) { Owner = this };
         if (_aiWindow.IsVisible) _aiWindow.HideBox();
         else _aiWindow.ShowUnder(AiButton);
     }

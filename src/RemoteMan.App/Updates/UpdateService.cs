@@ -285,7 +285,8 @@ public sealed partial class UpdateService : ObservableObject
     private static string? FormatSize(long bytes) =>
         bytes <= 0 ? null : bytes < 1024 * 1024 ? $"{Math.Max(1, bytes / 1024)} KB" : $"{bytes / (1024.0 * 1024):0.#} MB";
 
-    private static string ReadCurrentVersion()
+    /// <summary>The version this build carries (also used by the MCP bridge, which never starts the update service).</summary>
+    public static string ReadCurrentVersion()
     {
         var info = Assembly.GetEntryAssembly()?.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion;
         if (info is null) return "dev";
