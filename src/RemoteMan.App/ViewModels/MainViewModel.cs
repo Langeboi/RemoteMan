@@ -268,7 +268,8 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
     private void RebuildTree()
     {
         if (_store is null) return;
-        var expanded = _nodes.Values.Where(n => !n.IsExpanded).Select(n => n.Id).ToHashSet();
+        // Remember each folder's open/closed state across rebuilds (and while a flat panel is showing).
+        foreach (var n in _nodes.Values.Where(n => n.IsFolder && !n.IsRoot)) _expandState[n.Id] = n.IsExpanded;
         var selectedId = Selected?.Id;
         _nodes.Clear();
         Roots.Clear();
@@ -295,10 +296,13 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
             var byParent = all.ToLookup(e => e.ParentId is { } p && all.Any(x => x.Id == p) ? p : (Guid?)null);
             void Add(Guid? parent, ObservableCollection<EntryNode> into, int depth)
             {
-                // Folders first with the Credentials folder last among them, then connections, then loose credentials.
+                // Folders, then connections, then loose credentials, with the Credentials folder at the very bottom.
                 foreach (var e in byParent[parent].OrderBy(e => CredentialFolders.TreeRank(e, id => byParent[id])).ThenBy(e => e.Name, StringComparer.OrdinalIgnoreCase))
                 {
-                    var n = new EntryNode(e, depth) { IsExpanded = !expanded.Contains(e.Id) };
+                    // Folders start open, except Credentials folders, which start closed until you open them.
+                    var open = _expandState.TryGetValue(e.Id, out var was) ? was
+                        : !(e.Kind == EntryKind.Folder && CredentialFolders.IsCredentialsFolder(e, byParent[e.Id]));
+                    var n = new EntryNode(e, depth) { IsExpanded = open };
                     _nodes[e.Id] = n;
                     into.Add(n);
                     if (e.Kind == EntryKind.Folder) Add(e.Id, n.Children, depth + 1);
@@ -329,6 +333,8 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
     /// <summary>Id of the data source node at the top of the tree (never stored).</summary>
     public static readonly Guid DataSourceRootId = new("d5000000-0000-4000-8000-000000000001");
     private bool _rootExpanded = true;
+    /// <summary>Open/closed state of folders the user has seen this session; folders not in it use their default.</summary>
+    private readonly Dictionary<Guid, bool> _expandState = [];
 
     /// <summary>Id of the virtual Favorites group (never stored).</summary>
     public static readonly Guid FavoritesId = new("f4f0a7e0-0000-4000-8000-000000000001");
@@ -894,6 +900,8 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
                     var made = item.ParentId == DataSourceRootId || item.ParentId == FavoritesId ? null : item.ParentId;
                     item.ParentId = CredentialFolders.PlaceNewCredential(made, _store.Entries, out var folder);
                     if (folder is not null) await _store.SaveAsync(folder);
+                    // Show the credential you just made, even though Credentials folders start closed.
+                    if (item.ParentId is { } cf) _expandState[cf] = true;
                 }
                 saved = await _store.SaveAsync(item);
             }
