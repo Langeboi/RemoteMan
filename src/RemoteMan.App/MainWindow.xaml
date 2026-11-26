@@ -161,6 +161,8 @@
                             <Style.Triggers>
                                 <!-- The Overview tab follows the selection: italic, like a preview -->
                                 <DataTrigger Binding="{Binding IsPreview}" Value="True"><Setter Property="FontStyle" Value="Italic" /><Setter Property="ToolTip" Value="Overview: follows the entry you click in the tree" /></DataTrigger>
+                                <!-- Dropped and reconnecting in the background: the title fades until it's back -->
+                                <DataTrigger Binding="{Binding IsReconnecting}" Value="True"><Setter Property="Opacity" Value="0.5" /><Setter Property="ToolTip" Value="Connection lost: reconnecting…" /></DataTrigger>
                             </Style.Triggers>
                         </Style>
                     </TextBlock.Style>

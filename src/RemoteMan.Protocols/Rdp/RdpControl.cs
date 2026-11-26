@@ -189,6 +189,14 @@ public sealed class RdpControl : AxHost
         catch (Exception) { return null; }
     }
 
+    /// <summary>The control's ExtendedDisconnectReason after a disconnect (0 when it has none).</summary>
+    public int ExtendedDisconnectReason()
+    {
+        if (_closing || IsDisposed || GetOcx() is not { } ocx) return 0;
+        try { dynamic d = ocx; return Convert.ToInt32((object)d.ExtendedDisconnectReason); }
+        catch (Exception) { return 0; }
+    }
+
     /// <summary>Safe at any time, including before the control exists and while the tab is closing.</summary>
     public void Disconnect()
     {

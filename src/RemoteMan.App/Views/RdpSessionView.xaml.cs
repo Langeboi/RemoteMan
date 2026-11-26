@@ -30,41 +30,21 @@ public partial class RdpSessionView : UserControl
         _started = true;
         _vm = vm;
 
-        _rdp = new RdpControl { Dock = System.Windows.Forms.DockStyle.Fill };
-        Host.Child = _rdp;
         vm.ControlHandle = () => _rdp is { IsHandleCreated: true } r && Host.Visibility == Visibility.Visible ? r.Handle : IntPtr.Zero;
         var dpi = System.Windows.Media.VisualTreeHelper.GetDpi(this).DpiScaleX;
-        _rdp.Width = (int)((ActualWidth - 22) * dpi);
-        _rdp.Height = (int)(ActualHeight * dpi);
+        var first = NewControl(vm, (int)((ActualWidth - 22) * dpi), (int)(ActualHeight * dpi));
 
-        _rdp.Connected += () =>
-        {
-            OnTransportUp(vm);
-            vm.StatusText = $"RDP {vm.Via ?? vm.Endpoint.ToString()}{(vm.UsedFallback ? " (fallback)" : "")}";
-        };
-        _rdp.LoginComplete += () => { Reveal(); if (_rdp is { } r) vm.StatusText = $"RDP {vm.Via ?? vm.Endpoint.ToString()}  {r.Width}x{r.Height}"; };
-        _rdp.Disconnected += reason =>
-        {
-            if (_rdp is null) return; // tab is closing
-            StopConnecting();
-            vm.ReportProblem(RemoteMan.Core.Networking.ConnectionProblem.FromRdpDisconnect(reason, _rdp.DescribeDisconnect(reason)));
-            vm.StatusText = $"RDP disconnected (code {reason})";
-            Host.Visibility = Visibility.Collapsed;
-            State.Text = $"Disconnected from {vm.Endpoint} (code {reason}).";
-        };
         vm.Disposed += (_, _) =>
         {
             // Closing the tab: each step on its own, so one failing teardown can't take the app down.
             var rdp = _rdp; _rdp = null;
+            StopReconnecting();
             StopConnecting();
             try { _copy?.Dispose(); } catch (Exception) { }
             _copy = null;
             try { rdp?.Dispose(); } catch (Exception) { }
             try { Host.Child = null; Host.Dispose(); } catch (Exception) { }
         };
-
-        // Copy on select needs clipboard redirection to bring the text back.
-        if (vm.Settings.CopyOnSelect && vm.Settings.RedirectClipboard) _copy = new CopyOnSelect(_rdp);
 
         // Only the tab you're looking at draws and listens to the mouse.
         vm.PropertyChanged += (_, a) =>
@@ -82,8 +62,7 @@ public partial class RdpSessionView : UserControl
             vm.StatusText = $"RDP connecting to {vm.Via ?? vm.Endpoint.ToString()}…";
             if (vm.Credential.UseWindowsLogin && !SsoPolicy.AllowsDefaultCredentials(vm.Endpoint.Host))
                 vm.StatusText = SsoPolicy.Hint;
-            _rdp.Connect(vm.Endpoint, vm.Credential, vm.Settings, new RdpConnectOptions(
-                FullScreen: vm.FullScreen, AutoReconnect: vm.AutoReconnect, GatewayCredential: vm.GatewayCredential, Title: vm.Entry.Name));
+            Connect(first, vm);
         }
         catch (Exception ex)
         {
@@ -92,6 +71,193 @@ public partial class RdpSessionView : UserControl
             State.Text = $"Could not start RDP: {ex.Message}";
             vm.ReportProblem(RemoteMan.Core.Networking.ConnectionProblem.FromException(ex, RemoteMan.Core.Model.EntryKind.Rdp));
         }
+    }
+
+    /// <summary>A fresh RDP control in the host, its events wired. A reconnect gets a new one too, so nothing
+    /// from the dropped connection (half-torn-down channels, the control's own error state) carries over.</summary>
+    private RdpControl NewControl(RdpSessionViewModel vm, int width, int height)
+    {
+        var rdp = new RdpControl { Dock = System.Windows.Forms.DockStyle.Fill };
+        _rdp = rdp;
+        Host.Child = rdp;
+        rdp.Width = width;
+        rdp.Height = height;
+
+        rdp.Connected += () =>
+        {
+            if (!ReferenceEquals(rdp, _rdp)) return;
+            if (_reconnectAttempt > 0) { OnReconnectTransportUp(vm); return; }
+            OnTransportUp(vm);
+            vm.StatusText = $"RDP {vm.Via ?? vm.Endpoint.ToString()}{(vm.UsedFallback ? " (fallback)" : "")}";
+        };
+        rdp.LoginComplete += () =>
+        {
+            if (!ReferenceEquals(rdp, _rdp)) return;
+            _signedIn = true;
+            if (_reconnectAttempt > 0) EndReconnect(vm);
+            Reveal();
+            vm.StatusText = $"RDP {vm.Via ?? vm.Endpoint.ToString()}  {rdp.Width}x{rdp.Height}";
+        };
+        rdp.Disconnected += reason =>
+        {
+            if (!ReferenceEquals(rdp, _rdp)) return; // tab is closing, or a reconnect replaced this control
+            var ext = rdp.ExtendedDisconnectReason();
+            if (_reconnectAttempt > 0) { ReconnectAttemptFailed(vm); return; }
+            StopConnecting();
+            if (_signedIn && WantsReconnect(vm, reason, ext)) { BeginReconnect(vm); return; }
+            vm.ReportProblem(RemoteMan.Core.Networking.ConnectionProblem.FromRdpDisconnect(reason, rdp.DescribeDisconnect(reason)));
+            vm.StatusText = $"RDP disconnected (code {reason})";
+            Host.Visibility = Visibility.Collapsed;
+            State.Text = $"Disconnected from {vm.Endpoint} (code {reason}).";
+        };
+
+        // Copy on select needs clipboard redirection to bring the text back.
+        if (vm.Settings.CopyOnSelect && vm.Settings.RedirectClipboard)
+        {
+            try { _copy?.Dispose(); } catch (Exception) { }
+            _copy = new CopyOnSelect(rdp);
+            if (!vm.IsActive) _copy.Enabled = false;
+        }
+        return rdp;
+    }
+
+    private static void Connect(RdpControl rdp, RdpSessionViewModel vm) =>
+        rdp.Connect(vm.Endpoint, vm.Credential, vm.Settings, new RdpConnectOptions(
+            FullScreen: vm.FullScreen, AutoReconnect: vm.AutoReconnect, GatewayCredential: vm.GatewayCredential, Title: vm.Entry.Name));
+
+    // ---- Reconnecting in the background ----
+    // A signed-in session that drops on its own (server restart, network gone, idle limit) is tried again quietly
+    // for up to a minute. It comes back without a word, or its tab closes without one. Sign-outs, "Disconnect"
+    // inside the session and closing the tab here are left alone (RdpReconnect.ShouldRetry).
+
+    private bool _signedIn;
+    private int _reconnectAttempt;          // 0 = not reconnecting
+    private DateTime _reconnectUntil;
+    private bool _reconnectSigningIn;       // the latest try reached the server and is signing in
+    private System.Windows.Threading.DispatcherTimer? _reconnectTimer;
+    private System.Windows.Threading.DispatcherTimer? _reconnectDeadline;
+    private System.Windows.Media.Animation.DoubleAnimation? _reconnectSpin;
+
+    private static bool WantsReconnect(RdpSessionViewModel vm, int reason, int ext)
+    {
+        // The gateway switch was flipped and closed the connection on purpose: always come back on the new path.
+        if (Services.GatewayService.Instance.JustRerouted && reason is not (1 or 2)) return true;
+        return vm.AutoReconnect && RemoteMan.Core.Networking.RdpReconnect.ShouldRetry(reason, ext);
+    }
+
+    private void BeginReconnect(RdpSessionViewModel vm)
+    {
+        _reconnectUntil = DateTime.UtcNow + RemoteMan.Core.Networking.RdpReconnect.Window;
+        vm.IsReconnecting = true;
+        vm.StatusText = $"RDP connection to {vm.Via ?? vm.Endpoint.ToString()} lost: reconnecting…";
+        Notice.IsOpen = false;
+        // Hidden, not collapsed: the control keeps its size, so the desktop comes back at the same resolution.
+        Host.Visibility = Visibility.Hidden;
+        State.Text = "";
+        ReconnText.Text = $"Reconnecting to {vm.Entry.Name}…";
+        Reconnecting.Visibility = Visibility.Visible;
+        _reconnectSpin = new System.Windows.Media.Animation.DoubleAnimation(0, 360, TimeSpan.FromSeconds(1.1))
+            { RepeatBehavior = System.Windows.Media.Animation.RepeatBehavior.Forever };
+        ReconnSpin.BeginAnimation(System.Windows.Media.RotateTransform.AngleProperty, _reconnectSpin);
+
+        _reconnectDeadline = new System.Windows.Threading.DispatcherTimer { Interval = RemoteMan.Core.Networking.RdpReconnect.Window };
+        _reconnectDeadline.Tick += (_, _) =>
+        {
+            _reconnectDeadline?.Stop();
+            // A try that is already signing in gets to finish; it closes the tab itself if it fails.
+            if (!_reconnectSigningIn) GiveUp(vm);
+        };
+        _reconnectDeadline.Start();
+        ScheduleReconnect(vm);
+    }
+
+    private void ScheduleReconnect(RdpSessionViewModel vm)
+    {
+        _reconnectAttempt++;
+        _reconnectSigningIn = false;
+        var wait = Services.GatewayService.Instance.JustRerouted ? TimeSpan.FromMilliseconds(500)
+            : RemoteMan.Core.Networking.RdpReconnect.Delay(_reconnectAttempt);
+        _reconnectTimer?.Stop();
+        _reconnectTimer = new System.Windows.Threading.DispatcherTimer { Interval = wait };
+        _reconnectTimer.Tick += async (_, _) =>
+        {
+            _reconnectTimer?.Stop();
+            if (_rdp is null || _reconnectAttempt == 0) return;
+            if (DateTime.UtcNow >= _reconnectUntil) { GiveUp(vm); return; }
+
+            // A quick knock on the port first: the RDP control takes 20 s or more to give up on a host that's down.
+            var port = vm.Endpoint.Port > 0 ? vm.Endpoint.Port : 3389;
+            bool up;
+            using (var cts = new CancellationTokenSource(TimeSpan.FromSeconds(2)))
+            {
+                try { await RemoteMan.Core.Networking.EndpointResolver.TcpProbeAsync(vm.Endpoint.Host, port, cts.Token); up = true; }
+                catch (Exception) { up = false; }
+            }
+            if (_rdp is null || _reconnectAttempt == 0) return;   // closed meanwhile
+            if (!up) { ReconnectAttemptFailed(vm); return; }
+
+            var old = _rdp;
+            var size = (old.Width, old.Height);
+            var rdp = NewControl(vm, size.Width, size.Height);
+            try { old.Dispose(); } catch (Exception) { }
+            try
+            {
+                Connect(rdp, vm);
+                if (!vm.IsActive) rdp.SetForeground(false); // background tab: don't draw (as before the drop)
+            }
+            catch (Exception) { ReconnectAttemptFailed(vm); }
+        };
+        _reconnectTimer.Start();
+    }
+
+    /// <summary>The server answered: the session is coming back. With a stored login it signs in on its own and
+    /// LoginComplete shows the desktop; without one, the sign-in screen needs you, so show it now.</summary>
+    private void OnReconnectTransportUp(RdpSessionViewModel vm)
+    {
+        _reconnectSigningIn = true;
+        var c = vm.Credential;
+        if (string.IsNullOrEmpty(c.Password) && !c.UseWindowsLogin) { EndReconnect(vm); return; }
+        // Safety net for servers that show a banner or notice before the desktop (as on the first connect).
+        _revealTimer?.Stop();
+        _revealTimer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromSeconds(8) };
+        _revealTimer.Tick += (_, _) => { _revealTimer?.Stop(); if (_reconnectAttempt > 0) EndReconnect(vm); };
+        _revealTimer.Start();
+    }
+
+    private void ReconnectAttemptFailed(RdpSessionViewModel vm)
+    {
+        if (_rdp is null || _reconnectAttempt == 0) return;
+        if (DateTime.UtcNow >= _reconnectUntil) { GiveUp(vm); return; }
+        ScheduleReconnect(vm);
+    }
+
+    /// <summary>Back: drop the indicator and carry on as if nothing happened.</summary>
+    private void EndReconnect(RdpSessionViewModel vm)
+    {
+        StopReconnecting();
+        vm.IsReconnecting = false;
+        Host.Visibility = Visibility.Visible;
+        if (vm.IsActive) _rdp?.Focus();
+    }
+
+    /// <summary>A minute went by without the session coming back: close the tab quietly.</summary>
+    private void GiveUp(RdpSessionViewModel vm)
+    {
+        StopReconnecting();
+        vm.IsReconnecting = false;
+        if (_rdp is null) return;
+        vm.RequestClose();
+    }
+
+    private void StopReconnecting()
+    {
+        _reconnectAttempt = 0;
+        _reconnectSigningIn = false;
+        _reconnectTimer?.Stop(); _reconnectTimer = null;
+        _reconnectDeadline?.Stop(); _reconnectDeadline = null;
+        _revealTimer?.Stop(); _revealTimer = null;
+        if (_reconnectSpin is not null) { ReconnSpin.BeginAnimation(System.Windows.Media.RotateTransform.AngleProperty, null); _reconnectSpin = null; }
+        Reconnecting.Visibility = Visibility.Collapsed;
     }
 
     // ---- Connecting animation ----
