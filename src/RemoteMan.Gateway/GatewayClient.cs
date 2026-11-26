@@ -278,7 +278,8 @@ public sealed class LocalForwarder : IDisposable
     public TimeSpan OffSiteMemory { get; init; } = TimeSpan.FromMinutes(10);
     /// <summary>
     /// While connections go through the gateway, how often the direct path is tried in the background, so coming
-    /// back on site is noticed within seconds instead of after <see cref="OffSiteMemory"/>.
+    /// back on site is noticed within seconds instead of after <see cref="OffSiteMemory"/> (it must answer twice
+    /// in a row).
     /// </summary>
     public TimeSpan ProbeEvery { get; init; } = TimeSpan.FromSeconds(15);
     /// <summary>
@@ -437,18 +438,23 @@ public sealed class LocalForwarder : IDisposable
     private async Task WatchForSiteAsync()
     {
         var ct = _cts.Token;
+        var answered = 0;
         while (!ct.IsCancellationRequested)
         {
             try { await Task.Delay(ProbeEvery, ct); } catch (OperationCanceledException) { return; }
-            if (_path is not { Direct: false } || Override?.Invoke() is not null) continue;
+            if (_path is not { Direct: false } || Override?.Invoke() is not null) { answered = 0; continue; }
             try
             {
-                if (await DialDirectAsync(ct) is not var (tcp, _)) continue;
+                if (await DialDirectAsync(ct) is not var (tcp, _)) { answered = 0; continue; }
                 tcp.Dispose();
+                // Twice in a row before switching back, so a flaky link at the edge of the site's Wi-Fi doesn't
+                // move the database back and forth.
+                if (++answered < 2) continue;
+                answered = 0;
                 _path = (DateTime.UtcNow, true);
                 BackOnSite?.Invoke();
             }
-            catch { }
+            catch { answered = 0; }
         }
     }
 

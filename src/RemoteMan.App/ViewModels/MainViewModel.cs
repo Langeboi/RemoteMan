@@ -677,12 +677,42 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
 
         Message = via is not null ? $"{e.Name}: {via}"
             : result.UsedFallback ? $"{result.Attempts[0].Endpoint} {result.Attempts[0].Error}, using fallback {endpoint}" : "";
+        if (s is SshSessionViewModel or RdpSessionViewModel) s.Reroute = RouteFinder(e, probe, resolver);
         s.CloseRequested += (_, _) => CloseSession(s);
         TrackFailures(s);
         Prepare(s, e, fields);
         Show(s);
         RememberRecent(e);
     }
+
+    /// <summary>
+    /// How a dropped session finds its way back: the entry's hosts directly, in order (on site, or the fallback
+    /// that answers), else its gateway site. Same rules as connecting, so it's stable: the direct hosts only win
+    /// when one answers right now, and once this PC is known to be off-site (a connection needed the gateway in the
+    /// last 10 minutes, and the forwarders' background checks haven't seen the direct path come back) the direct
+    /// try is skipped. It runs only when a session has already dropped, so live sessions are never moved.
+    /// </summary>
+    private Func<Task<SessionRoute?>> RouteFinder(Entry e, Entry probe, EndpointResolver resolver) => async () =>
+    {
+        var gw = GatewayService.Instance;
+        var gateway = gw.Mode == GatewayMode.Disconnected ? null : _store?.GatewayFor(e, gw.DefaultSite(_settings.Active));
+        var skipDirect = gateway is { } g0 && (g0.Always || gw.PreferGateway(g0.Site));
+        if (!skipDirect)
+        {
+            var direct = await resolver.ResolveAsync(probe);
+            if (direct.Success)
+            {
+                if (gateway is { } g1) gw.RecordPath(g1.Site, direct: true);
+                return new SessionRoute(direct.Endpoint!, null, null);
+            }
+        }
+        if (gateway is not { } g || !gw.IsConfigured) return null;   // nothing else to try: the same host again
+        var targets = GatewayService.Targets(e, probe.Endpoints, e.Web?.Url);
+        if (targets.Count == 0) return null;
+        var fwd = gw.Forwarder(g.Site, targets, directFirst: false);
+        var real = GatewayProtocol.ParseTarget(targets[0]) is var (h, p) ? new HostEndpoint(h, p) : null;
+        return new SessionRoute(new HostEndpoint("127.0.0.1", fwd.Port), $"{targets[0]} via gateway {g.Site}", real);
+    };
 
     /// <summary>
     /// Opens (or reuses) a local forwarder through the entry's gateway site after checking that the site's connector

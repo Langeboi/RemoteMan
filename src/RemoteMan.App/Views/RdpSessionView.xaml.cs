@@ -185,6 +185,10 @@ public partial class RdpSessionView : UserControl
             if (_rdp is null || _reconnectAttempt == 0) return;
             if (DateTime.UtcNow >= _reconnectUntil) { GiveUp(vm); return; }
 
+            // Moved on or off site since it connected: reconnect the way that works from here now.
+            if (await vm.RerouteAsync()) vm.StatusText = $"RDP connection lost: reconnecting through {vm.Via ?? vm.Endpoint.ToString()}…";
+            if (_rdp is null || _reconnectAttempt == 0) return;
+
             // A quick knock on the port first: the RDP control takes 20 s or more to give up on a host that's down.
             var port = vm.Endpoint.Port > 0 ? vm.Endpoint.Port : 3389;
             bool up;

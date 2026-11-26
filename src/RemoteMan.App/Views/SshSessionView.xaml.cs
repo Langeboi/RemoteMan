@@ -847,6 +847,10 @@ public partial class SshSessionView : UserControl
             var old = _chan;
             _ssh = null; _chan = null;
             try { old?.Dispose(); } catch (Exception) { }
+            // Moved on or off site since it connected: reconnect the way that works from here now.
+            if (await _vm.RerouteAsync())
+                Post(new { t = "info", d = $"Reconnecting {(_vm.Via is { } via ? $"through {via}" : $"directly to {_vm.Endpoint}")}…" });
+            if (_closing) return;
             await StartAsync(_cols, _rows);
         };
         timer.Start();

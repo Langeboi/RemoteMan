@@ -38,10 +38,33 @@ public abstract partial class SessionViewModel : ObservableObject, IDisposable
 
     /// <summary>Things that live as long as the tab, e.g. the SSH tunnel an RDP session goes through.</summary>
     public List<IDisposable> Owned { get; } = new();
-    public HostEndpoint Endpoint { get; }
+    public HostEndpoint Endpoint { get; private set; }
     /// <summary>Where the session really goes when <see cref="Endpoint"/> is a local tunnel: "10.0.0.5:3389 via bastion",
     /// "10.0.0.5:3389 via gateway school".</summary>
-    public string? Via { get; init; }
+    public string? Via { get; set; }
+
+    /// <summary>
+    /// Picks the path again for where this PC is now (the entry's hosts directly, else its gateway site). Set for
+    /// sessions that can go more than one way; the view calls <see cref="RerouteAsync"/> only after the connection
+    /// dropped, never on a live one, so moving between on-site and off-site can't make a session hop back and forth.
+    /// </summary>
+    public Func<Task<SessionRoute?>>? Reroute { get; set; }
+
+    /// <summary>Before a reconnect: switches to the path that works from here now. True when it changed.</summary>
+    public async Task<bool> RerouteAsync()
+    {
+        if (Reroute is not { } reroute) return false;
+        SessionRoute? r;
+        try { r = await reroute(); }
+        catch (Exception) { return false; }
+        if (r is null || (r.Endpoint == Endpoint && r.Via == Via)) return false;
+        Endpoint = r.Endpoint;
+        Via = r.Via;
+        OnRerouted(r);
+        return true;
+    }
+
+    protected virtual void OnRerouted(SessionRoute route) { }
     public ResolvedCredential Credential { get; }
     public bool UsedFallback { get; }
     public virtual string KindTag => EntryNode.KindTagFor(Entry.Kind);
@@ -107,12 +130,17 @@ public abstract partial class SessionViewModel : ObservableObject, IDisposable
     public event Action<SessionViewModel>? Closed;
 }
 
+/// <summary>Where a session connects: the endpoint, how it gets there ("… via gateway school") and the real host behind a tunnel.</summary>
+public sealed record SessionRoute(HostEndpoint Endpoint, string? Via, HostEndpoint? Real);
+
 public sealed class SshSessionViewModel(Entry e, HostEndpoint ep, ResolvedCredential c, bool fb) : SessionViewModel(e, ep, c, fb)
 {
     public SshSettings Settings => Entry.Ssh ?? new SshSettings();
 
     /// <summary>The real host behind a gateway tunnel, for host key checks.</summary>
-    public HostEndpoint? KnownHostAs { get; init; }
+    public HostEndpoint? KnownHostAs { get; set; }
+
+    protected override void OnRerouted(SessionRoute route) => KnownHostAs = route.Real;
     /// <summary>Hosts to try in order. Without a jump host this is just the probed <see cref="SessionViewModel.Endpoint"/>.</summary>
     public IReadOnlyList<HostEndpoint>? Endpoints { get; init; }
 
