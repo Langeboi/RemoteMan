@@ -68,11 +68,16 @@ public sealed partial class EntryNode : ObservableObject
     public bool HasLinkedCredential => Entry.CredentialId is not null;
     public string KindTag => KindTagFor(Entry.Kind);
     public Guid Id => Entry.Id;
+    /// <summary>A folder holding credentials (named Credentials, or only credentials inside); set by the tree.</summary>
+    public bool IsCredentialsFolder { get; init; }
+    /// <summary>A Credentials folder with no icon or colour picked shows orange keys instead of the plain folder.</summary>
+    private bool KeysByDefault => IsCredentialsFolder && string.IsNullOrEmpty(Entry.Icon) && string.IsNullOrEmpty(Entry.IconColor);
     /// <summary>Folder icon chosen in the folder icon picker (plain folder by default).</summary>
-    public System.Windows.Media.Geometry FolderGlyph => RemoteMan.App.Views.FolderIcons.GlyphFor(Entry.Icon);
-    public System.Windows.Media.Brush FolderBrush => RemoteMan.App.Views.FolderIcons.BrushFor(Entry.IconColor);
-    /// <summary>Plain folders are drawn filled in their colour; folders with a glyph (server, network…) stay outlined.</summary>
-    public System.Windows.Media.Brush? FolderFill => Entry.Icon is null or "" or "folder" ? FolderBrush : null;
+    public System.Windows.Media.Geometry FolderGlyph => RemoteMan.App.Views.FolderIcons.GlyphFor(KeysByDefault ? "keys" : Entry.Icon);
+    public System.Windows.Media.Brush FolderBrush =>
+        RemoteMan.App.Views.FolderIcons.BrushFor(KeysByDefault ? RemoteMan.App.Views.FolderIcons.CredentialsColor : Entry.IconColor);
+    /// <summary>Plain folders are drawn filled in their colour; folders with a glyph (server, network, keys…) stay outlined.</summary>
+    public System.Windows.Media.Brush? FolderFill => !KeysByDefault && Entry.Icon is null or "" or "folder" ? FolderBrush : null;
     /// <summary>Any entry: a glyph or vendor mark picked with Change icon, shown instead of the protocol or folder icon.</summary>
     public bool HasCustomIcon => RemoteMan.App.Views.EntryIcons.IsCustom(Entry.Icon, Entry.IconColor, IsFolder);
     public System.Windows.Media.ImageSource? IconImage =>
