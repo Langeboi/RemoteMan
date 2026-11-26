@@ -48,9 +48,4 @@ public static class WebViewEnvironment
             return Sso[list] = CoreWebView2Environment.CreateAsync(null, folder, options);
         }
     }
-    private static Task<CoreWebView2Environment>? _ai;
-
-    /// <summary>A separate profile for AI account sign-in, so those cookies never mix with web entries.</summary>
-    public static Task<CoreWebView2Environment> GetAiAsync() =>
-        _ai ??= CoreWebView2Environment.CreateAsync(null, AppPaths.AiWebData);
 }

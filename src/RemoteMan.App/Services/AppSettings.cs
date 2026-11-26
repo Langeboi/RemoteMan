@@ -3,7 +3,6 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using RemoteMan.Core.Integrations.Oxidized;
 using RemoteMan.Core.Integrations.Zabbix;
-using RemoteMan.Core.Ai;
 using RemoteMan.Core.Storage;
 
 namespace RemoteMan.App.Services;
@@ -14,7 +13,6 @@ public static class AppPaths
     public static string Settings => Path.Combine(Root, "settings.json");
     public static string LocalDb => Path.Combine(Root, "local.db");
     public static string KnownHosts => Path.Combine(Root, "known_hosts.json");
-    public static string AiWebData => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "RemoteMan", "AiWeb");
     public static string WebViewData => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "RemoteMan", "WebView2");
 }
 
@@ -77,8 +75,8 @@ public sealed class AppSettings
     /// <summary>Data sources the setup window changed the integrations for: they are saved there the next time it opens.</summary>
     public List<string> IntegrationsPending { get; set; } = new();
 
-    /// <summary>AI assistant providers (keys are not stored here; see <see cref="Secrets"/>).</summary>
-    public AiSettings Ai { get; set; } = new();
+    /// <summary>AI apps (Claude, VS Code…) using RemoteMan as an MCP server, and what they may do.</summary>
+    public McpSettings Mcp { get; set; } = new();
 
     public DataSourceConfig Active =>
         DataSources.FirstOrDefault(d => d.Name == ActiveDataSource) ?? DataSources[0];
@@ -101,6 +99,20 @@ public sealed class AppSettings
 }
 
 public enum ReopenMode { Ask, Always, Never }
+
+/// <summary>How far AI apps may go in SSH, Telnet and serial sessions.</summary>
+public enum McpTerminalAccess { Off = 0, Read = 1, Type = 2, Run = 3 }
+
+/// <summary>RemoteMan as an MCP server for AI apps. Off until switched on; secrets are never shared whatever is set here.</summary>
+public sealed class McpSettings
+{
+    public bool Enabled { get; set; }
+    /// <summary>Read terminal output, type into it (the user presses Enter), or also run commands.</summary>
+    public McpTerminalAccess Terminal { get; set; } = McpTerminalAccess.Type;
+    public bool OpenConnections { get; set; } = true;
+    /// <summary>Oxidized config text: can hold password hashes and keys, so off unless the user allows it.</summary>
+    public bool DeviceConfigs { get; set; }
+}
 
 /// <summary>One tab or session window that was open: the entry, which pane, and whether it was the shown tab.</summary>
 public sealed class OpenSessionRecord

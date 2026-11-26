@@ -3,7 +3,6 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using RemoteMan.App.Services;
-using RemoteMan.Core.Ai;
 using RemoteMan.Core.Storage;
 using RemoteMan.Data;
 
@@ -26,7 +25,7 @@ public sealed class SetupWindow : Window
         (Step.Welcome, "Welcome", ""),
         (Step.DataSource, "Data source", "Where entries live"),
         (Step.Look, "Look", "Theme and shading"),
-        (Step.Ai, "AI assistant", "Optional"),
+        (Step.Ai, "AI apps", "Optional"),
         (Step.Integrations, "Integrations", "Zabbix, Oxidized"),
         (Step.Import, "Import", "From RDM and others"),
         (Step.Startup, "Startup", "Reopen sessions"),
@@ -65,17 +64,9 @@ public sealed class SetupWindow : Window
     private readonly TextBlock _previewName = new() { FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 8, 0, 0) };
     private readonly TextBlock _previewDesc = Muted("");
 
-    // AI
-    private AiProviderKind? _ai;
-    private readonly Dictionary<AiProviderKind, Border> _aiCards = new();
-    private readonly StackPanel _aiForm = new();
-    private readonly TextBlock _aiKeyLabel = Muted("API key");
-    private readonly PasswordBox _aiKey = new();
-    private readonly TextBlock _aiEndpointLabel = Muted("Server address");
-    private readonly TextBox _aiEndpoint = new();
-    private readonly TextBox _aiModel = new();
-    private readonly CheckBox _aiContext = new() { Content = "Send the active session's recent output with each message", IsChecked = true };
-    private readonly TextBlock _aiResult = Muted("Not using AI? Press Skip; the assistant stays hidden until you set it up.");
+    // AI apps (MCP)
+    private readonly CheckBox _mcpOn = new() { Content = "Let AI apps use RemoteMan" };
+    private readonly TextBlock _mcpResult = Muted("");
 
     // Integrations
     private readonly CheckBox _zbxOn = new() { Content = "Use" };
@@ -145,7 +136,6 @@ public sealed class SetupWindow : Window
 
         LoadCurrent();
         BuildPages();
-        if (_ai is not null) RefreshAi();
         Content = BuildChrome();
         Closing += (_, _) => Apply();
         PreviewKeyDown += (_, e) => { if (e.Key == Key.Escape) { e.Handled = true; Close(); } };
@@ -445,84 +435,28 @@ public sealed class SetupWindow : Window
 
     private FrameworkElement AiPage()
     {
-        var p = Page("Add an AI assistant?",
-            "The assistant panel can explain errors, write commands and read the session you're in. Sign in with an API key, or point it at your own Ollama server.");
-        var cards = new WrapPanel();
-        foreach (var info in AiProviderInfo.All)
+        var p = Page("Use RemoteMan from your AI app?",
+            "RemoteMan can be an MCP server, so Claude Desktop, Claude Code, VS Code and other AI apps can look up your entries, " +
+            "read the SSH sessions you have open and check Zabbix and Oxidized. Passwords and keys are never shared.");
+        p.Children.Add(_mcpOn);
+        var add = new Button { Content = "Add to Claude Desktop", HorizontalAlignment = HorizontalAlignment.Left };
+        add.Click += (_, _) =>
         {
-            var kind = info.Kind;
-            var c = Card(info.Name, info.Vendor, () => { _ai = _ai == kind ? null : kind; RefreshAi(); });
-            _aiCards[kind] = c;
-            cards.Children.Add(c);
-        }
-        p.Children.Add(cards);
-
-        var check = new Button { Content = "Check", HorizontalAlignment = HorizontalAlignment.Left };
-        check.Click += async (_, _) => await CheckAiAsync();
-        var checkRow = new StackPanel { Orientation = Orientation.Horizontal };
-        checkRow.Children.Add(check);
-        _aiForm.Children.Add(FormOf([(_aiKeyLabel, _aiKey), (_aiEndpointLabel, _aiEndpoint), (Muted("Model"), _aiModel), (Muted(""), _aiContext), (Muted(""), checkRow)]));
-        p.Children.Add(_aiForm);
-        _aiResult.Margin = new Thickness(0, 10, 0, 0);
-        p.Children.Add(_aiResult);
+            _mcpOn.IsChecked = true;
+            var (ok, text) = McpClients.AddToClaudeDesktop();
+            ShowResult(_mcpResult, text, ok);
+        };
+        var row = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 14, 0, 0) };
+        row.Children.Add(add);
+        var other = Muted("Other apps: the AI button in the title bar");
+        other.Margin = new Thickness(10, 0, 0, 0);
+        other.VerticalAlignment = VerticalAlignment.Center;
+        row.Children.Add(other);
+        p.Children.Add(row);
+        _mcpResult.Margin = new Thickness(0, 10, 0, 0);
+        _mcpResult.TextWrapping = TextWrapping.Wrap;
+        p.Children.Add(_mcpResult);
         return p;
-    }
-
-    private void RefreshAi()
-    {
-        foreach (var (k, c) in _aiCards) Mark(c, k == _ai);
-        _aiForm.Visibility = _ai is null ? Visibility.Collapsed : Visibility.Visible;
-        if (_ai is { } kind)
-        {
-            var info = AiProviderInfo.Get(kind);
-            var keyVis = info.NeedsKey || kind == AiProviderKind.Custom ? Visibility.Visible : Visibility.Collapsed;
-            _aiKey.Visibility = _aiKeyLabel.Visibility = keyVis;
-            _aiKeyLabel.Text = info.NeedsKey ? "API key" : "API key (optional)";
-            _aiEndpoint.Visibility = _aiEndpointLabel.Visibility = info.EndpointEditable ? Visibility.Visible : Visibility.Collapsed;
-            var existing = _settings.Ai.Providers.FirstOrDefault(x => x.Kind == kind);
-            _aiEndpoint.Text = existing?.Endpoint ?? info.DefaultEndpoint ?? "";
-            _aiModel.Text = existing?.Model is { Length: > 0 } m ? m : info.DefaultModel;
-            _aiKey.Password = "";
-            _aiKey.ToolTip = Secrets.LoadAiKey(kind) is null ? null : "A key is saved. Leave this empty to keep it.";
-            ShowResult(_aiResult, "", null);
-        }
-        else ShowResult(_aiResult, "Not using AI? Press Skip; the assistant stays hidden until you set it up.", null);
-    }
-
-    private AiProviderConfig? ReadAi() => _ai is not { } kind ? null : new()
-    {
-        Kind = kind,
-        AuthMode = AiAuthMode.ApiKey,
-        Model = _aiModel.Text.Trim(),
-        Endpoint = AiProviderInfo.Get(kind).EndpointEditable ? _aiEndpoint.Text.Trim() : null,
-    };
-
-    private string AiKey => _aiKey.Password.Trim() is { Length: > 0 } k ? k : _ai is { } kind ? Secrets.LoadAiKey(kind) ?? "" : "";
-
-    private string? AiProblem()
-    {
-        if (ReadAi() is not { } cfg) return null;
-        if (cfg.Info.NeedsKey && AiKey.Length == 0) return "Paste your API key, or press Skip.";
-        if (cfg.Info.EndpointEditable && !Uri.TryCreate(cfg.EffectiveEndpoint, UriKind.Absolute, out _)) return "Enter the server address, like http://10.0.10.30:11434/v1";
-        return null;
-    }
-
-    private async Task CheckAiAsync()
-    {
-        if (AiProblem() is { } problem) { ShowResult(_aiResult, problem, false); return; }
-        var cfg = ReadAi()!;
-        ShowResult(_aiResult, "Checking…", null);
-        try
-        {
-            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
-            var models = await AiClientFactory.Create(cfg, AiKey).ListModelsAsync(cts.Token);
-            if (_aiModel.Text.Trim().Length == 0 && models.Count > 0) _aiModel.Text = models[0];
-            ShowResult(_aiResult, models.Count > 0 ? $"Works. {models.Count} models available." : "Works.", true);
-        }
-        catch (Exception ex)
-        {
-            ShowResult(_aiResult, ex is OperationCanceledException ? "No answer within 15 seconds." : ex.GetBaseException().Message, false);
-        }
     }
 
     private FrameworkElement IntegrationsPage()
@@ -688,7 +622,7 @@ public sealed class SetupWindow : Window
         }
         Row(Step.DataSource, "Data source", () => _dsKind == DataSourceKind.Sqlite ? "Local (this PC)" : $"{Sources.First(s => s.Kind == _dsKind).Name}, \"{ReadDataSource().Name}\", {ReadDataSource().ConnectionStrings.Count} server(s)");
         Row(Step.Look, "Look", () => $"{Themes.Find(_theme).Name}, {_shading.ToString().ToLowerInvariant()} shading");
-        Row(Step.Ai, "AI assistant", () => _ai is { } k ? AiProviderInfo.Get(k).Name : "None");
+        Row(Step.Ai, "AI apps", () => _mcpOn.IsChecked == true ? "On" : "Off");
         Row(Step.Integrations, "Integrations", () => string.Join(", ", new[] { _zbxOn.IsChecked == true ? "Zabbix" : null, _oxOn.IsChecked == true ? "Oxidized" : null }.OfType<string>()) is { Length: > 0 } s ? s : "None");
         Row(Step.Import, "Import", () => _import is null or "none" ? "Start empty" : ImportSources.First(s => s.Id == _import).Name + ", opens when RemoteMan is up");
         Row(Step.Startup, "Reopen sessions", () => _reopen.ToString() + (_backup.IsChecked == true ? ", daily backup" : "") + (_chat.IsChecked == true ? ", chat drawer open" : ""));
@@ -757,7 +691,6 @@ public sealed class SetupWindow : Window
         {
             case Step.DataSource: RefreshDataSource(); break;
             case Step.Look: RefreshLook(); break;
-            case Step.Ai: RefreshAiMarks(); break;
             case Step.Integrations: RefreshIntegrations(); break;
             case Step.Import: RefreshImport(); break;
             case Step.Startup: RefreshStartup(); break;
@@ -771,13 +704,6 @@ public sealed class SetupWindow : Window
         _skipAll.Visibility = last ? Visibility.Collapsed : Visibility.Visible;
         _next.Content = first ? "Get started" : last ? "Finish" : "Next";
         RefreshRail();
-    }
-
-    /// <summary>Re-marks the AI cards without resetting what was typed (RefreshAi also loads the provider's defaults).</summary>
-    private void RefreshAiMarks()
-    {
-        foreach (var (k, c) in _aiCards) Mark(c, k == _ai);
-        _aiForm.Visibility = _ai is null ? Visibility.Collapsed : Visibility.Visible;
     }
 
     private void OnNext()
@@ -795,7 +721,6 @@ public sealed class SetupWindow : Window
                 { ShowResult(_dsResult, "Set a vault passphrase. Everyone on this data source uses the same one.", false); return; }
                 break;
             }
-            case Step.Ai when AiProblem() is { } problem: ShowResult(_aiResult, problem, false); return;
             case Step.Integrations when IntegrationsProblem() is { } problem: ShowResult(_intResult, problem, false); return;
         }
         _state[step] = State.Done;
@@ -815,8 +740,7 @@ public sealed class SetupWindow : Window
             _dsServers.Text = string.Join(Environment.NewLine, active.ConnectionStrings);
             _dsSso.IsChecked = active.UseWindowsLogin;
         }
-        _ai = _settings.Ai.ActiveProvider?.Kind;
-        _aiContext.IsChecked = _settings.Ai.IncludeSessionContext;
+        _mcpOn.IsChecked = _settings.Mcp.Enabled;
         _zbxOn.IsChecked = _settings.Zabbix.Enabled;
         _zbxUrl.Text = _settings.Zabbix.Url;
         _zbxCert.IsChecked = _settings.Zabbix.IgnoreCertificateErrors;
@@ -825,12 +749,6 @@ public sealed class SetupWindow : Window
         _oxUser.Text = _settings.Oxidized.UserName ?? "";
         _backup.IsChecked = _settings.Backup.Enabled;
         _chat.IsChecked = _settings.ChatOpen;
-        if (_ai is { } kind)
-        {
-            var cfg = _settings.Ai.Providers.First(p => p.Kind == kind);
-            _aiModel.Text = cfg.EffectiveModel;
-            _aiEndpoint.Text = cfg.EffectiveEndpoint;
-        }
     }
 
     /// <summary>Writes the confirmed steps to the settings (once, as the window closes). Skipped steps are left alone.</summary>
@@ -870,16 +788,7 @@ public sealed class SetupWindow : Window
             _settings.Shading = _shading;
         }
 
-        var aiChanged = false;
-        if (Confirmed(Step.Ai) && ReadAi() is { } ai)
-        {
-            if (_aiKey.Password.Trim().Length > 0) Secrets.SaveAiKey(ai.Kind, _aiKey.Password.Trim());
-            _settings.Ai.Providers.RemoveAll(x => x.Kind == ai.Kind);
-            _settings.Ai.Providers.Add(ai);
-            _settings.Ai.Active = ai.Kind;
-            _settings.Ai.IncludeSessionContext = _aiContext.IsChecked == true;
-            aiChanged = true;
-        }
+        if (Confirmed(Step.Ai)) _settings.Mcp.Enabled = _mcpOn.IsChecked == true;
 
         var integrationsChanged = false;
         if (Confirmed(Step.Integrations))
@@ -924,6 +833,6 @@ public sealed class SetupWindow : Window
         // The data source and integrations switch over live (the main window reopens the data source); only a new
         // theme, or new AI settings when run again, need a fresh start.
         IntegrationsChanged = integrationsChanged;
-        NeedsRestart = themeChanged || (_rerun && aiChanged);
+        NeedsRestart = themeChanged;
     }
 }

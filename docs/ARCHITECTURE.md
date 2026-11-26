@@ -133,24 +133,31 @@ gzip-compressed bundle encrypted with AES-256-GCM, key from PBKDF2-SHA256 (600,0
 are plain text (the file is the encryption boundary), so a file opens into any data source. Automatic
 backups write `RemoteMan <source> <date>.rmx` daily to `%APPDATA%\RemoteMan\backups` (or a chosen
 folder), keep the newest N, and remember their password under DPAPI.
-## AI assistant
+## AI apps (MCP)
 
-- `RemoteMan.Core/Ai`: one `IAiChatClient` per provider family, all streaming. Claude goes through the
-  official Anthropic SDK (with server-side refusal fallback on); OpenAI, Mistral, Ollama and custom
-  endpoints share a Chat Completions client; Gemini uses `streamGenerateContent`. Connecting lists the
-  account's models first, which proves the key before anything is saved.
-- Keys are DPAPI-encrypted per Windows user in `%APPDATA%\RemoteMan\ai-<provider>.key`. They are never
-  written to a data source, so on a shared database every user brings their own key.
-- Session context: SSH tabs keep a plain-text tail of the terminal (`TerminalTail`, escape codes
-  stripped). When the context toggle is on, the last 50 lines go in front of the user's message, wrapped
-  as untrusted data; the system prompt stays constant so providers can cache it. Nothing is sent until
-  the user presses Send.
-- Paste to terminal types the command without Enter; multi-line text is sent as a bracketed paste.
-- The chat box is a small owned window, not an overlay, because WPF cannot draw over the RDP control or
-  WebView2. It is not a layered window, so the account sign-in WebView2 renders inside it. Windows 11
-  rounds its corners when the provider's theme is rounded.
-- Account sign-in uses a separate WebView2 profile (`%LOCALAPPDATA%\RemoteMan\AiWeb`); signing out
-  deletes that provider's cookies.
+RemoteMan doesn't talk to any AI provider itself. It is a Model Context Protocol server that AI apps start.
+
+- **Transport**: the AI app runs `RemoteMan.exe --mcp` as a stdio server. That process (`McpBridge`, before
+  Velopack or WPF start) passes newline-delimited JSON-RPC through to the running RemoteMan over a named pipe,
+  `RemoteMan.Mcp.<domain>.<user>`, opened with `CurrentUserOnly`, so only the same Windows user can connect.
+  The app only listens while "Let AI apps use RemoteMan" is on (`McpSettings.Enabled`, off by default).
+- **RemoteMan closed**: the bridge answers initialize and tools/list itself (the tool list is fixed in
+  `McpCatalog`) and every tool call returns an error saying to start RemoteMan. It connects as soon as the
+  pipe is there; requests in flight when RemoteMan closes get an error instead of hanging.
+- **Protocol** (`Core/Mcp/McpServer`): initialize (2024-11-05 to 2025-11-25), ping, tools/list, tools/call,
+  empty resources and prompts lists. Tool failures come back as `isError` results the model can read.
+- **Tools** (`MainViewModel.Mcp`, run on the UI thread like a click): list_entries, get_entry, list_sessions,
+  read_terminal, type_in_terminal, open_connection, team_presence, zabbix_problems, config_backups,
+  get_device_config. Output is built field by field, never by serializing an `Entry`: no passwords, keys,
+  stored usernames or secret custom fields, and credential entries (and credential folders) aren't listed.
+- **Permissions** (AI box): terminals off / read / type (no Enter, bracketed paste) / run; opening entries;
+  Oxidized config text (off by default, configs hold hashes). Each tool call is listed in the box's activity.
+- **Terminal output**: SSH tabs keep a plain-text tail (`TerminalTail`, escape codes stripped), returned
+  inside `<terminal_output>` and marked as untrusted data in the tool description and server instructions.
+- **Client setup** (`McpClients`): writes `mcpServers.remoteman` into Claude Desktop's config (normal and
+  Microsoft Store installs, a `.bak` copy kept) and copies the `claude mcp add` command, VS Code `servers`
+  JSON or the generic `mcpServers` JSON. The installed exe path (`…\current\RemoteMan.exe`) stays the same
+  across updates.
 
 ## Shared sessions
 

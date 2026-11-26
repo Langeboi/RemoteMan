@@ -1,7 +1,6 @@
 using System.IO;
 using System.Security.Cryptography;
 using System.Text;
-using RemoteMan.Core.Ai;
 using RemoteMan.Core.Model;
 using RemoteMan.Core.Security;
 using RemoteMan.Core.Storage;
@@ -33,24 +32,6 @@ public static class Secrets
         Directory.CreateDirectory(AppPaths.Root);
         File.WriteAllText(VaultFile(dataSourceName), new DpapiSecretProtector().Protect(passphrase));
     }
-
-    /// <summary>AI provider keys: this PC and this Windows user only, never the shared database.</summary>
-    public static string? LoadAiKey(AiProviderKind kind)
-    {
-        var f = AiKeyFile(kind);
-        try { return File.Exists(f) ? new DpapiSecretProtector().Unprotect(File.ReadAllText(f)) : null; }
-        catch (CryptographicException) { return null; }
-    }
-
-    public static void SaveAiKey(AiProviderKind kind, string? key)
-    {
-        var f = AiKeyFile(kind);
-        if (string.IsNullOrEmpty(key)) { if (File.Exists(f)) File.Delete(f); return; }
-        Directory.CreateDirectory(AppPaths.Root);
-        File.WriteAllText(f, new DpapiSecretProtector().Protect(key));
-    }
-
-    private static string AiKeyFile(AiProviderKind kind) => Path.Combine(AppPaths.Root, $"ai-{kind.ToString().ToLowerInvariant()}.key");
 
     private static string VaultFile(string name) =>
         Path.Combine(AppPaths.Root, "vault-" + Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(name)))[..16] + ".key");
