@@ -54,6 +54,12 @@ public partial class RdpSessionView : UserControl
             if (_copy is not null) _copy.Enabled = vm.IsActive;
             if (!vm.IsActive) Notice.IsOpen = false;
         };
+        // Switching to this tab or back to the window: keyboard straight into the remote desktop. While it is still
+        // connecting the request waits, and Reveal / EndReconnect focus it once it shows.
+        vm.FocusRequested += () =>
+        {
+            if (_rdp is { IsHandleCreated: true } r && Host.Visibility == Visibility.Visible && vm.TakeFocus()) r.Focus();
+        };
 
         if (!vm.FullScreen) StartConnecting(vm);
 

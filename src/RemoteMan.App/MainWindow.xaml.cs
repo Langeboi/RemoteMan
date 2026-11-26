@@ -93,6 +93,7 @@ public partial class MainWindow : Window
         _vm.AskReopen = AskReopen;
         _vm.AskMove = AskMove;
         PreviewKeyDown += OnWindowKeyDown;
+        SetUpSessionFocus();
         SetUpChat();
         SetUpGatewayPill();
         StateChanged += (_, _) => MaxGlyph.Data = Geometry.Parse(WindowState == WindowState.Maximized
@@ -586,7 +587,16 @@ public partial class MainWindow : Window
 
     private void OnWindowKeyDown(object sender, KeyEventArgs e)
     {
-        if (e.Key == Key.A && Keyboard.Modifiers == (ModifierKeys.Control | ModifierKeys.Shift))
+        var mods = Keyboard.Modifiers;
+        var ctrlTab = e.Key == Key.Tab && (mods == ModifierKeys.Control || mods == (ModifierKeys.Control | ModifierKeys.Shift));
+        var ctrlPage = (e.Key == Key.PageDown || e.Key == Key.PageUp) && mods == ModifierKeys.Control;
+        if (ctrlTab || ctrlPage)
+        {
+            // Ctrl+Tab / Ctrl+Shift+Tab (and Ctrl+PgDn / Ctrl+PgUp): next or previous tab in the focused pane.
+            var back = e.Key == Key.PageUp || (ctrlTab && mods.HasFlag(ModifierKeys.Shift));
+            if (CycleTab(back ? -1 : 1)) e.Handled = true;
+        }
+        else if (e.Key == Key.A && Keyboard.Modifiers == (ModifierKeys.Control | ModifierKeys.Shift))
         {
             ToggleAi();
             e.Handled = true;
@@ -610,10 +620,63 @@ public partial class MainWindow : Window
         }
     }
 
+    // ---------------- keyboard into the session ----------------
+
+    /// <summary>Switching tabs (click or Ctrl+Tab) or coming back to the window puts the keyboard straight into the
+    /// session (terminal, remote desktop, page), so typing goes there without a click first.</summary>
+    private void SetUpSessionFocus()
+    {
+        // Mouse up, not down: the tab takes focus itself while the button is down, so we move it on afterwards.
+        // handledEventsToo: the ListBoxItem marks the click handled.
+        AddHandler(PreviewMouseLeftButtonUpEvent, new MouseButtonEventHandler(OnTabMouseUp), true);
+        Activated += (_, _) => { if (_sessionHadFocus) FocusActiveSession(); };
+        Deactivated += (_, _) => _sessionHadFocus = SessionHasFocus();
+    }
+
+    private bool _sessionHadFocus;
+
+    private void OnTabMouseUp(object sender, MouseButtonEventArgs e)
+    {
+        if (e.OriginalSource is not DependencyObject d) return;
+        ListBoxItem? tab = null;
+        for (var p = d; p is not null; p = p is Visual or System.Windows.Media.Media3D.Visual3D ? VisualTreeHelper.GetParent(p) : LogicalTreeHelper.GetParent(p))
+        {
+            if (p is System.Windows.Controls.Primitives.ButtonBase) return; // the close button
+            if (p is ListBoxItem { DataContext: SessionViewModel } item) { tab = item; break; }
+        }
+        if (tab?.DataContext is SessionViewModel s && s == _vm.ActiveSession) FocusActiveSession();
+    }
+
+    /// <summary>Next (+1) or previous (-1) tab in the focused pane, wrapping around. False with nothing to switch to.</summary>
+    private bool CycleTab(int step)
+    {
+        var list = _vm.IsSplit && _vm.FocusedPane == 1 ? _vm.RightSessions : _vm.LeftSessions;
+        if (list.Count < 2) return false;
+        var i = _vm.ActiveSession is { } a ? list.IndexOf(a) : -1;
+        _vm.ActiveSession = list[((i < 0 ? 0 : i + step) % list.Count + list.Count) % list.Count];
+        FocusActiveSession();
+        return true;
+    }
+
+    /// <summary>After layout, so a tab that was hidden a moment ago is on screen and can take the keyboard.</summary>
+    private void FocusActiveSession() =>
+        Dispatcher.BeginInvoke(() => { if (IsActive && _vm.ActiveSession is { IsConnection: true } s) s.RequestFocus(); },
+            System.Windows.Threading.DispatcherPriority.Input);
+
+    /// <summary>The keyboard is in a session, on a session's tab, or nowhere in particular (an embedded terminal or
+    /// remote desktop can hold the Win32 focus without WPF knowing), rather than in the tree, search or chat.</summary>
+    private bool SessionHasFocus() => Keyboard.FocusedElement switch
+    {
+        null or Window => true,
+        ListBoxItem { DataContext: SessionViewModel } => true,
+        DependencyObject d => IsInSession(d),
+        _ => false,
+    };
+
     private static bool IsInSession(DependencyObject d)
     {
         for (var p = d; p is not null; p = p is Visual or System.Windows.Media.Media3D.Visual3D ? VisualTreeHelper.GetParent(p) : LogicalTreeHelper.GetParent(p))
-            if (p is SshSessionView or WebSessionView or RdpSessionView) return true;
+            if (p is SshSessionView or WebSessionView or RdpSessionView or SharedSessionView) return true;
         return false;
     }
 

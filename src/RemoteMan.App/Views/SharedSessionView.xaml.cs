@@ -40,6 +40,12 @@ public partial class SharedSessionView : UserControl
         var c = vm.Client;
         c.StateChanged += s => Dispatcher.BeginInvoke(() => Apply(s));
         vm.Disposed += (_, _) => Close();
+        vm.FocusRequested += () =>
+        {
+            if (vm.IsRdp || !_ready || !vm.TakeFocus()) return;
+            SessionFocus.Into(Web);
+            Post(new { t = "focus" });
+        };
         if (vm.IsRdp) StartRdp(c);
         else await StartTerminalAsync(c);
         Apply(c.State);
