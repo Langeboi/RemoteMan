@@ -83,6 +83,10 @@ public sealed partial class ChatViewModel
 
     /// <summary>The GIF button shows when files can be sent and a GIPHY key is set (More, Chat GIFs).</summary>
     public bool CanUseGiphy => CanSendFiles && _main.Integrations?.GiphyApiKey is { Length: > 0 };
+    /// <summary>Without a key the GIF button still shows; clicking it opens the GIPHY setup.</summary>
+    public string GifButtonTip => CanUseGiphy ? "Search GIPHY for a GIF" : "GIF search: set up GIPHY first (needs a free API key)";
+    /// <summary>The window opens More, Chat GIFs (GIPHY).</summary>
+    public event EventHandler? GiphySetupRequested;
     public System.Collections.ObjectModel.ObservableCollection<GifPickItem> GifResults { get; } = new();
     [ObservableProperty] private bool _isGifPickerOpen;
     [ObservableProperty] private string _gifQuery = "";
@@ -92,13 +96,14 @@ public sealed partial class ChatViewModel
     /// <summary>The window focuses the GIF search box when the picker opens.</summary>
     public event EventHandler? FocusGifSearch;
 
-    public void GiphyChanged() { OnPropertyChanged(nameof(CanUseGiphy)); GifResults.Clear(); }
+    public void GiphyChanged() { OnPropertyChanged(nameof(CanUseGiphy)); OnPropertyChanged(nameof(GifButtonTip)); GifResults.Clear(); }
 
     private GiphyClient? Giphy => _main.Integrations is { GiphyApiKey: { Length: > 0 } key } ints ? new GiphyClient(key, ints.GiphyRating) : null;
 
     [RelayCommand]
     private void ToggleGifPicker()
     {
+        if (!CanUseGiphy && CanSendFiles) { IsGifPickerOpen = false; GiphySetupRequested?.Invoke(this, EventArgs.Empty); return; }
         IsGifPickerOpen = !IsGifPickerOpen && CanUseGiphy && Current is not null;
         if (!IsGifPickerOpen) return;
         IsPickerOpen = false;

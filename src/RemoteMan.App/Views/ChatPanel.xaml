@@ -361,8 +361,8 @@
                                       StrokeLineJoin="Round" StrokeStartLineCap="Round" StrokeEndLineCap="Round" />
                             </Button>
                             <Button x:Name="GifButton" Grid.Column="1" Style="{StaticResource FlatButton}" Height="28" Padding="5,0" VerticalAlignment="Bottom" Command="{Binding ToggleGifPickerCommand}"
-                                    ToolTip="Search GIPHY for a GIF" AutomationProperties.Name="Send a GIF"
-                                    Visibility="{Binding CanUseGiphy, Converter={StaticResource BoolVis}}">
+                                    ToolTip="{Binding GifButtonTip}" AutomationProperties.Name="Send a GIF"
+                                    Visibility="{Binding CanSendFiles, Converter={StaticResource BoolVis}}">
                                 <Border BorderBrush="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" BorderThickness="1.2" CornerRadius="3" Padding="3,0,3,1">
                                     <TextBlock Text="GIF" FontSize="9" FontWeight="Bold" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
                                 </Border>
