@@ -373,7 +373,7 @@
         <!-- Update banner (hidden unless there is an update to show) -->
         <updates:UpdateBanner DockPanel.Dock="Top" />
 
-        <!-- Status bar: quick connect, messages, active session, the Q, users online, version -->
+        <!-- Status bar: quick connect, messages, active session, the database and Zabbix icons, users online, version -->
         <Border DockPanel.Dock="Bottom" Height="26" Background="{StaticResource Depth.Header}" BorderBrush="{StaticResource Border}" BorderThickness="0,1,0,0">
             <DockPanel>
                 <Border DockPanel.Dock="Left" BorderBrush="{StaticResource Border}" BorderThickness="0,0,1,0" Padding="10,0">
@@ -399,23 +399,20 @@
                 <TextBlock DockPanel.Dock="Right" Text="{Binding AppVersion}" Style="{StaticResource MutedText}" FontSize="11" VerticalAlignment="Center" Margin="10,0" />
                 <TextBlock DockPanel.Dock="Right" Text="{Binding OnlineText}" Style="{StaticResource MutedText}" FontSize="11" VerticalAlignment="Center" Margin="10,0,0,0" />
 
-                <!-- Zabbix: a small "Z" like the Q. Green when connected, red when unreachable, grey while connecting. Click for details. -->
+                <!-- Zabbix: a small radar, tinted green when connected, red when unreachable, grey while connecting. Click for details. -->
                 <Grid DockPanel.Dock="Right" Visibility="{Binding ZabbixActive, Converter={StaticResource BoolVis}}">
                     <ToggleButton x:Name="ZButton" Style="{StaticResource BarToggle}" Width="30" Height="24" ToolTip="{Binding ZabbixStatusText}" AutomationProperties.Name="{Binding ZabbixStatusText}">
-                        <Grid Width="16" Height="16">
-                            <Ellipse>
-                                <Ellipse.Style>
-                                    <Style TargetType="Ellipse">
-                                        <Setter Property="Fill" Value="{StaticResource Faint}" />
-                                        <Style.Triggers>
-                                            <DataTrigger Binding="{Binding ZabbixConnState}" Value="ok"><Setter Property="Fill" Value="{StaticResource Ok}" /></DataTrigger>
-                                            <DataTrigger Binding="{Binding ZabbixConnState}" Value="bad"><Setter Property="Fill" Value="{StaticResource Bad}" /></DataTrigger>
-                                        </Style.Triggers>
-                                    </Style>
-                                </Ellipse.Style>
-                            </Ellipse>
-                            <TextBlock Text="Z" FontSize="10" FontWeight="Bold" Foreground="{StaticResource Bg}" HorizontalAlignment="Center" VerticalAlignment="Center" />
-                        </Grid>
+                        <Path Data="{StaticResource Icon.Bar.zabbix}">
+                            <Path.Style>
+                                <Style TargetType="Path" BasedOn="{StaticResource BarGlyph}">
+                                    <Setter Property="Stroke" Value="{StaticResource Faint}" />
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding ZabbixConnState}" Value="ok"><Setter Property="Stroke" Value="{StaticResource Ok}" /></DataTrigger>
+                                        <DataTrigger Binding="{Binding ZabbixConnState}" Value="bad"><Setter Property="Stroke" Value="{StaticResource Bad}" /></DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Path.Style>
+                        </Path>
                     </ToggleButton>
                     <Popup AllowsTransparency="True" IsOpen="{Binding IsChecked, ElementName=ZButton}" StaysOpen="False" Placement="Top" PlacementTarget="{Binding ElementName=ZButton}"
                            HorizontalOffset="-240" VerticalOffset="-4" Closed="OnZPopupClosed">
@@ -436,22 +433,19 @@
                     </Popup>
                 </Grid>
 
-                <!-- Shared data source: a small "Q", green when connected, red when offline. Hidden for local. Click for details. -->
+                <!-- Shared data source: stacked layers, tinted green when connected, red when offline. Hidden for local. Click for details. -->
                 <Grid DockPanel.Dock="Right" Visibility="{Binding IsSharedSource, Converter={StaticResource BoolVis}}">
                     <ToggleButton x:Name="QButton" Style="{StaticResource BarToggle}" Width="30" Height="24" ToolTip="{Binding DataSourceText}" AutomationProperties.Name="{Binding DataSourceText}">
-                        <Grid Width="16" Height="16">
-                            <Ellipse>
-                                <Ellipse.Style>
-                                    <Style TargetType="Ellipse">
-                                        <Setter Property="Fill" Value="{StaticResource Bad}" />
-                                        <Style.Triggers>
-                                            <DataTrigger Binding="{Binding DataSourceOk}" Value="True"><Setter Property="Fill" Value="{StaticResource Ok}" /></DataTrigger>
-                                        </Style.Triggers>
-                                    </Style>
-                                </Ellipse.Style>
-                            </Ellipse>
-                            <TextBlock Text="Q" FontSize="10" FontWeight="Bold" Foreground="{StaticResource Bg}" HorizontalAlignment="Center" VerticalAlignment="Center" />
-                        </Grid>
+                        <Path Data="{StaticResource Icon.Bar.db}">
+                            <Path.Style>
+                                <Style TargetType="Path" BasedOn="{StaticResource BarGlyph}">
+                                    <Setter Property="Stroke" Value="{StaticResource Bad}" />
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding DataSourceOk}" Value="True"><Setter Property="Stroke" Value="{StaticResource Ok}" /></DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Path.Style>
+                        </Path>
                     </ToggleButton>
                     <Popup AllowsTransparency="True" IsOpen="{Binding IsChecked, ElementName=QButton}" StaysOpen="False" Placement="Top" PlacementTarget="{Binding ElementName=QButton}"
                            HorizontalOffset="-240" VerticalOffset="-4" Closed="OnQPopupClosed">
