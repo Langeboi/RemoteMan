@@ -33,6 +33,12 @@ public static class GatewayProtocol
     /// <summary>RemoteMan → relay POST: redeem an invite link's code for a device token (no auth; the code is the secret).</summary>
     public const string EnrollPath = "/v1/enroll";
     public const int Version = 1;
+    /// <summary>
+    /// WebSocket pings on every gateway connection: often enough that CG-NAT and home routers keep the path open,
+    /// and a dead relay or connector is noticed within about half a minute instead of a minute.
+    /// </summary>
+    public static readonly TimeSpan KeepAliveInterval = TimeSpan.FromSeconds(15);
+    public static readonly TimeSpan KeepAliveTimeout = TimeSpan.FromSeconds(15);
 
     public static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web)
     {
@@ -155,13 +161,15 @@ internal static class Pump
         });
         var down = Task.Run(async () =>
         {
+            var buf = new byte[SecureChannel.MaxPlaintext];
             try
             {
-                while (await channel.ReceiveAsync(cts.Token) is { } data)
+                int n;
+                while ((n = await channel.ReceiveAsync(buf, cts.Token)) >= 0)
                 {
-                    if (data.Length == 0) continue;
-                    await tcp.WriteAsync(data, cts.Token);
-                    if (count) GatewayActivity.Received(data.Length);
+                    if (n == 0) continue;
+                    await tcp.WriteAsync(buf.AsMemory(0, n), cts.Token);
+                    if (count) GatewayActivity.Received(n);
                 }
             }
             catch (Exception ex) when (ex is IOException or SocketException or OperationCanceledException or ObjectDisposedException

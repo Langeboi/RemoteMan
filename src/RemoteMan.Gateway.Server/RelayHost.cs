@@ -30,7 +30,7 @@ public static class RelayHost
             builder.WebHost.ConfigureKestrel(k => k.ConfigureHttpsDefaults(h => h.ServerCertificate = cert));
         }
         var app = builder.Build();
-        app.UseWebSockets(new WebSocketOptions { KeepAliveInterval = TimeSpan.FromSeconds(20), KeepAliveTimeout = TimeSpan.FromSeconds(30) });
+        app.UseWebSockets(new WebSocketOptions { KeepAliveInterval = GatewayProtocol.KeepAliveInterval, KeepAliveTimeout = GatewayProtocol.KeepAliveTimeout });
 
         console = new AdminConsole(relay, admin ?? new AdminOptions { PublicUrl = publicUrl });
         // The root says nothing about what this is or where the console lives: a bare 404 like any unknown path.
