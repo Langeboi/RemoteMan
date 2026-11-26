@@ -22,12 +22,12 @@ public static class CredentialFolders
         return any;
     }
 
-    /// <summary>Tree order inside one folder: folders, then the credentials folder, then connections, then loose credentials.</summary>
+    /// <summary>Tree order inside one folder: folders, then connections, then loose credentials, and the credentials folder at the very bottom.</summary>
     public static int TreeRank(Entry e, Func<Guid, IEnumerable<Entry>> childrenOf) => e.Kind switch
     {
-        EntryKind.Folder => IsCredentialsFolder(e, childrenOf(e.Id)) ? 1 : 0,
-        EntryKind.Credential => 3,
-        _ => 2,
+        EntryKind.Folder => IsCredentialsFolder(e, childrenOf(e.Id)) ? 3 : 0,
+        EntryKind.Credential => 2,
+        _ => 1,
     };
 
     /// <summary>

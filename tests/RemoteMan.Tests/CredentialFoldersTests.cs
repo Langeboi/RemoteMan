@@ -18,7 +18,7 @@ public class CredentialFoldersTests
     }
 
     [Fact]
-    public void CredentialsFolderSortsAfterOtherFoldersAndLooseCredentialsAfterConnections()
+    public void CredentialsFolderSortsBelowEverythingElseInItsFolder()
     {
         var intern = Folder("Intern");
         var all = new List<Entry>
@@ -27,7 +27,7 @@ public class CredentialFoldersTests
             Folder("Credentials", intern.Id), Folder("Network", intern.Id), Folder("Zabbix", intern.Id),
             Ssh("box", intern.Id), Cred("admin", intern.Id),
         };
-        Assert.Equal(new[] { "Network", "Zabbix", "Credentials", "box", "admin" }, Sorted(all, intern.Id));
+        Assert.Equal(new[] { "Network", "Zabbix", "box", "admin", "Credentials" }, Sorted(all, intern.Id));
     }
 
     [Fact]
