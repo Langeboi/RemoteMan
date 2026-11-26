@@ -300,9 +300,9 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
                 foreach (var e in byParent[parent].OrderBy(e => CredentialFolders.TreeRank(e, id => byParent[id])).ThenBy(e => e.Name, StringComparer.OrdinalIgnoreCase))
                 {
                     // Folders start open, except Credentials folders, which start closed until you open them.
-                    var open = _expandState.TryGetValue(e.Id, out var was) ? was
-                        : !(e.Kind == EntryKind.Folder && CredentialFolders.IsCredentialsFolder(e, byParent[e.Id]));
-                    var n = new EntryNode(e, depth) { IsExpanded = open };
+                    var creds = e.Kind == EntryKind.Folder && CredentialFolders.IsCredentialsFolder(e, byParent[e.Id]);
+                    var open = _expandState.TryGetValue(e.Id, out var was) ? was : !creds;
+                    var n = new EntryNode(e, depth) { IsExpanded = open, IsCredentialsFolder = creds };
                     _nodes[e.Id] = n;
                     into.Add(n);
                     if (e.Kind == EntryKind.Folder) Add(e.Id, n.Children, depth + 1);

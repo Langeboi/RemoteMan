@@ -9,6 +9,8 @@ public static class FolderIcons
     public sealed record Swatch(string Name, string Hex, Brush Brush);
 
     public const string DefaultColor = "#D6B85A";
+    /// <summary>Soft orange of the keys on a Credentials folder.</summary>
+    public const string CredentialsColor = "#E0904F";
 
     public static readonly IReadOnlyList<Glyph16> Glyphs =
     [
@@ -24,6 +26,9 @@ public static class FolderIcons
         G("globe", "Internet / web", "M14.5,8 A6.5,6.5 0 1 1 1.5,8 a6.5,6.5 0 0 1 13,0 z M1.5,8 h13 M8,1.5 c-3,3 -3,10 0,13 M8,1.5 c3,3 3,10 0,13"),
         G("shield", "Firewalls", "M8,1.5 l5.5,2 v4.2 c0,3.3 -2.3,5.8 -5.5,6.8 c-3.2,-1 -5.5,-3.5 -5.5,-6.8 V3.5 z M5.5,8 l2,2 l3,-3.5"),
         G("home", "Home", "M1.5,7.5 L8,2 l6.5,5.5 M3.5,6 v8.5 h9 V6 M6.5,14.5 v-4 h3 v4"),
+        // Two crossed keys: the default for Credentials folders.
+        G("keys", "Credentials", "M7,4.5 a2.5,2.5 0 1 1 -5,0 a2.5,2.5 0 1 1 5,0 z M6.3,6.3 L14,14 M11.6,11.6 l1.5,-1.5 M13.2,13.2 l1.3,-1.3 " +
+                                  "M14,4.5 a2.5,2.5 0 1 1 -5,0 a2.5,2.5 0 1 1 5,0 z M9.7,6.3 L2,14 M4.4,11.6 l-1.5,-1.5 M2.8,13.2 l-1.3,-1.3"),
     ];
 
     public static readonly IReadOnlyList<Swatch> Colors =
