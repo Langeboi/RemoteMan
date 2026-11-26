@@ -17,6 +17,18 @@ public sealed class GatewayService
 {
     public static GatewayService Instance { get; } = new();
 
+    private GatewayService()
+    {
+        // Wi-Fi changed, a cable went in or the VPN came up: check the relay now, and let every connection try
+        // the direct path again instead of trusting what was true on the old network.
+        System.Net.NetworkInformation.NetworkChange.NetworkAddressChanged += (_, _) =>
+        {
+            RefreshSoon();
+            _paths.Clear();
+            foreach (var f in _forwarders.Values) f.ForgetPath();
+        };
+    }
+
     private readonly ConcurrentDictionary<string, LocalForwarder> _forwarders = new();
     private GatewayClient? _client;
 
@@ -181,7 +193,7 @@ public sealed class GatewayService
                 {
                     Latency = null; State = GatewayState.Down;
                     Error = ex is RelayRefusedException or GatewayException ? ex.Message : $"Can't reach {client.Relay.Host}: {ex.GetBaseException().Message}";
-                    _nextPing = DateTime.UtcNow.AddSeconds(5);
+                    _nextPing = DateTime.UtcNow.AddSeconds(3);
                 }
             }
             long i = GatewayActivity.BytesIn, o = GatewayActivity.BytesOut;

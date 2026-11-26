@@ -103,7 +103,9 @@ public sealed class Connector
             finally { Connected = false; }
             if (DateTime.UtcNow - started > TimeSpan.FromMinutes(1)) delay = TimeSpan.FromSeconds(1);
             try { await Task.Delay(delay, ct); } catch (OperationCanceledException) { break; }
-            delay = TimeSpan.FromSeconds(Math.Min(30, delay.TotalSeconds * 2));
+            // Back off to at most 5 s while the relay is unreachable (it was 30 s): a site comes back within
+            // seconds of the relay or the line recovering. Refusals above wait a minute; retrying won't fix those.
+            if (delay < TimeSpan.FromSeconds(5)) delay = TimeSpan.FromSeconds(Math.Min(5, delay.TotalSeconds * 2));
         }
     }
 
@@ -112,10 +114,10 @@ public sealed class Connector
         var ws = new ClientWebSocket();
         ws.Options.SetRequestHeader("Authorization", "Bearer " + _o.SiteToken);
         ws.Options.SetRequestHeader(GatewayProtocol.VersionHeader, GatewayProtocol.Version.ToString());
-        // CG-NAT and home routers forget idle mappings quickly; a ping every 20 s keeps the path open and
-        // notices a dead relay within the timeout.
-        ws.Options.KeepAliveInterval = TimeSpan.FromSeconds(20);
-        ws.Options.KeepAliveTimeout = TimeSpan.FromSeconds(30);
+        // CG-NAT and home routers forget idle mappings quickly; regular pings keep the path open and notice a
+        // dead relay within the timeout.
+        ws.Options.KeepAliveInterval = GatewayProtocol.KeepAliveInterval;
+        ws.Options.KeepAliveTimeout = GatewayProtocol.KeepAliveTimeout;
         ws.Options.CollectHttpResponseDetails = true;
         return ws;
     }

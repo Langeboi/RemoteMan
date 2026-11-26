@@ -208,7 +208,7 @@ public sealed class Relay
 
     private async Task CopyAsync(WebSocket from, WebSocket to, CancellationTokenSource cts, TunnelInfo info)
     {
-        var buf = new byte[64 * 1024];
+        var buf = System.Buffers.ArrayPool<byte>.Shared.Rent(64 * 1024);
         try
         {
             while (true)
@@ -230,6 +230,7 @@ public sealed class Relay
             // One side broke off without a close: end the other direction too.
             cts.Cancel();
         }
+        finally { System.Buffers.ArrayPool<byte>.Shared.Return(buf); }
     }
 
     public IEnumerable<SiteInfo> SitesFor(DeviceRecord device) =>

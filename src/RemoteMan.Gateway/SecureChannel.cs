@@ -31,6 +31,9 @@ public sealed class SecureChannel
     private ulong _sendCounter, _recvCounter;
     private readonly SemaphoreSlim _sendLock = new(1, 1);
     private readonly byte[] _recvBuffer = new byte[MaxPlaintext + TagLen + 64];
+    // Reused for every frame sent (under the send lock): no allocation per frame on big transfers.
+    private readonly byte[] _sendFrame = new byte[MaxPlaintext + TagLen];
+    private readonly byte[] _sendNonce = new byte[12];
 
     private SecureChannel(WebSocket ws, byte[] sendKey, byte[] recvKey)
     {
@@ -105,16 +108,15 @@ public sealed class SecureChannel
 
     public async Task SendAsync(ReadOnlyMemory<byte> plaintext, CancellationToken ct)
     {
-        var nonce = new byte[12];
         for (var off = 0; off < plaintext.Length || plaintext.Length == 0; off += MaxPlaintext)
         {
             var chunk = plaintext.Slice(off, Math.Min(MaxPlaintext, plaintext.Length - off));
-            var frame = new byte[chunk.Length + TagLen];
             await _sendLock.WaitAsync(ct);
             try
             {
-                BinaryPrimitives.WriteUInt64BigEndian(nonce.AsSpan(4), _sendCounter++);
-                _send.Encrypt(nonce, chunk.Span, frame.AsSpan(0, chunk.Length), frame.AsSpan(chunk.Length));
+                var frame = _sendFrame.AsMemory(0, chunk.Length + TagLen);
+                BinaryPrimitives.WriteUInt64BigEndian(_sendNonce.AsSpan(4), _sendCounter++);
+                _send.Encrypt(_sendNonce, chunk.Span, frame.Span[..chunk.Length], frame.Span[chunk.Length..]);
                 await _ws.SendAsync(frame, WebSocketMessageType.Binary, true, ct);
             }
             finally { _sendLock.Release(); }
@@ -125,22 +127,47 @@ public sealed class SecureChannel
     /// <summary>The next frame's plaintext, or null when the other side closed.</summary>
     public async Task<byte[]?> ReceiveAsync(CancellationToken ct)
     {
+        var n = await ReceiveSealedAsync(ct);
+        if (n < 0) return null;
+        var plain = new byte[n - TagLen];
+        Open(n, plain);
+        return plain;
+    }
+
+    /// <summary>
+    /// The next frame's plaintext decrypted into <paramref name="into"/> (at least <see cref="MaxPlaintext"/> bytes),
+    /// without allocating. Returns its length, or -1 when the other side closed.
+    /// </summary>
+    public async Task<int> ReceiveAsync(Memory<byte> into, CancellationToken ct)
+    {
+        var n = await ReceiveSealedAsync(ct);
+        if (n < 0) return -1;
+        if (into.Length < n - TagLen) throw new ArgumentException("Buffer too small.", nameof(into));
+        Open(n, into.Span[..(n - TagLen)]);
+        return n - TagLen;
+    }
+
+    private async Task<int> ReceiveSealedAsync(CancellationToken ct)
+    {
         var n = 0;
         while (true)
         {
             if (n == _recvBuffer.Length) throw new GatewayException("Frame too large.");
             var r = await _ws.ReceiveAsync(_recvBuffer.AsMemory(n), ct);
-            if (r.MessageType == WebSocketMessageType.Close) return null;
+            if (r.MessageType == WebSocketMessageType.Close) return -1;
             n += r.Count;
             if (r.EndOfMessage) break;
         }
         if (n < TagLen) throw new GatewayException("Frame too short.");
-        var plain = new byte[n - TagLen];
+        return n;
+    }
+
+    private void Open(int n, Span<byte> plain)
+    {
         Span<byte> nonce = stackalloc byte[12];
         BinaryPrimitives.WriteUInt64BigEndian(nonce[4..], _recvCounter++);
         try { _recv.Decrypt(nonce, _recvBuffer.AsSpan(0, n - TagLen), _recvBuffer.AsSpan(n - TagLen, TagLen), plain); }
         catch (CryptographicException) { throw new GatewayException("A frame failed its integrity check; the connection was tampered with."); }
-        return plain;
     }
 
     public async Task CloseAsync()

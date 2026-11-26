@@ -70,8 +70,8 @@ public sealed class GatewayClient : IDisposable
         {
             ws.Options.SetRequestHeader("Authorization", "Bearer " + _token);
             ws.Options.SetRequestHeader(GatewayProtocol.VersionHeader, GatewayProtocol.Version.ToString());
-            ws.Options.KeepAliveInterval = TimeSpan.FromSeconds(20);
-            ws.Options.KeepAliveTimeout = TimeSpan.FromSeconds(30);
+            ws.Options.KeepAliveInterval = GatewayProtocol.KeepAliveInterval;
+            ws.Options.KeepAliveTimeout = GatewayProtocol.KeepAliveTimeout;
             using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
             cts.CancelAfter(TimeSpan.FromSeconds(20));
             try
@@ -337,6 +337,9 @@ public sealed class LocalForwarder : IDisposable
             finally { _live.TryRemove(live, out _); }
         }
     }
+
+    /// <summary>The network changed: the next connection tries the direct path again (when automatic).</summary>
+    public void ForgetPath() => _path = null;
 
     private async Task WatchForSiteAsync()
     {
