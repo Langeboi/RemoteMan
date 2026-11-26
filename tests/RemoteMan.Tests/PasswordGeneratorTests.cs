@@ -72,7 +72,7 @@ public class PasswordGeneratorTests
     [Fact]
     public void Pattern_keeps_literals_and_fills_classes()
     {
-        var pw = PasswordGenerator.Generate(new PasswordOptions { Mode = PasswordMode.Pattern, Pattern = @"Lab-\A9999-hh" }).Value;
+        var pw = PasswordGenerator.Generate(new PasswordOptions { Mode = PasswordMode.Pattern, Pattern = @"L\ab-\A9999-hh" }).Value;
         Assert.Matches(@"^Lab-A[2-9]{4}-[0-9a-f]{2}$", pw);
     }
 
