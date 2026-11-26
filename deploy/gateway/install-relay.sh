@@ -105,7 +105,7 @@ say "Waiting for the relay to start..."
 i=0
 LINK=""
 while [ $i -lt 30 ]; do
-  LINK=$(docker logs remoteman-relay 2>&1 | grep -o 'https\?://[^ ]*/admin/#setup=[A-Za-z0-9_-]*' | tail -1 || true)
+  LINK=$(docker logs remoteman-relay 2>&1 | grep -o 'https\?://[^ ]*/rmrelay/#setup=[A-Za-z0-9_-]*' | tail -1 || true)
   if [ -n "$LINK" ] || docker logs remoteman-relay 2>&1 | grep -q 'Admin console: http'; then break; fi
   i=$((i + 1)); sleep 1
 done
@@ -116,7 +116,7 @@ if [ -n "$LINK" ]; then
   say ""
   say "  $LINK"
 else
-  say "Done. The admin console is at $URL/admin/"
+  say "Done. The admin console is at $URL/rmrelay/"
   say "No admin yet? docker exec remoteman-relay gateway admin setup   (prints a one-time link)"
 fi
 say ""

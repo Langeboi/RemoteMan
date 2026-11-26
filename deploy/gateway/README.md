@@ -31,7 +31,7 @@ curl -fsSL https://raw.githubusercontent.com/langeboi/remoteman/test/all-feature
 
 It asks for the relay's public name and whether it gets its own certificate (Caddy) or sits behind your proxy,
 installs Docker if needed, starts the relay and prints a one-time link. Open it, create your admin, and do the rest
-in the **admin console** at `https://<your relay>/admin/`:
+in the **admin console** at `https://<your relay>/rmrelay/`:
 
 1. **Add site** (one per network). It opens straight into **Add connector**: a one-line install
    (`curl … | sudo sh`, installs Docker on that machine if missing), a `docker run` line, or a `compose.yaml`, each
@@ -45,7 +45,7 @@ command too.
 
 ## Admin console
 
-`https://<your relay>/admin/`, served by the relay itself (same port, nothing extra to run or proxy).
+`https://<your relay>/rmrelay/`, served by the relay itself (same port, nothing extra to run or proxy).
 
 - **Overview**: sites and connectors online, tunnels open now (who, where, how long, how much), traffic, recent
   activity, and a *Get started* list until the first site, connector and device exist.

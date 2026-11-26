@@ -68,6 +68,12 @@ public sealed class AdminConsole
     public ActivityLog Activity { get; }
     private RelayStore Store => _relay.Store;
 
+    /// <summary>
+    /// Where the console lives. Not /admin: a generic path is the first thing scanners try. Everything else on the
+    /// relay (the root page, /admin, the console when it's off) is a bare 404 that names nothing.
+    /// </summary>
+    public const string ConsolePath = "/rmrelay";
+
     public void Map(WebApplication app)
     {
         // Invite links work even with the console off: they only need the code.
@@ -75,18 +81,17 @@ public sealed class AdminConsole
         app.MapPost(GatewayProtocol.EnrollPath + "/peek", Task<IResult> (HttpContext c) => PeekInviteAsync(c));
         app.MapPost(GatewayProtocol.EnrollPath, Task<IResult> (HttpContext c) => RedeemInviteAsync(c));
         app.MapGet("/v1/install/{code}", (HttpContext c, string code) => TakeInstall(c, code));
-        app.MapGet("/admin/assets/{file}", (HttpContext c, string file) => Page(c, file));
+        app.MapGet(ConsolePath + "/assets/{file}", (HttpContext c, string file) => Page(c, file));
 
         if (!_o.Enabled)
         {
-            app.MapGet("/admin/{**rest}", () => Results.Text("The admin console is turned off on this relay (ADMIN=off).\n", statusCode: 404));
-            return;
+            return;   // nothing under the console path: a plain 404
         }
 
-        // Routing treats /admin and /admin/ alike; the page's relative links need the slash.
-        app.MapGet("/admin", (HttpContext c) => c.Request.Path.Value!.EndsWith('/') ? Page(c, "index.html") : Results.Redirect(c.Request.PathBase + "/admin/"));
+        // Routing treats /rmrelay and /rmrelay/ alike; the page's relative links need the slash.
+        app.MapGet(ConsolePath, (HttpContext c) => c.Request.Path.Value!.EndsWith('/') ? Page(c, "index.html") : Results.Redirect(c.Request.PathBase + ConsolePath + "/"));
 
-        var api = app.MapGroup("/admin/api");
+        var api = app.MapGroup(ConsolePath + "/api");
         api.MapGet("/state", State);
         api.MapPost("/setup", Task<IResult> (HttpContext c) => SetupAsync(c));
         api.MapPost("/login", Task<IResult> (HttpContext c) => LoginAsync(c));
@@ -352,7 +357,7 @@ public sealed class AdminConsole
         };
         c.Response.Cookies.Append(Cookie, token, new CookieOptions
         {
-            HttpOnly = true, SameSite = SameSiteMode.Strict, Secure = IsHttps(c), Path = c.Request.PathBase + "/admin", MaxAge = MaxAge,
+            HttpOnly = true, SameSite = SameSiteMode.Strict, Secure = IsHttps(c), Path = c.Request.PathBase + ConsolePath, MaxAge = MaxAge,
         });
         // Drop sessions that have run out, now and then.
         foreach (var x in _sessions.Values.Where(x => !Fresh(x))) _sessions.TryRemove(x.Id, out _);
@@ -365,7 +370,7 @@ public sealed class AdminConsole
         if (Store.Admin(s.User) is { } a) StartSession(c, a);
     }
 
-    private void ClearCookie(HttpContext c) => c.Response.Cookies.Delete(Cookie, new CookieOptions { Path = c.Request.PathBase + "/admin" });
+    private void ClearCookie(HttpContext c) => c.Response.Cookies.Delete(Cookie, new CookieOptions { Path = c.Request.PathBase + ConsolePath });
 
     private Session? Current(HttpContext c)
     {

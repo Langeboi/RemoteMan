@@ -58,7 +58,7 @@ public sealed class GatewayAdminTests : IAsyncLifetime
         return h;
     }
 
-    private async Task<HttpResponseMessage> Post(HttpClient h, string path, object body) => await h.PostAsJsonAsync("admin/api" + path, body);
+    private async Task<HttpResponseMessage> Post(HttpClient h, string path, object body) => await h.PostAsJsonAsync("rmrelay/api" + path, body);
 
     private async Task SignedInAsync()
     {
@@ -67,7 +67,7 @@ public sealed class GatewayAdminTests : IAsyncLifetime
         Assert.Equal(HttpStatusCode.OK, r.StatusCode);
     }
 
-    private async Task<JsonElement> SnapshotAsync() => await _http.GetFromJsonAsync<JsonElement>("admin/api/snapshot");
+    private async Task<JsonElement> SnapshotAsync() => await _http.GetFromJsonAsync<JsonElement>("rmrelay/api/snapshot");
 
     private static async Task WaitUntil(Func<bool> condition)
     {
@@ -93,24 +93,24 @@ public sealed class GatewayAdminTests : IAsyncLifetime
         Assert.Equal(HttpStatusCode.OK, (await Post(_http, "/setup", new { code, user = "lange", password = "correct-horse-1" })).StatusCode);
         Assert.Equal(HttpStatusCode.BadRequest, (await Post(NewClient(), "/setup", new { code, user = "mallory", password = "correct-horse-2" })).StatusCode);
         Assert.Single(_relay.Store.Admins);
-        Assert.Equal(HttpStatusCode.OK, (await _http.GetAsync("admin/api/snapshot")).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await _http.GetAsync("rmrelay/api/snapshot")).StatusCode);
     }
 
     [Fact]
     public async Task The_api_needs_a_session_and_changes_need_the_console_header()
     {
         await SignedInAsync();
-        Assert.Equal(HttpStatusCode.Unauthorized, (await NewClient().GetAsync("admin/api/snapshot")).StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await NewClient().GetAsync("rmrelay/api/snapshot")).StatusCode);
 
         // Same session cookie, but a plain form-style post without the console's header (what another site could send).
         var cookies = new CookieContainer();
         var login = new HttpClient(new HttpClientHandler { CookieContainer = cookies }) { BaseAddress = _uri };
         login.DefaultRequestHeaders.Add("X-RemoteMan-Admin", "1");
-        Assert.Equal(HttpStatusCode.OK, (await login.PostAsJsonAsync("admin/api/login", new { user = "lange", password = "correct-horse-1" })).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await login.PostAsJsonAsync("rmrelay/api/login", new { user = "lange", password = "correct-horse-1" })).StatusCode);
         var bare = new HttpClient(new HttpClientHandler { CookieContainer = cookies }) { BaseAddress = _uri };
-        Assert.Equal(HttpStatusCode.Forbidden, (await bare.PostAsJsonAsync("admin/api/sites", new { name = "evil" })).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await bare.PostAsJsonAsync("rmrelay/api/sites", new { name = "evil" })).StatusCode);
         Assert.Null(_relay.Store.Site("evil"));
-        Assert.Equal(HttpStatusCode.OK, (await bare.GetAsync("admin/api/snapshot")).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await bare.GetAsync("rmrelay/api/snapshot")).StatusCode);
     }
 
     [Fact]
@@ -127,7 +127,7 @@ public sealed class GatewayAdminTests : IAsyncLifetime
     public async Task Two_step_sign_in_asks_for_the_code()
     {
         await SignedInAsync();
-        var start = await (await _http.PostAsync("admin/api/me/totp/start", null)).Content.ReadFromJsonAsync<JsonElement>();
+        var start = await (await _http.PostAsync("rmrelay/api/me/totp/start", null)).Content.ReadFromJsonAsync<JsonElement>();
         var secret = start.GetProperty("secret").GetString()!;
         var now = Totp.Code(Totp.FromBase32(secret), DateTimeOffset.UtcNow.ToUnixTimeSeconds() / 30);
         Assert.Equal(HttpStatusCode.OK, (await Post(_http, "/me/totp/confirm", new { code = now })).StatusCode);
@@ -182,7 +182,7 @@ public sealed class GatewayAdminTests : IAsyncLifetime
             (await client.OpenAsync("school", [$"127.0.0.1:{port}"])).Dispose();
 
         // Resources set in the console reach the online connector and narrow what it opens.
-        Assert.Equal(HttpStatusCode.OK, (await _http.PutAsJsonAsync("admin/api/sites/school", new { resources = $"127.0.0.1:{port + 1}" })).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await _http.PutAsJsonAsync("rmrelay/api/sites/school", new { resources = $"127.0.0.1:{port + 1}" })).StatusCode);
         await WaitUntil(() => connector.SiteAllow is not null);
         using (var client = new GatewayClient(_uri, deviceToken))
         {
@@ -191,11 +191,11 @@ public sealed class GatewayAdminTests : IAsyncLifetime
         }
 
         // A bad rule is refused and changes nothing.
-        Assert.Equal(HttpStatusCode.BadRequest, (await _http.PutAsJsonAsync("admin/api/sites/school", new { resources = "nas.lan" })).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await _http.PutAsJsonAsync("rmrelay/api/sites/school", new { resources = "nas.lan" })).StatusCode);
 
         // Revoking the connector's token disconnects it.
         var id = setup.GetProperty("id").GetString();
-        Assert.Equal(HttpStatusCode.OK, (await _http.DeleteAsync($"admin/api/sites/school/tokens/{id}")).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await _http.DeleteAsync($"rmrelay/api/sites/school/tokens/{id}")).StatusCode);
         await WaitUntil(() => !_relay.IsOnline("school"));
     }
 
@@ -219,9 +219,9 @@ public sealed class GatewayAdminTests : IAsyncLifetime
         await Assert.ThrowsAsync<GatewayException>(() => GatewayEnrollment.RedeemAsync(link, "again"));
 
         // Paused devices are refused; turning them back on lets them in again.
-        Assert.Equal(HttpStatusCode.OK, (await _http.PutAsJsonAsync("admin/api/devices/ANNA-S-PC", new { owner = "Anna", sites = new[] { "school" }, disabled = true })).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await _http.PutAsJsonAsync("rmrelay/api/devices/ANNA-S-PC", new { owner = "Anna", sites = new[] { "school" }, disabled = true })).StatusCode);
         Assert.Null(_relay.Store.DeviceByToken(invite.Token));
-        await _http.PutAsJsonAsync("admin/api/devices/ANNA-S-PC", new { owner = "Anna", sites = new[] { "school" }, disabled = false });
+        await _http.PutAsJsonAsync("rmrelay/api/devices/ANNA-S-PC", new { owner = "Anna", sites = new[] { "school" }, disabled = false });
         Assert.NotNull(_relay.Store.DeviceByToken(invite.Token));
     }
 
@@ -254,11 +254,22 @@ public sealed class GatewayAdminTests : IAsyncLifetime
     [Fact]
     public async Task The_console_page_is_served_with_a_strict_policy()
     {
-        var r = await _http.GetAsync("admin/");
+        var r = await _http.GetAsync("rmrelay/");
         Assert.Equal(HttpStatusCode.OK, r.StatusCode);
         Assert.Contains("script-src 'self'", r.Headers.GetValues("Content-Security-Policy").Single());
-        Assert.Equal(HttpStatusCode.OK, (await _http.GetAsync("admin/assets/app.js")).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await _http.GetAsync("rmrelay/assets/app.js")).StatusCode);
         Assert.Equal(HttpStatusCode.OK, (await _http.GetAsync("enroll")).StatusCode);
-        Assert.Equal(HttpStatusCode.NotFound, (await _http.GetAsync("admin/assets/..%2Frelay.json")).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await _http.GetAsync("rmrelay/assets/..%2Frelay.json")).StatusCode);
+    }
+
+    [Fact]
+    public async Task The_root_and_old_console_path_name_nothing()
+    {
+        foreach (var path in new[] { "", "admin", "admin/", "admin/api/state" })
+        {
+            var r = await NewClient().GetAsync(path);
+            Assert.Equal(HttpStatusCode.NotFound, r.StatusCode);
+            Assert.Equal("", await r.Content.ReadAsStringAsync());
+        }
     }
 }

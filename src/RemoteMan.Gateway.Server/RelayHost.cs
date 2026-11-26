@@ -33,9 +33,8 @@ public static class RelayHost
         app.UseWebSockets(new WebSocketOptions { KeepAliveInterval = TimeSpan.FromSeconds(20), KeepAliveTimeout = TimeSpan.FromSeconds(30) });
 
         console = new AdminConsole(relay, admin ?? new AdminOptions { PublicUrl = publicUrl });
-        var consoleOn = admin?.Enabled ?? true;
-        app.MapGet("/", () => Results.Text($"RemoteMan gateway relay{(publicUrl is null ? "" : " for " + publicUrl)}. RemoteMan and connectors use /v1" +
-            (consoleOn ? "; the admin console is at /admin/.\n" : ".\n")));
+        // The root says nothing about what this is or where the console lives: a bare 404 like any unknown path.
+        app.MapGet("/", () => Results.NotFound());
         console.Map(app);
         app.MapGet("/healthz", () => Results.Text("ok\n"));
 
