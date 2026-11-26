@@ -1190,8 +1190,9 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
         if (_store is null || _protector is null || Selected?.Entry is not { } e) return;
         var secret = Secrets.Resolve(e, _store, _protector).TotpSecret;
         if (secret is null || !RemoteMan.Core.Security.Totp.IsValid(secret)) { Message = $"{e.Name} has no 2FA secret"; return; }
-        CredentialClipboard.CopyText(RemoteMan.Core.Security.Totp.Code(secret), secret: true);
-        Message = $"2FA code copied, valid for {RemoteMan.Core.Security.Totp.SecondsLeft(secret)} s";
+        // Near the end of a window this hands over the next code, so the paste isn't already stale.
+        CredentialClipboard.CopyText(RemoteMan.Core.Security.Totp.CodeToCopy(secret, out var validFor), secret: true);
+        Message = $"2FA code copied, valid for {validFor} s";
     }
 
     [RelayCommand]

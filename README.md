@@ -31,6 +31,11 @@ WebView2 runtime ships with Windows 11 and current Windows 10.
 - Login per entry or folder: none, inherited from the folder, a saved credential, your Windows login, or typed
   into the entry. Credential types: user name + password (+ domain), SSH key (stored, generated, or a key file
   on disk), client certificate (.pfx), secret / API key; "ask for the password when connecting" is optional.
+- Built-in 2FA codes: give a password or SSH-key login its authenticator secret (the setup key, an
+  `otpauth://` link, or paste a screenshot of the QR code) and the live code shows on the entry's overview with a
+  countdown ring. Copy it in one click (near the end of a window you get the next code). SSH answers
+  verification-code prompts, web entries fill code fields, and `{totp}` works in login scripts. SHA-1/256/512,
+  6–8 digits and custom periods; the secret is encrypted like the password and shared through the database.
 - Right-click menu: connect / connect with (mstsc, another credential, Windows login, admin session), edit,
   duplicate, move to, favorites, copy user / password / both / host, link credential, open with (mstsc,
   .rdp file, WinSCP, ping), properties and history, delete. Drag entries onto folders to move them.

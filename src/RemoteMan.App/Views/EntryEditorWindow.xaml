@@ -250,9 +250,19 @@
                         <TextBlock x:Name="CertInfo" Style="{StaticResource MutedText}" FontSize="11" Margin="90,2,0,2" TextWrapping="Wrap" />
                         <DockPanel x:Name="TotpRow" Margin="0,2">
                             <TextBlock Text="2FA secret" Width="90" Style="{StaticResource Label}" />
-                            <Button DockPanel.Dock="Right" x:Name="TotpCopy" Content="Copy code" Margin="6,0,0,0" Click="OnCopyTotp" ToolTip="Copy the current 6-digit code" />
+                            <Button DockPanel.Dock="Right" x:Name="TotpCopy" Content="Copy code" Margin="6,0,0,0" Click="OnCopyTotp" ToolTip="Copy the current code (clears from the clipboard)" />
                             <TextBlock DockPanel.Dock="Right" x:Name="TotpNow" Margin="8,0,0,0" VerticalAlignment="Center" FontFamily="{StaticResource MonoFont}" FontSize="14" Foreground="{StaticResource TextStrong}" />
-                            <PasswordBox x:Name="TotpBox" PasswordChanged="OnTotpChanged" ToolTip="The text under the QR code (base32), or an otpauth:// link. Leave empty to keep the stored one." />
+                            <PasswordBox x:Name="TotpBox" PasswordChanged="OnTotpChanged" AutomationProperties.Name="2FA secret"
+                                         ToolTip="The setup key under the QR code, an otpauth:// link, or paste a screenshot of the QR code. Leave empty to keep the stored one." />
+                        </DockPanel>
+                        <DockPanel x:Name="TotpTools" Margin="90,0,0,2">
+                            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                                <Button Content="Paste QR" Margin="6,0,0,0" Click="OnTotpFromClipboard"
+                                        ToolTip="Read the QR code from a copied screenshot (Win+Shift+S) or a copied image file" />
+                                <Button Content="QR image…" Margin="6,0,0,0" Click="OnTotpFromFile" ToolTip="Read the QR code from a saved screenshot or image" />
+                                <Button x:Name="TotpRemove" Content="Remove" Margin="6,0,0,0" Click="OnTotpRemove" ToolTip="Turn off the 2FA code for this login" />
+                            </StackPanel>
+                            <TextBlock x:Name="TotpInfo" Style="{StaticResource MutedText}" FontSize="11" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
                         </DockPanel>
                         <CheckBox x:Name="AskPasswordBox" Content="Ask for the password when connecting instead of storing it" Margin="90,4,0,0" />
                         <DockPanel x:Name="NotesRow" Margin="0,2">

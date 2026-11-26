@@ -112,8 +112,10 @@ public sealed partial class OverviewViewModel : SessionViewModel
     private Func<string?>? _totpSecret;
     [ObservableProperty] private bool _hasTotp;
     [ObservableProperty] private string _totpCode = "";
+    /// <summary>"2FA code" or "2FA code · GitHub (lange)" when the secret came from a QR code.</summary>
+    [ObservableProperty] private string _totpTitle = "2FA code";
     [ObservableProperty] private int _totpSeconds;
-    /// <summary>0..1 of the 30 s window still left (the ring).</summary>
+    /// <summary>0..1 of the code's lifetime still left (the ring).</summary>
     [ObservableProperty] private double _totpLeft;
     public ICommand? CopyTotp { get; internal set; }
 
@@ -152,14 +154,16 @@ public sealed partial class OverviewViewModel : SessionViewModel
         if (_totpSecret?.Invoke() is not { } s || !RemoteMan.Core.Security.Totp.IsValid(s))
         {
             TotpCode = HasTotp ? "invalid secret" : "";
+            TotpTitle = "2FA code";
             TotpSeconds = 0;
             TotpLeft = 0;
             return;
         }
-        var code = RemoteMan.Core.Security.Totp.Code(s);
-        TotpCode = code.Length == 6 ? $"{code[..3]} {code[3..]}" : code;
+        TotpCode = RemoteMan.Core.Security.Totp.Group(RemoteMan.Core.Security.Totp.Code(s));
         TotpSeconds = RemoteMan.Core.Security.Totp.SecondsLeft(s);
-        TotpLeft = TotpSeconds / 30.0;
+        TotpLeft = TotpSeconds / (double)RemoteMan.Core.Security.Totp.Period(s);
+        var label = RemoteMan.Core.Security.Totp.Label(s);
+        TotpTitle = label.Length > 0 ? $"2FA code · {label}" : "2FA code";
     }
 
     /// <summary>Stops the 2FA timer when the tab is closed.</summary>
