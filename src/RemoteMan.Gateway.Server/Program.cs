@@ -70,11 +70,11 @@ async Task<int> RunRelayAsync()
             var code = relay.Store.NewSetupCode(TimeSpan.FromDays(1));
             Log("──────────────────────────────────────────────────────────────────────");
             Log("Admin console: open this link to create the first admin (one-time, valid 24 h):");
-            Log($"  {(publicUrl ?? $"http://<this host>:{port}").TrimEnd('/')}/admin/#setup={code}");
+            Log($"  {(publicUrl ?? $"http://<this host>:{port}").TrimEnd('/')}/rmrelay/#setup={code}");
             Log("New link later: docker exec remoteman-relay gateway admin setup");
             Log("──────────────────────────────────────────────────────────────────────");
         }
-        else Log($"Admin console: {(publicUrl ?? $"http://<this host>:{port}").TrimEnd('/')}/admin/");
+        else Log($"Admin console: {(publicUrl ?? $"http://<this host>:{port}").TrimEnd('/')}/rmrelay/");
     }
     if (relay.Store.Sites.Count == 0) Log("No sites yet. Add one in the admin console, or: docker exec -it remoteman-relay gateway site add <name>");
     await app.RunAsync();
@@ -194,7 +194,7 @@ int Admin(string[] a)
             Console.WriteLine($"""
                 Open this link within an hour to create a console admin (it works once):
 
-                {url}/admin/#setup={code}
+                {url}/rmrelay/#setup={code}
                 """);
             return 0;
         }
@@ -203,7 +203,7 @@ int Admin(string[] a)
             var pw = ReadNewPassword();
             if (pw is null) return 1;
             store.AddAdmin(name, pw);
-            Console.WriteLine($"Admin {name} added. Sign in at {url}/admin/");
+            Console.WriteLine($"Admin {name} added. Sign in at {url}/rmrelay/");
             return 0;
         }
         case ["reset", var name]:
