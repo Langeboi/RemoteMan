@@ -64,7 +64,15 @@
     plus: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M8 3v10M3 8h10"/></svg>',
     more: '<svg viewBox="0 0 16 16" fill="currentColor"><circle cx="3" cy="8" r="1.4"/><circle cx="8" cy="8" r="1.4"/><circle cx="13" cy="8" r="1.4"/></svg>',
     menu: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M2 4h12M2 8h12M2 12h12"/></svg>',
+    db: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><ellipse cx="8" cy="3.8" rx="5" ry="2"/><path d="M3 3.8v8.4c0 1.1 2.2 2 5 2s5-.9 5-2V3.8M3 8c0 1.1 2.2 2 5 2s5-.9 5-2"/></svg>',
+    account: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="8" cy="5.5" r="2.7"/><path d="M2.8 14c.5-2.8 2.6-4.4 5.2-4.4s4.7 1.6 5.2 4.4"/></svg>',
+    backup: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M2.5 8a5.5 5.5 0 1 0 1.6-3.9"/><path d="M2 2.5V5h2.5M8 5v3l2 1.5"/></svg>',
   };
+  const ACCESS = { admin: ['Admin', 'admin'], edit: ['Can edit', 'acc'], read: ['Read only', ''] };
+  const accessPill = a => `<span class="pill ${ACCESS[a]?.[1] || ''}">${ACCESS[a]?.[0] || esc(a)}</span>`;
+  const AV = ['#7FD3C4', '#E0A84A', '#B49CF0', '#5B9BEA', '#E58B8B', '#9BD37F', '#E3A0D0'];
+  const avatar = name => { let h = 0; for (const ch of String(name)) h = (h * 31 + ch.charCodeAt(0)) >>> 0; return `<span class="av" style="background:${AV[h % AV.length]}">${esc(String(name).slice(0, 2).toUpperCase())}</span>`; };
+  const brandName = () => S.info?.hosted ? 'RemoteMan' : 'RemoteMan Gateway';
 
   // ---------- state ----------
   const S = { info: null, snap: null, timer: 0, watchers: new Set(), activity: null, activityFilter: { text: '', kind: '' }, peopleView: 'devices', fast: 0 };
@@ -111,7 +119,9 @@
     const h = location.hash.replace(/^#\/?/, '');
     if (h.startsWith('setup=')) return { view: 'overview' };
     const [view, ...rest] = h.split('/');
-    return { view: ['overview', 'sites', 'people', 'activity', 'settings'].includes(view) ? view : 'overview', arg: rest.length ? decodeURIComponent(rest.join('/')) : null };
+    if (S.info?.member) return { view: 'account' };
+    const views = ['overview', 'sites', 'people', 'activity', 'settings', ...(S.info?.hosted ? ['workspaces', 'accounts', 'backups'] : [])];
+    return { view: views.includes(view) ? view : 'overview', arg: rest.length ? decodeURIComponent(rest.join('/')) : null };
   }
   addEventListener('hashchange', () => {
     if (!S.snap) return;
@@ -131,7 +141,7 @@
     showLogin();
   }
 
-  const brand = () => `<div class="brand"><div class="mark">R</div><div><b>RemoteMan Gateway</b><span>${esc(host(S.info?.relay || location.origin))}</span></div></div>`;
+  const brand = () => `<div class="brand"><div class="mark">R</div><div><b>${brandName()}</b><span>${esc(host(S.info?.relay || location.origin))}</span></div></div>`;
   const gate = inner => `<div class="gate"><div class="box">${brand()}${inner}<div class="foot">RemoteMan gateway ${esc(S.info?.version || '')}</div></div></div>`;
 
   function showNoAdmin() {
@@ -169,10 +179,10 @@
   function showLogin(note) {
     stop();
     S.snap = null;
-    root.innerHTML = gate(`<h1>Sign in</h1><p>Admin console for this relay.</p>
+    root.innerHTML = gate(`<h1>Sign in</h1><p>${S.info?.hosted ? 'With your RemoteMan account. There is no sign-up: the admin makes the accounts.' : 'Admin console for this relay.'}</p>
       ${note ? `<div class="note info">${esc(note)}</div>` : ''}
       <form id="f" autocomplete="on">
-        <div class="field"><label for="u">Name</label><input id="u" autocomplete="username" required></div>
+        <div class="field"><label for="u">${S.info?.hosted ? 'Username' : 'Name'}</label><input id="u" autocomplete="username" autocapitalize="off" required></div>
         <div class="field"><label for="p">Password</label><input id="p" type="password" autocomplete="current-password" required></div>
         <div class="field" id="cf" hidden><label for="c">Authenticator code</label><input id="c" inputmode="numeric" autocomplete="one-time-code" maxlength="7" placeholder="123456"></div>
         <p class="err" id="e"></p>
@@ -195,20 +205,27 @@
   }
 
   async function startApp(fresh) {
-    root.innerHTML = `<div class="app">
-      <nav class="nav" id="nav">${brand()}
-        <ul>
+    const member = S.info.member, hosted = S.info.hosted;
+    const links = member ? `<li><a href="#/account" data-v="account">${ICON.account}My account</a></li>` : `
           <li><a href="#/overview" data-v="overview">${ICON.overview}Overview</a></li>
+          ${hosted ? `<li class="grp">Workspaces</li>
+          <li><a href="#/workspaces" data-v="workspaces">${ICON.db}Workspaces<span class="count" id="n-ws"></span></a></li>
+          <li><a href="#/accounts" data-v="accounts">${ICON.account}Accounts<span class="count" id="n-acc"></span></a></li>
+          <li><a href="#/backups" data-v="backups">${ICON.backup}Backups</a></li>
+          <li class="grp">Gateway</li>` : ''}
           <li><a href="#/sites" data-v="sites">${ICON.sites}Sites<span class="count" id="n-sites"></span></a></li>
           <li><a href="#/people" data-v="people">${ICON.people}People &amp; devices<span class="count" id="n-dev"></span></a></li>
           <li><a href="#/activity" data-v="activity">${ICON.activity}Activity</a></li>
-          <li><a href="#/settings" data-v="settings">${ICON.settings}Settings</a></li>
+          <li><a href="#/settings" data-v="settings">${ICON.settings}Settings</a></li>`;
+    root.innerHTML = `<div class="app">
+      <nav class="nav" id="nav">${brand()}
+        <ul>${links}
         </ul>
         <div class="foot"><span class="who" id="who"></span><button class="b sm ghost" data-act="logout">Sign out</button></div>
         <div class="foot" style="border-top:0;padding-top:0" id="conn"></div>
       </nav>
       <div>
-        <div class="topbar"><button class="b sm ghost" data-act="menu" aria-label="Menu">${ICON.menu}</button><b>RemoteMan Gateway</b></div>
+        <div class="topbar"><button class="b sm ghost" data-act="menu" aria-label="Menu">${ICON.menu}</button><b>${brandName()}</b></div>
         <main class="main" id="main"></main>
       </div>
     </div>`;
@@ -217,6 +234,7 @@
     root.addEventListener('input', onInput);
     await refresh();
     if (fresh) toast('Welcome. Start by adding a site for the first network you want to reach.');
+    if (member && S.snap?.me?.mustChange) changePassword(true);
   }
 
   // ---------- rendering ----------
@@ -224,12 +242,15 @@
     const s = S.snap; if (!s) return;
     const r = route();
     $$('.nav a[data-v]').forEach(a => a.classList.toggle('on', a.dataset.v === r.view));
+    $('#who').textContent = s.me.name;
+    if (s.me.member) { $('#main').innerHTML = myAccount(); document.title = 'My account · RemoteMan'; return; }
     $('#n-sites').textContent = s.sites.length || '';
     $('#n-dev').textContent = s.devices.length || '';
-    $('#who').textContent = s.me.name;
-    const view = { overview, sites: r.arg ? site : sites, people, activity, settings }[r.view];
+    if (s.hosted) { $('#n-ws').textContent = s.hosted.workspaces.length || ''; $('#n-acc').textContent = s.hosted.accounts.length || ''; }
+    const view = { overview, sites: r.arg ? site : sites, people, activity, settings, workspaces: r.arg ? workspace : workspaces, accounts, backups }[r.view];
     $('#main').innerHTML = view(r.arg);
-    document.title = `${({ overview: 'Overview', sites: r.arg || 'Sites', people: 'People & devices', activity: 'Activity', settings: 'Settings' })[r.view]} · RemoteMan Gateway`;
+    const wsName = r.view === 'workspaces' && r.arg ? s.hosted?.workspaces.find(w => w.id === r.arg)?.name : null;
+    document.title = `${wsName || ({ overview: 'Overview', sites: r.arg || 'Sites', people: 'People & devices', activity: 'Activity', settings: 'Settings', workspaces: 'Workspaces', accounts: 'Accounts', backups: 'Backups' })[r.view]} · ${brandName()}`;
   }
 
   const head = (title, text, actions = '', crumb = '') =>
@@ -449,6 +470,311 @@
         </div></div>
       </div></div>`;
   }
+
+  // ---------- hosted workspaces ----------
+  const H = () => S.snap.hosted;
+  const serverNote = () => H().serverError
+    ? `<div class="note"><span>⚠</span><span><b>Can't reach the workspace database server.</b> ${esc(H().serverError)}. RemoteMan keeps working from each PC's copy; changes wait until it's back.</span></div>` : '';
+  const avatarRow = (list, max = 5) => `<span class="avs">${list.slice(0, max).map(m => avatar(m.account || m)).join('')}${list.length > max ? `<span class="faint" style="margin-left:6px">+${list.length - max}</span>` : ''}</span>`;
+  const onlineState = w => w.online ? `<span class="state"><span class="dot ok"></span>${w.online} online</span>` : '<span class="state"><span class="dot"></span><span class="faint">nobody online</span></span>';
+
+  function workspaces() {
+    const h = H();
+    const totalBytes = h.workspaces.reduce((n, w) => n + (w.bytes || 0), 0);
+    const onlineNow = h.accounts.filter(a => a.online).length;
+    const lastTest = h.restoreTests[0];
+    const newest = h.backups.find(b => b.kind === 'nightly') || h.backups[0];
+    const tiles = `<div class="tiles">
+      <div class="tile"><span class="k">Workspaces</span><span class="v">${h.workspaces.length}</span><span class="s">${h.workspaces.filter(w => w.online).length} in use right now</span></div>
+      <div class="tile"><span class="k">People online</span><span class="v">${onlineNow}<small> / ${h.accounts.length}</small></span><span class="s">in RemoteMan now</span></div>
+      <div class="tile"><span class="k">Storage</span><span class="v">${bytes(totalBytes)}</span><span class="s">on ${esc(h.endpoint)}</span></div>
+      <div class="tile"><span class="k">Last backup</span><span class="v">${newest ? fmtTime(newest.taken) : '<small>none yet</small>'}</span><span class="s">${lastTest ? (lastTest.ok ? 'restore tested ' + ago(lastTest.at) : '<span style="color:var(--bad)">restore test failed</span>') : 'restore not tested yet'}</span></div>
+    </div>`;
+    const rows = h.workspaces.map(w => `<tr class="click" data-href="#/workspaces/${enc(w.id)}">
+      <td><span class="name">${esc(w.name)}</span>${w.description ? `<div class="desc">${esc(w.description)}</div>` : ''}</td>
+      <td>${avatarRow(w.members)}</td><td class="num hide-sm">${w.entries ?? '—'}</td><td class="num hide-sm">${w.bytes != null ? bytes(w.bytes) : '—'}</td>
+      <td>${onlineState(w)}${w.lastChange ? `<div class="desc">edited ${ago(w.lastChange)}</div>` : ''}</td></tr>`).join('');
+    return head('Workspaces', 'Each workspace is its own database. Members see it under Data sources in RemoteMan once they sign in: no links to send.',
+      `<button class="b pri" data-act="new-ws">${ICON.plus}New workspace</button>`) + serverNote() + tiles +
+      `<div class="card"><div class="cb flush tablewrap">${h.workspaces.length ? `<table><thead><tr><th>Workspace</th><th>Members</th><th class="hide-sm">Entries</th><th class="hide-sm">Size</th><th>Status</th></tr></thead><tbody>${rows}</tbody></table>`
+        : `<div class="empty"><b>No workspaces yet</b>Make one for a class, a homelab or a project, and tick who's in it.<br><button class="b pri" data-act="new-ws">${ICON.plus}New workspace</button></div>`}</div></div>
+      <p class="faint" style="font-size:12.5px;margin-top:12px">Self-hosted databases don't show up here, and nothing here touches them. RemoteMan lists both kinds side by side.</p>`;
+  }
+
+  function workspace(id) {
+    const h = H();
+    const w = h.workspaces.find(x => x.id === id);
+    if (!w) return head('Workspace not found', 'It may have been deleted.', '', '<a href="#/workspaces">Workspaces</a>');
+    const rows = w.members.slice().sort((a, b) => (b.access === 'admin') - (a.access === 'admin') || a.account.localeCompare(b.account)).map(m => `<tr>
+      <td style="width:34px">${avatar(m.account)}</td>
+      <td><span class="name">${esc(m.account)}</span>${m.account === S.snap.me.name ? ' <span class="pill acc">you</span>' : ''}${m.fullName ? `<div class="desc">${esc(m.fullName)}</div>` : ''}</td>
+      <td>${accessPill(m.access)}</td>
+      <td>${m.machines.length ? `<span class="state"><span class="dot ok"></span>online · ${esc(m.machines.join(', '))}</span>` : m.signedIn ? '<span class="state"><span class="dot"></span><span class="faint">signed in, not running</span></span>' : `<span class="faint">${m.lastLogin ? 'not signed in to RemoteMan' : "hasn't signed in yet"}</span>`}</td>
+      <td class="hide-sm">${m.lastChange ? ago(m.lastChange) : '<span class="faint">never</span>'}</td>
+      <td class="r"><div class="menu"><button class="b sm ghost" data-act="pop" aria-label="Actions">${ICON.more}</button><div class="pop" hidden>
+        ${['admin', 'edit', 'read'].filter(a => a !== m.access).map(a => `<button data-act="set-access" data-ws="${esc(w.id)}" data-account="${esc(m.account)}" data-access="${a}">Make ${ACCESS[a][0].toLowerCase()}</button>`).join('')}
+        <button class="dan" data-act="remove-member" data-ws="${esc(w.id)}" data-account="${esc(m.account)}">Remove from workspace…</button></div></div></td></tr>`).join('');
+    const backs = h.backups.filter(b => b.workspace === w.id).slice(0, 6);
+    const acts = `<button class="b" data-act="backup-ws" data-ws="${esc(w.id)}">Back up now</button>
+      <div class="menu"><button class="b" data-act="pop" aria-label="More">${ICON.more}</button><div class="pop" hidden>
+        <button data-act="rename-ws" data-ws="${esc(w.id)}">Rename…</button>
+        <button data-act="copy-ws" data-ws="${esc(w.id)}">Make a copy…</button>
+        <button class="dan" data-act="delete-ws" data-ws="${esc(w.id)}">Delete workspace…</button></div></div>
+      <button class="b pri" data-act="add-people" data-ws="${esc(w.id)}">${ICON.plus}Add people</button>`;
+    return head(esc(w.name), `${w.description ? esc(w.description) + ' · ' : ''}${plural(w.entries ?? 0, 'entry', 'entries')} · ${w.bytes != null ? bytes(w.bytes) : '…'} · database <code>${esc(w.database)}</code>`, acts, '<a href="#/workspaces">Workspaces</a>') + serverNote() +
+      `<div class="card"><div class="ch"><h2>Members<span class="sub">${w.members.length}</span></h2></div><div class="cb flush tablewrap">
+        ${w.members.length ? `<table><thead><tr><th></th><th>Person</th><th>Access</th><th>In RemoteMan</th><th class="hide-sm">Last change</th><th></th></tr></thead><tbody>${rows}</tbody></table>` : '<div class="empty"><b>Nobody yet</b>Add people: they see this workspace in RemoteMan the next time it checks their account.</div>'}
+      </div></div>
+      <p class="faint" style="font-size:12.5px;margin:10px 0 18px">People see changes within a minute if they're signed in. Taking someone out removes the workspace from their app and deletes its copy on their PCs. Saved passwords are encrypted with the workspace's vault passphrase, which you share yourself; this server never knows it.</p>
+      <div class="card"><div class="ch"><h2>Latest backups</h2><a class="b sm ghost" href="#/backups">All backups</a></div><div class="cb flush tablewrap">${backupRows(backs, false)}</div></div>`;
+  }
+
+  function backupRows(list, showName) {
+    if (!list.length) return '<div class="empty">No backups yet. The first one runs tonight, or press Back up now.</div>';
+    const kind = { nightly: 'nightly', manual: 'by hand', 'before-delete': 'before delete' };
+    return `<table><thead><tr>${showName ? '<th>Workspace</th>' : ''}<th>Taken</th><th class="hide-sm">Kind</th><th class="num">Entries</th><th class="num hide-sm">Size</th><th></th></tr></thead><tbody>
+      ${list.map(b => `<tr>${showName ? `<td><span class="name">${esc(b.name || 'deleted workspace')}</span></td>` : ''}<td>${fmtDate(b.taken)}</td><td class="hide-sm">${kind[b.kind] || esc(b.kind)}</td>
+        <td class="num">${b.entries}</td><td class="num hide-sm">${bytes(b.size)}</td>
+        <td class="r"><button class="b sm" data-act="restore-backup" data-ws="${esc(b.workspace)}" data-file="${esc(b.file)}">Restore as copy</button>
+          <a class="b sm" href="api/hosted/backups/${enc(b.workspace)}/${enc(b.file)}" download>Download</a></td></tr>`).join('')}</tbody></table>`;
+  }
+
+  function backups() {
+    const h = H();
+    const t = h.restoreTests[0];
+    const test = t ? `<div class="note ${t.ok ? 'ok' : ''}"><span>${t.ok ? '✓' : '⚠'}</span><span><b>Restore ${t.ok ? 'tested' : 'test failed'} ${ago(t.at)}.</b> ${esc(t.detail)}</span></div>`
+      : '<div class="note info"><span>ⓘ</span><span>No restore test yet. One runs every Sunday after the nightly backup, or press Test a restore.</span></div>';
+    return head('Backups', `Every workspace, every night${h.nextBackup ? ` (next ${fmtDate(h.nextBackup)})` : ''}. Kept: the last 7 nights, Sundays for 4 weeks, the 1st of the month for 3 months. Stored on this server, not on the database server.`,
+      `<button class="b" data-act="test-restore">Test a restore</button><button class="b pri" data-act="backup-all" ${h.backupRunning ? 'disabled' : ''}>${h.backupRunning ? 'Backing up…' : 'Back up all now'}</button>`) + serverNote() + test +
+      `<div class="card"><div class="cb flush tablewrap">${backupRows(h.backups.slice(0, 200), true)}</div></div>
+      <p class="faint" style="font-size:12.5px;margin-top:12px">“Restore as copy” makes a new workspace next to the old one with the same members, so nothing is overwritten. “Download” is a SQL file: <code>gunzip -c file.sql.gz | psql -d remoteman</code> loads it into a new, empty database on a self-hosted server. Saved passwords stay encrypted with the vault passphrase in every backup.</p>`;
+  }
+
+  function accounts() {
+    const h = H();
+    const rows = h.accounts.map(a => `<tr>
+      <td style="width:34px">${avatar(a.name)}</td>
+      <td><span class="name" ${a.disabled ? 'style="color:var(--faint)"' : ''}>${esc(a.name)}</span>${a.admin ? ' <span class="pill admin">Console admin</span>' : ''}${a.disabled ? ' <span class="pill warn">Off</span>' : ''}${a.fullName ? `<div class="desc">${esc(a.fullName)}</div>` : ''}</td>
+      <td class="hide-sm">${a.workspaces.length ? `<div class="chips">${a.workspaces.map(w => `<a class="chip" href="#/workspaces/${enc(w.id)}" title="${ACCESS[w.access][0]}">${esc(w.name)}</a>`).join('')}</div>` : '<span class="faint">none</span>'}</td>
+      <td class="hide-sm">${a.totp ? '<span class="pill ok">On</span>' : '<span class="faint">Off</span>'}</td>
+      <td>${a.mustChange ? '<span style="color:var(--warn)">must choose a password</span>' : a.online ? '<span class="state"><span class="dot ok"></span>online now</span>' : ago(a.lastLogin)}${a.apps.length ? `<div class="desc">${plural(a.apps.length, 'PC')} signed in</div>` : ''}</td>
+      <td class="r"><div class="menu"><button class="b sm ghost" data-act="pop" aria-label="Actions">${ICON.more}</button><div class="pop" hidden>
+        <button data-act="edit-account" data-name="${esc(a.name)}">Edit…</button>
+        ${a.admin ? '' : `<button data-act="reset-account" data-name="${esc(a.name)}">New first password…</button>`}
+        ${a.apps.length ? `<button data-act="signout-account" data-name="${esc(a.name)}">Sign out everywhere</button>` : ''}
+        ${a.admin ? '' : `<button class="dan" data-act="remove-account" data-name="${esc(a.name)}">Remove…</button>`}</div></div></td></tr>`).join('');
+    return head('Accounts', 'Everyone who can sign in to RemoteMan and this website. Console admins have an account too, with the same password.',
+      `<button class="b pri" data-act="new-account">${ICON.plus}New account</button>`) + serverNote() +
+      `<div class="card"><div class="cb flush tablewrap"><table><thead><tr><th></th><th>Account</th><th class="hide-sm">Workspaces</th><th class="hide-sm">2FA</th><th>Last sign-in</th><th></th></tr></thead><tbody>${rows}</tbody></table></div></div>
+      <p class="faint" style="font-size:12.5px;margin-top:12px">There's no sign-up and no email. You make the account, then tell the person their username and first password yourself; they choose their own at the first sign-in.</p>`;
+  }
+
+  function myAccount() {
+    const s = S.snap;
+    const ws = s.workspaces.map(w => `<tr><td><span class="name">${esc(w.name)}</span>${w.description ? `<div class="desc">${esc(w.description)}</div>` : ''}</td><td>${accessPill(w.access)}</td><td>${onlineState(w)}</td><td class="num hide-sm">${plural(w.members, 'member')}</td></tr>`).join('');
+    const apps = s.apps.map(t => `<tr><td><span class="name">${esc(t.device || 'A PC')}</span><div class="desc">signed in ${fmtDate(t.created)}</div></td><td class="hide-sm mono">${esc(t.lastIp || '')}</td><td>${ago(t.lastSeen)}</td>
+      <td class="r"><button class="b sm" data-act="signout-app" data-id="${esc(t.id)}">Sign out</button></td></tr>`).join('');
+    return head(`Hi ${esc(s.me.fullName || s.me.name)}`, 'Your RemoteMan account. Sign in with it in RemoteMan (Data sources › Sign in) and your workspaces show up there by themselves.',
+      `<button class="b" data-act="password">Change password</button>${s.me.totp ? '<button class="b" data-act="totp-off">Turn off code</button>' : '<button class="b pri" data-act="totp-on">Turn on authenticator code</button>'}`) +
+      `<div class="card" style="margin-bottom:14px"><div class="ch"><h2>Your workspaces<span class="sub">${s.workspaces.length}</span></h2></div><div class="cb flush tablewrap">
+        ${s.workspaces.length ? `<table><thead><tr><th>Workspace</th><th>Your access</th><th>Now</th><th class="hide-sm">Members</th></tr></thead><tbody>${ws}</tbody></table>` : '<div class="empty">You aren\'t in a workspace yet. The admin adds you.</div>'}</div></div>
+      <div class="card"><div class="ch"><h2>PCs signed in to RemoteMan<span class="sub">${s.apps.length}</span></h2></div><div class="cb flush tablewrap">
+        ${s.apps.length ? `<table><tbody>${apps}</tbody></table>` : '<div class="empty">None yet.</div>'}</div></div>
+      <p class="faint" style="font-size:12.5px;margin-top:12px">Lost a laptop? Sign it out here: it loses the workspaces at its next check, and its copy of them is deleted.</p>`;
+  }
+
+  const accessSelect = (id, value = 'edit') => `<select id="${id}" style="width:auto">${['admin', 'edit', 'read'].map(a => `<option value="${a}" ${a === value ? 'selected' : ''}>${ACCESS[a][0]}</option>`).join('')}</select>`;
+
+  function newWorkspace(copyFrom) {
+    const h = H();
+    const src = copyFrom ? h.workspaces.find(w => w.id === copyFrom) : null;
+    const pick = h.accounts.filter(a => !a.disabled).map((a, i) => {
+      const was = src?.members.find(m => m.account === a.name);
+      const me = a.name === S.snap.me.name;
+      return `<label class="pickrow"><input type="checkbox" value="${esc(a.name)}" ${me || was ? 'checked' : ''} ${me ? 'disabled' : ''}>${avatar(a.name)}<span>${esc(a.name)}${a.fullName ? ` <span class="faint">${esc(a.fullName)}</span>` : ''}</span>
+        <span class="r">${me ? '<span class="pill admin">Admin</span>' : accessSelect('na-' + i, was?.access || 'edit')}</span></label>`;
+    }).join('');
+    const m = modal({
+      title: src ? `Copy ${src.name}` : 'New workspace', wide: true,
+      body: `<div class="row"><div class="field"><label for="wn">Name</label><input id="wn" maxlength="60" value="${src ? esc(src.name + ' (copy)') : ''}" placeholder="Networking class"></div>
+        <div class="field"><label for="wd">Description <span class="faint">(optional)</span></label><input id="wd" maxlength="200" value="${esc(src?.description || '')}" placeholder="CCNA labs, school VMs"></div></div>
+        ${src ? `<div class="note info"><span>ⓘ</span><span>Starts with everything in ${esc(src.name)} right now: entries, folders, credentials, chat. It uses the same vault passphrase.</span></div>` : ''}
+        <div class="field"><span class="lbl">Members</span><div class="picklist">${pick}</div>
+          <span class="hint">You're in it as an admin. People see it in RemoteMan within a minute of being added. No link to send.</span></div>
+        <p class="faint" style="font-size:12.5px;margin:0">The vault passphrase isn't set here. ${src ? '' : 'The first admin to open the workspace in RemoteMan chooses it, '}so this server never knows it.</p>`,
+      buttons: [{ label: 'Cancel' }, {
+        label: src ? 'Make the copy' : 'Create workspace', cls: 'pri', act: async () => {
+          const members = $$('.pickrow', m.el).map((row, i) => ({ row, i })).filter(x => $('input', x.row).checked && !$('input', x.row).disabled)
+            .map(x => ({ account: $('input', x.row).value, access: $('select', x.row)?.value || 'edit' }));
+          const r = await api('POST', '/hosted/workspaces', { name: $('#wn', m.el).value.trim(), description: $('#wd', m.el).value.trim() || null, members, copyFrom: copyFrom || null });
+          await refresh();
+          location.hash = '#/workspaces/' + enc(r.id);
+          toast('Workspace made. Members see it in RemoteMan within a minute.');
+        },
+      }],
+    });
+  }
+
+  function addPeople(wsId) {
+    const w = H().workspaces.find(x => x.id === wsId);
+    const rows = H().accounts.map((a, i) => {
+      const inIt = w.members.some(mm => mm.account === a.name);
+      return `<label class="pickrow ${inIt || a.disabled ? 'dis' : ''}"><input type="checkbox" value="${esc(a.name)}" ${inIt ? 'checked disabled' : a.disabled ? 'disabled' : ''}>${avatar(a.name)}<span>${esc(a.name)}${a.fullName ? ` <span class="faint">${esc(a.fullName)}</span>` : ''}</span>
+        <span class="r">${inIt ? '<span class="faint">already a member</span>' : a.disabled ? '<span class="faint">turned off</span>' : accessSelect('ap-' + i)}</span></label>`;
+    }).join('');
+    const m = modal({
+      title: `Add people to ${w.name}`,
+      body: `<div class="picklist">${rows}</div>
+        <p style="margin:10px 0 0"><a href="#" data-act="new-account" data-ws="${esc(w.id)}">+ New account…</a></p>
+        <div class="note info" style="margin:12px 0 0"><span>ⓘ</span><span>They see <b>${esc(w.name)}</b> in RemoteMan within a minute if they're signed in, or at their next sign-in. They need the vault passphrase from you once.</span></div>`,
+      buttons: [{ label: 'Cancel' }, {
+        label: 'Add', cls: 'pri', act: async () => {
+          const changes = $$('.pickrow', m.el).filter(r => { const i = $('input', r); return i.checked && !i.disabled; }).map(r => ({ account: $('input', r).value, access: $('select', r).value }));
+          if (!changes.length) throw new Error('Tick someone to add.');
+          await api('POST', `/hosted/workspaces/${enc(wsId)}/members`, { changes });
+          toast(`${plural(changes.length, 'person', 'people')} added.`); refresh();
+        },
+      }],
+    });
+  }
+
+  const genPassword = () => {
+    const words = ['wave', 'tundra', 'cobalt', 'maple', 'orbit', 'ember', 'falcon', 'quartz', 'harbor', 'nimbus', 'pixel', 'lagoon', 'summit', 'violet', 'cactus', 'zephyr'];
+    const r = n => crypto.getRandomValues(new Uint32Array(1))[0] % n;
+    const w = () => words[r(words.length)];
+    const f = w();
+    return `${f[0].toUpperCase()}${f.slice(1)}-${w()}-${w()}-${10 + r(90)}`;
+  };
+
+  function newAccount(wsId) {
+    const h = H();
+    const pw = genPassword();
+    const ws = h.workspaces.map((w, i) => `<label class="pickrow"><input type="checkbox" value="${esc(w.id)}" ${w.id === wsId ? 'checked' : ''}><span>${esc(w.name)}</span><span class="r">${accessSelect('aw-' + i)}</span></label>`).join('');
+    const m = modal({
+      title: 'New account', wide: true,
+      body: `<div class="row"><div class="field"><label for="an">Username</label><input id="an" maxlength="40" autocomplete="off" autocapitalize="off" placeholder="mikkel"><span class="hint">Lowercase letters, digits and _. It's also the name on what they change.</span></div>
+        <div class="field"><label for="af">Full name <span class="faint">(optional)</span></label><input id="af" maxlength="80" placeholder="Mikkel Sø"></div></div>
+        <div class="field"><label for="ap">First password</label><div class="row" style="flex-wrap:nowrap"><input id="ap" class="mono" value="${esc(pw)}" autocomplete="off"><button class="b" type="button" data-act="gen-pw">Generate</button></div></div>
+        <label class="check"><input type="checkbox" id="am" checked> Must choose their own password at the first sign-in</label>
+        ${h.workspaces.length ? `<div class="field" style="margin-top:10px"><span class="lbl">Put in workspaces</span><div class="picklist">${ws}</div></div>` : ''}
+        <p class="faint" style="font-size:12.5px;margin:6px 0 0">Tell them the username and first password yourself, in class or on Discord. There's no email and no link to send.</p>`,
+      buttons: [{ label: 'Cancel' }, {
+        label: 'Create account', cls: 'pri', close: false, act: async () => {
+          const name = $('#an', m.el).value.trim().toLowerCase(), password = $('#ap', m.el).value;
+          const workspaces = $$('.pickrow', m.el).filter(r => $('input', r).checked).map(r => ({ id: $('input', r).value, access: $('select', r).value }));
+          await api('POST', '/hosted/accounts', { name, fullName: $('#af', m.el).value.trim() || null, password, mustChange: $('#am', m.el).checked, workspaces });
+          m.setBody(`<div class="note ok"><span>✓</span><span><b>${esc(name)}</b> can sign in now${workspaces.length ? ` and sees ${plural(workspaces.length, 'workspace')}` : ''}.</span></div>
+            <p>Give them these, then they sign in in RemoteMan under <b>Data sources › Sign in</b>:</p>
+            ${copyBox(`Server: ${S.snap.relay.url}\nUsername: ${name}\nPassword: ${password}`, 'Copy')}
+            <p class="faint" style="font-size:12.5px;margin-top:8px">The password isn't shown again. You can always give them a new first password.</p>`);
+          m.setButtons([{ label: 'Done', cls: 'pri' }]);
+          refresh();
+        },
+      }],
+    });
+  }
+
+  function editAccount(name) {
+    const a = H().accounts.find(x => x.name === name);
+    const apps = a.apps.map(t => `<tr><td>${esc(t.device || 'A PC')}</td><td class="faint">${ago(t.lastSeen)}</td><td class="r"><button class="b sm" type="button" data-act="signout-app" data-id="${esc(t.id)}">Sign out</button></td></tr>`).join('');
+    const m = modal({
+      title: `Edit ${name}`,
+      body: `<div class="field"><label for="ef">Full name</label><input id="ef" maxlength="80" value="${esc(a.fullName || '')}"></div>
+        ${a.admin ? '<p class="faint" style="font-size:12.5px">A console admin: their password and 2FA are under Settings.</p>' : `<label class="check"><input type="checkbox" id="ed" ${a.disabled ? 'checked' : ''}> Turned off (can't sign in; their PCs are signed out and lose the workspaces)</label>`}
+        <div class="field" style="margin-top:10px"><span class="lbl">PCs signed in</span>${a.apps.length ? `<table>${apps}</table>` : '<span class="faint">none</span>'}</div>`,
+      buttons: [{ label: 'Cancel' }, {
+        label: 'Save', cls: 'pri', act: async () => {
+          await api('PUT', `/hosted/accounts/${enc(name)}`, { fullName: $('#ef', m.el).value.trim() || null, disabled: !!$('#ed', m.el)?.checked });
+          refresh();
+        },
+      }],
+    });
+  }
+
+  function resetAccount(name) {
+    const pw = genPassword();
+    const m = modal({
+      title: `New first password for ${name}`,
+      body: `<p>They sign in with this and pick their own straight after. Their 2FA is turned off and their PCs are signed out.</p>
+        <div class="field"><label for="rp">First password</label><input id="rp" class="mono" value="${esc(pw)}" autocomplete="off"></div>`,
+      buttons: [{ label: 'Cancel' }, {
+        label: 'Set password', cls: 'pri', close: false, act: async () => {
+          const p = $('#rp', m.el).value;
+          await api('POST', `/hosted/accounts/${enc(name)}/password`, { password: p });
+          m.setBody(`<p>Give ${esc(name)} this password:</p>${copyBox(p)}`);
+          m.setButtons([{ label: 'Done', cls: 'pri' }]);
+          refresh();
+        },
+      }],
+    });
+  }
+
+  function renameWorkspace(id) {
+    const w = H().workspaces.find(x => x.id === id);
+    const m = modal({
+      title: `Rename ${w.name}`,
+      body: `<div class="field"><label for="rn">Name</label><input id="rn" maxlength="60" value="${esc(w.name)}"></div>
+        <div class="field"><label for="rd">Description</label><input id="rd" maxlength="200" value="${esc(w.description || '')}"></div>
+        <p class="faint" style="font-size:12.5px;margin:0">Members' apps show the new name at their next check.</p>`,
+      buttons: [{ label: 'Cancel' }, { label: 'Save', cls: 'pri', act: async () => { await api('PUT', `/hosted/workspaces/${enc(id)}`, { name: $('#rn', m.el).value.trim(), description: $('#rd', m.el).value.trim() || null }); refresh(); } }],
+    });
+  }
+
+  function deleteWorkspace(id) {
+    const w = H().workspaces.find(x => x.id === id);
+    const m = modal({
+      title: `Delete ${w.name}?`,
+      body: `<p>The database and everything in it is deleted, and it disappears from every member's RemoteMan. A last backup is taken first and kept for 30 days under Backups, in case this was a mistake.</p>
+        <div class="field"><label for="dn">Type the workspace's name to delete it</label><input id="dn" autocomplete="off"></div>`,
+      buttons: [{ label: 'Cancel' }, {
+        label: 'Delete workspace', cls: 'dan solid', act: async () => {
+          if ($('#dn', m.el).value.trim() !== w.name) throw new Error('Type the name exactly as shown.');
+          await api('DELETE', `/hosted/workspaces/${enc(id)}`);
+          location.hash = '#/workspaces'; toast(`${w.name} deleted. Its last backup is under Backups.`); refresh();
+        },
+      }],
+    });
+  }
+
+  const HACTS = {
+    'new-ws': () => newWorkspace(),
+    'copy-ws': d => newWorkspace(d.ws),
+    'add-people': d => addPeople(d.ws),
+    'rename-ws': d => renameWorkspace(d.ws),
+    'delete-ws': d => deleteWorkspace(d.ws),
+    'set-access': async d => {
+      await api('POST', `/hosted/workspaces/${enc(d.ws)}/members`, { changes: [{ account: d.account, access: d.access }] });
+      toast(`${d.account} is now ${ACCESS[d.access][0].toLowerCase()}.`); refresh();
+    },
+    'remove-member': async d => {
+      const w = H().workspaces.find(x => x.id === d.ws);
+      if (!await confirmDlg(`Remove ${d.account} from ${w.name}?`, `${esc(d.account)}'s RemoteMan loses this workspace at its next check (within a minute) and deletes its copy. What they changed keeps their name.`, 'Remove')) return;
+      await api('POST', `/hosted/workspaces/${enc(d.ws)}/members`, { changes: [{ account: d.account, access: null }] });
+      refresh();
+    },
+    'backup-ws': async d => { await api('POST', `/hosted/workspaces/${enc(d.ws)}/backup`); toast('Backup taken.'); refresh(); },
+    'backup-all': async () => { toast('Backing up every workspace…'); await api('POST', '/hosted/backups/run'); toast('Backups done.'); refresh(); },
+    'test-restore': async () => { toast('Restoring into a scratch database…'); const r = await api('POST', '/hosted/backups/test'); toast(r.ok ? 'Restore test passed.' : 'Restore test failed: ' + r.detail, !r.ok); refresh(); },
+    'restore-backup': async d => {
+      const b = H().backups.find(x => x.workspace === d.ws && x.file === d.file);
+      if (!await confirmDlg('Restore as a copy?', `Makes a new workspace from the backup of ${esc(b.name || 'this workspace')} taken ${esc(fmtDate(b.taken))}, with the same members. Nothing existing is changed.`, 'Restore as copy', false)) return;
+      const r = await api('POST', `/hosted/backups/${enc(d.ws)}/${enc(d.file)}/restore`);
+      await refresh(); location.hash = '#/workspaces/' + enc(r.id); toast(`Restored as ${r.name}.`);
+    },
+    'new-account': d => { $$('.shade').forEach(x => x.remove()); newAccount(d.ws); },
+    'edit-account': d => editAccount(d.name),
+    'reset-account': d => resetAccount(d.name),
+    'signout-account': async d => {
+      if (!await confirmDlg(`Sign ${d.name} out everywhere?`, 'Every PC they signed in on loses the workspaces at its next check, and their database password changes. They can sign in again with their password.', 'Sign out everywhere')) return;
+      await api('POST', `/hosted/accounts/${enc(d.name)}/signout`); refresh();
+    },
+    'remove-account': async d => {
+      if (!await confirmDlg(`Remove ${d.name}?`, 'They can\'t sign in any more and lose every workspace. What they changed keeps their name.', 'Remove account')) return;
+      await api('DELETE', `/hosted/accounts/${enc(d.name)}`); refresh();
+    },
+    'signout-app': async (d, el) => { await api('DELETE', `/hosted/apps/${enc(d.id)}`); el.closest('tr')?.remove(); toast('Signed out. That PC loses the workspaces at its next check.'); refresh(); },
+    'gen-pw': (d, el) => { el.closest('.dlg').querySelector('#ap').value = genPassword(); },
+  };
 
   // ---------- dialogs ----------
   function modal({ title, body, wide, buttons = [], onClose }) {
@@ -673,9 +999,9 @@
     });
   }
 
-  function changePassword() {
+  function changePassword(first) {
     modal({
-      title: 'Change your password', body: `<div class="field"><label for="p0">Current password</label><input id="p0" type="password" autocomplete="current-password"></div>
+      title: first === true ? 'Choose your own password' : 'Change your password', body: `${first === true ? '<p>You signed in with a first password from the admin. Pick one only you know.</p>' : ''}<div class="field"><label for="p0">${first === true ? 'First password' : 'Current password'}</label><input id="p0" type="password" autocomplete="current-password"></div>
         <div class="field"><label for="p1">New password</label><input id="p1" type="password" autocomplete="new-password"><span class="hint">At least 10 characters. Your other sessions are signed out.</span></div>
         <div class="field"><label for="p2">New password again</label><input id="p2" type="password" autocomplete="new-password"></div>`,
       buttons: [{ label: 'Cancel' }, {
@@ -683,6 +1009,7 @@
           if ($('#p1').value !== $('#p2').value) throw new Error("The new passwords don't match.");
           await api('POST', '/me/password', { current: $('#p0').value, next: $('#p1').value });
           toast('Password changed.');
+          refresh();
         },
       }],
     });
@@ -710,6 +1037,7 @@
 
   // ---------- events ----------
   const acts = {
+    ...HACTS,
     menu: () => $('#nav').classList.toggle('open'),
     logout: async () => { await api('POST', '/logout').catch(() => {}); showLogin(); },
     pop: (d, el) => {
