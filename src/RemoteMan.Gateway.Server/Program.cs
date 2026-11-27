@@ -55,11 +55,39 @@ async Task<int> RunRelayAsync()
         try { adminAllow = new AllowList(aa); }
         catch (FormatException ex) { Console.Error.WriteLine($"ADMIN_ALLOW: {ex.Message}"); return 2; }
     }
+    // Hosted workspaces: a PostgreSQL server of its own (HOSTED_DB) that the relay makes databases and logins on.
+    RemoteMan.Gateway.Server.Hosted.HostedService? hosted = null;
+    if (env("HOSTED_DB", null) is { } hostedDb)
+    {
+        string? ca = null;
+        if (env("HOSTED_DB_CA", null) is { } caFile)
+        {
+            if (!File.Exists(caFile)) { Console.Error.WriteLine($"HOSTED_DB_CA: no file at {caFile}"); return 2; }
+            ca = File.ReadAllText(caFile);
+        }
+        TimeSpan at = new(3, 0, 0);
+        if (env("BACKUP_AT", null) is { } ba && !TimeSpan.TryParse(ba, out at)) { Console.Error.WriteLine("BACKUP_AT: use HH:mm, e.g. 03:00"); return 2; }
+        try
+        {
+            hosted = new RemoteMan.Gateway.Server.Hosted.HostedService(
+                new RemoteMan.Gateway.Server.Hosted.HostedStore(Path.Combine(dataDir, "hosted.json")),
+                new RemoteMan.Gateway.Server.Hosted.HostedDb(new RemoteMan.Gateway.Server.Hosted.HostedDbOptions
+                {
+                    AdminConnectionString = hostedDb, PublicHost = env("HOSTED_DB_PUBLIC", null), CaPem = ca,
+                    NoTls = string.Equals(env("HOSTED_DB_TLS", "on"), "off", StringComparison.OrdinalIgnoreCase),
+                }),
+                relay.Store,
+                new RemoteMan.Gateway.Server.Hosted.HostedOptions { BackupDir = Path.Combine(dataDir, "backups"), BackupAt = at, Log = Log });
+        }
+        catch (ArgumentException ex) { Console.Error.WriteLine($"HOSTED_DB: {ex.Message}"); return 2; }
+    }
+    if (hosted?.Db.Options.NoTls == true) Log("HOSTED_DB_TLS=off: RemoteMan connects to hosted workspaces WITHOUT encryption. Only do this on a test network.");
     var app = RelayHost.Build(relay, urls, cert, key, publicUrl, new AdminOptions
     {
         Enabled = adminOn, Allow = adminAllow, PublicUrl = publicUrl, ConnectorImage = ConnectorImage(), Version = Version(),
-        ActivityPath = Path.Combine(dataDir, "activity.jsonl"), Log = Log,
+        ActivityPath = Path.Combine(dataDir, "activity.jsonl"), Log = Log, Hosted = hosted,
     }, out var console);
+    hosted?.Start(app.Lifetime.ApplicationStopping);
     Log($"RemoteMan gateway relay {Version()} listening on {urls}{(publicUrl is null ? "" : $", reached as {publicUrl}")}");
     if (publicUrl is null) Log("Set PUBLIC_URL (e.g. https://remoteman.example.com) so invites and connector setups carry the right address.");
     if (adminOn)

@@ -6,6 +6,8 @@ WORKDIR /src
 COPY Directory.Build.props global.json ./
 COPY src/RemoteMan.Gateway src/RemoteMan.Gateway
 COPY src/RemoteMan.Gateway.Server src/RemoteMan.Gateway.Server
+# The table definitions hosted workspaces share with the app (linked into the relay, see its .csproj).
+COPY src/RemoteMan.Data/PostgresSchema.cs src/RemoteMan.Data/PostgresSchema.cs
 ARG VERSION=dev
 # Framework-dependent IL runs on amd64 and arm64 alike, so one build serves both platforms.
 # MSBuild reads environment variables as properties, so the VERSION build arg would become the projects' $(Version)
