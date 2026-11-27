@@ -22,6 +22,7 @@ public static class DataSourceFactory
     {
         if (cfg.ConnectionStrings.Count == 0) throw new ArgumentException("No connection string configured.");
         var strings = cfg.ConnectionStrings.Where(cs => !string.IsNullOrWhiteSpace(cs)).ToList();
+        if (cfg.Hosted is not null) strings = strings.Select(cs => HostedConnectionString(cfg, cs)).ToList();
         // PostgreSQL primary + standby: one multi-host connection that always lands on the writable
         // server, whichever of the two that is after a failover (see deploy/postgres).
         if (cfg.Kind == DataSourceKind.PostgreSql && strings.Count > 0) strings = [PostgresPair(strings)];
@@ -30,6 +31,19 @@ public static class DataSourceFactory
             .Select(cs => route is null ? cs : RouteHosts(cfg.Kind, cs, route))
             .Select(cs => Single(cfg.Kind, cs, cfg.PollMilliseconds)).ToList();
         return members.Count == 1 ? members[0] : new RedundantDataSource(members);
+    }
+
+    /// <summary>
+    /// A hosted workspace's connection string with the account's database password (kept out of settings.json) and the
+    /// server's CA certificate, when it has one, added.
+    /// </summary>
+    public static string HostedConnectionString(DataSourceConfig cfg, string cs)
+    {
+        if (string.IsNullOrEmpty(cfg.RuntimePassword))
+            throw new InvalidOperationException($"Sign in to RemoteMan (Data sources) to open \"{cfg.Name}\".");
+        var b = new Npgsql.NpgsqlConnectionStringBuilder(cs) { Password = cfg.RuntimePassword };
+        if (cfg.RuntimeRootCertificate is { } ca) b.RootCertificate = ca;
+        return b.ConnectionString;
     }
 
     /// <summary>

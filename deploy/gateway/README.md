@@ -79,6 +79,12 @@ shows the setup link (or run `docker exec remoteman-relay gateway admin setup`).
 connectors carry on unchanged; the site's original token shows as *Site token* in the console. Update the
 connectors too (same command where they run) so they report their version and follow the site's resources.
 
+## Hosted workspaces (optional)
+
+With `HOSTED_DB` set, the console also makes **workspaces**: shared RemoteMan databases on a PostgreSQL server of
+their own, which show up in your friends' RemoteMan under Data sources once they sign in with the account you made
+them. No invite links or connection strings. See [deploy/hosted](../hosted/README.md).
+
 ## 1. Relay (once)
 
 1. DNS: an A record, e.g. `remoteman.mydomain.dk`, pointing at your public IP.

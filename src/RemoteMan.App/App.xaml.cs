@@ -14,6 +14,8 @@ public partial class App : Application
         // No settings file yet: this is the first start on this PC (for this Windows user).
         var firstRun = !System.IO.File.Exists(AppPaths.Settings);
         var settings = AppSettings.Load();
+        // Signed in to a RemoteMan account: its workspaces get their database password before anything opens them.
+        HostedAccount.Instance.Load(settings);
         // Before the window opens: decides whether the What's new tab opens (never on a fresh install).
         WhatsNew.CheckOnStart(UpdateService.Instance.CurrentVersion, firstRun);
         // Before any window exists: every view looks its colours up once, as it's built.

@@ -17,6 +17,10 @@ services:
       TZ: Europe/Copenhagen
       # ADMIN_ALLOW: 192.168.0.0/16                      # only these addresses may open the admin console (/rmrelay)
       # ADMIN: "off"                                     # no web console at all; the CLI still works
+      # Hosted workspaces (optional): a PostgreSQL server of its own, see deploy/hosted/README.md
+      # HOSTED_DB: Host=db.remoteman.mydomain.dk;Username=postgres;Password=…;SSL Mode=VerifyFull;Root Certificate=/data/hosted-ca.pem
+      # HOSTED_DB_CA: /data/hosted-ca.pem
+      # BACKUP_AT: "03:00"
     volumes:
       - relay-data:/data                                 # sites, devices, console admins (secrets stored hashed), activity
 

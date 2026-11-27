@@ -5,6 +5,7 @@ using System.Windows.Media;
 using RemoteMan.App.Services;
 using RemoteMan.App.ViewModels;
 using RemoteMan.App.Views;
+using RemoteMan.Core.Storage;
 
 namespace RemoteMan.App;
 
@@ -83,6 +84,8 @@ public partial class MainWindow : Window
         StateChanged += (_, _) => { if (WindowState == WindowState.Minimized) _aiWindow?.HideBox(); else _aiWindow?.Reposition(); };
         Loaded += async (_, _) =>
         {
+            // A workspace from the RemoteMan account opened for the first time on this PC: its vault passphrase first.
+            if (_settings.Active.Hosted is not null) EnsureVaultPassphrase(_settings.Active);
             await _vm.InitializeAsync();
             // The first-run setup picked an import source: open the import window on it once the entries are loaded.
             if (ImportAfterLoad is { } source) { ImportAfterLoad = null; new ImportWindow(_vm, source) { Owner = this }.ShowDialog(); }
@@ -96,6 +99,7 @@ public partial class MainWindow : Window
         SetUpSessionFocus();
         SetUpChat();
         SetUpGatewayPill();
+        SetUpHostedAccount();
         StateChanged += (_, _) => MaxGlyph.Data = Geometry.Parse(WindowState == WindowState.Maximized
             ? "M2.5,0.5 H9.5 V7.5 M0.5,2.5 H7.5 V9.5 H0.5 Z" : "M0.5,0.5 H9.5 V9.5 H0.5 Z");
     }
@@ -242,6 +246,7 @@ public partial class MainWindow : Window
         menu.Items.Add(generator);
         menu.Items.Add(new Separator());
         menu.Items.Add(Click("Data sources…", OnDataSources));
+        menu.Items.Add(Click(HostedAccount.Instance.IsSignedIn ? $"RemoteMan account ({HostedAccount.Instance.Account})…" : "Sign in to RemoteMan…", OnAccount));
         menu.Items.Add(Click("Import…", OnImport));
         menu.Items.Add(Click("Export and backup…", OnExportBackup));
         menu.Items.Add(Click("Restore from backup…", OnRestore));
@@ -427,14 +432,27 @@ public partial class MainWindow : Window
     private void OnDataSourcePicker(object sender, RoutedEventArgs e)
     {
         var menu = new ContextMenu();
-        foreach (var ds in _settings.DataSources)
+        void Add(DataSourceConfig ds, string label)
         {
             var name = ds.Name;
-            var item = new MenuItem { Header = $"{ds.Name}  ({ds.Kind})", IsCheckable = true, IsChecked = ds.Name == _settings.Active.Name };
+            var item = new MenuItem { Header = label, IsCheckable = true, IsChecked = ds.Name == _settings.Active.Name };
             item.Click += (_, _) => SwitchDataSource(name);
             menu.Items.Add(item);
         }
+        foreach (var ds in _settings.DataSources.Where(d => d.Hosted is null)) Add(ds, $"{ds.Name}  ({ds.Kind})");
+        // Workspaces from the RemoteMan account, under their own heading.
+        var hosted = _settings.DataSources.Where(d => d.Hosted is not null).ToList();
+        if (hosted.Count > 0 || HostedAccount.Instance.IsSignedIn)
+        {
+            menu.Items.Add(new Separator());
+            menu.Items.Add(new MenuItem { Header = $"RemoteMan account · {HostedAccount.Instance.Account ?? "signed out"}", IsEnabled = false });
+            foreach (var ds in hosted) Add(ds, $"{ds.Name}  ({ds.Hosted!.AccessLabel})");
+            if (hosted.Count == 0) menu.Items.Add(new MenuItem { Header = "No workspaces yet", IsEnabled = false });
+        }
         menu.Items.Add(new Separator());
+        var account = new MenuItem { Header = HostedAccount.Instance.IsSignedIn ? "RemoteMan account…" : "Sign in to RemoteMan…" };
+        account.Click += OnAccount;
+        menu.Items.Add(account);
         var manage = new MenuItem { Header = "Manage data sources…" };
         manage.Click += OnDataSources;
         menu.Items.Add(manage);
@@ -446,6 +464,7 @@ public partial class MainWindow : Window
     private void SwitchDataSource(string name)
     {
         if (name == _settings.Active.Name) return;
+        if (_settings.DataSources.FirstOrDefault(d => d.Name == name) is { } target && !EnsureVaultPassphrase(target)) return;
         _settings.ActiveDataSource = name;
         _settings.Save();
         _ = _vm.ReloadDataSourceAsync();
@@ -456,7 +475,7 @@ public partial class MainWindow : Window
     {
         var a = _settings.Active;
         return string.Join("\u0001", a.Name, a.Kind, string.Join("\n", a.ConnectionStrings), a.UseWindowsLogin, a.GatewaySite, a.GatewayAlways,
-            a.UseSharedVaultKey, Services.Secrets.LoadVaultPassphrase(a.Name));
+            a.UseSharedVaultKey, Services.Secrets.LoadVaultPassphrase(a));
     }
 
     private void OnPanelMore(object sender, RoutedEventArgs e)
@@ -1005,6 +1024,71 @@ public partial class MainWindow : Window
         if (dlg.ShowDialog() != true) return;
         // Another data source, or new connection or gateway settings on this one: switch over now, no restart.
         if (DataSourceKey() != before) _ = _vm.ReloadDataSourceAsync();
+    }
+
+    // ---------------- RemoteMan account (hosted workspaces) ----------------
+
+    private System.Windows.Threading.DispatcherTimer? _accountTimer;
+
+    /// <summary>Signed in: the account's workspace list is checked at start and every minute, and the data sources follow.</summary>
+    private void SetUpHostedAccount()
+    {
+        _accountTimer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromMinutes(1) };
+        _accountTimer.Tick += async (_, _) => await SyncAccountAsync(quiet: true);
+        Loaded += async (_, _) => { _accountTimer.Start(); await SyncAccountAsync(quiet: true); };
+        Closed += (_, _) => _accountTimer.Stop();
+    }
+
+    private async Task SyncAccountAsync(bool quiet)
+    {
+        if (!HostedAccount.Instance.IsSignedIn) return;
+        var before = Snapshot();
+        var r = await HostedAccount.Instance.SyncAsync(_settings);
+        AfterAccountChange(before, r);
+    }
+
+    /// <summary>The open data source and what it connects with, to tell after a check whether it has to be reopened.</summary>
+    private (DataSourceConfig Active, string Key) Snapshot() =>
+        (_settings.Active, string.Join("\n", _settings.Active.ConnectionStrings) + "\u0001" + _settings.Active.RuntimePassword);
+
+    private void AfterAccountChange((DataSourceConfig Active, string Key) before, HostedAccount.SyncResult? r)
+    {
+        if (r is not null && AccountDialog.Describe(r) is { } what) _vm.Message = what;
+        if (!_settings.DataSources.Contains(before.Active))
+        {
+            // The open workspace went (taken out, signed out): open what is left instead.
+            ChoiceDialog.Info(this, $"{before.Active.Name} is closed",
+                (r?.SignedOut == true ? "You were signed out of your RemoteMan account" : $"You're no longer a member of {before.Active.Name}") +
+                $", so it was closed and this PC's copy deleted. RemoteMan opened {_settings.Active.Name} instead.");
+            _ = _vm.ReloadDataSourceAsync();
+        }
+        else if (Snapshot().Key != before.Key) _ = _vm.ReloadDataSourceAsync();
+        _vm.RefreshDataSourceName();
+    }
+
+    private async void OnAccount(object sender, RoutedEventArgs e)
+    {
+        var before = Snapshot();
+        if (await AccountDialog.ShowAsync(this, _settings)) AfterAccountChange(before, null);
+    }
+
+    /// <summary>
+    /// A shared data source needs its vault passphrase before it opens. For a hosted workspace it's asked here the first
+    /// time: whoever runs the workspace chose it, so the server never knows it.
+    /// </summary>
+    private bool EnsureVaultPassphrase(DataSourceConfig cfg)
+    {
+        if (cfg.Kind == DataSourceKind.Sqlite && !cfg.UseSharedVaultKey) return true;
+        if (Services.Secrets.LoadVaultPassphrase(cfg) is not null) return true;
+        var box = new PasswordBox { MinWidth = 320, Margin = new Thickness(0, 10, 0, 0) };
+        box.Loaded += (_, _) => box.Focus();
+        var text = cfg.Hosted is not null
+            ? $"Saved passwords in {cfg.Name} are encrypted with a passphrase everyone in it shares. Ask whoever runs the workspace for it. " +
+              "If you're the first one in, choose one now and tell the others. RemoteMan keeps it on this PC only."
+            : $"{cfg.Name} encrypts saved passwords with a passphrase everyone on it shares. Type it once; RemoteMan keeps it on this PC.";
+        if (ChoiceDialog.Show(this, $"Vault passphrase for {cfg.Name}", text, ["Open", "Cancel"], extra: box) != 0 || box.Password.Length == 0) return false;
+        Services.Secrets.SaveVaultPassphrase(cfg, box.Password);
+        return true;
     }
 
     private void OnImport(object sender, RoutedEventArgs e) => new ImportWindow(_vm) { Owner = this }.ShowDialog();
