@@ -33,13 +33,26 @@ public static class Secrets
         File.WriteAllText(VaultFile(dataSourceName), new DpapiSecretProtector().Protect(passphrase));
     }
 
+    /// <summary>What this PC files a data source's local things under (vault passphrase, offline copy): its name, or for a
+    /// hosted workspace the server and workspace id, so a rename on the server keeps them.</summary>
+    public static string LocalKey(DataSourceConfig cfg) => cfg.Hosted is { } h ? $"hosted:{h.Server.TrimEnd('/')}|{h.WorkspaceId}" : cfg.Name;
+
+    public static string? LoadVaultPassphrase(DataSourceConfig cfg) => LoadVaultPassphrase(LocalKey(cfg));
+    public static void SaveVaultPassphrase(DataSourceConfig cfg, string passphrase) => SaveVaultPassphrase(LocalKey(cfg), passphrase);
+
+    /// <summary>Forgets a data source's vault passphrase on this PC (a hosted workspace you were taken out of).</summary>
+    public static void DeleteVaultPassphrase(DataSourceConfig cfg)
+    {
+        try { File.Delete(VaultFile(LocalKey(cfg))); } catch (IOException) { }
+    }
+
     private static string VaultFile(string name) =>
         Path.Combine(AppPaths.Root, "vault-" + Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(name)))[..16] + ".key");
 
     public static ISecretProtector For(DataSourceConfig cfg)
     {
         if (cfg.Kind == DataSourceKind.Sqlite && !cfg.UseSharedVaultKey) return new DpapiSecretProtector();
-        var pass = LoadVaultPassphrase(cfg.Name) ?? throw new InvalidOperationException($"No vault passphrase set for \"{cfg.Name}\".");
+        var pass = LoadVaultPassphrase(cfg) ?? throw new InvalidOperationException($"No vault passphrase set for \"{cfg.Name}\".");
         return new AesGcmSecretProtector(pass);
     }
 

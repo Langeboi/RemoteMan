@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace RemoteMan.Core.Storage;
 
 /// <summary>
@@ -28,4 +30,28 @@ public sealed class DataSourceConfig
     public string? GatewaySite { get; set; }
     /// <summary>Always use the gateway, without trying the servers directly first.</summary>
     public bool GatewayAlways { get; set; }
+
+    /// <summary>A workspace on a RemoteMan account (hosted on the relay's database server). Added, renamed and removed
+    /// by the account's sign-in, not by hand. Null = a data source you set up yourself.</summary>
+    public HostedLink? Hosted { get; set; }
+
+    /// <summary>The account's database password for a hosted workspace. Never written to settings.json: it comes from
+    /// the account file (DPAPI-protected) when RemoteMan starts, and from the server at each check.</summary>
+    [JsonIgnore] public string? RuntimePassword { get; set; }
+
+    /// <summary>The hosted server's CA certificate (a PEM file), for full TLS verification. Null = encrypted, not verified.</summary>
+    [JsonIgnore] public string? RuntimeRootCertificate { get; set; }
+}
+
+/// <summary>Where a hosted workspace came from: the RemoteMan server, the account and the workspace's id there.</summary>
+public sealed class HostedLink
+{
+    public string Server { get; set; } = "";
+    public string Account { get; set; } = "";
+    public string WorkspaceId { get; set; } = "";
+    /// <summary>"admin", "edit" or "read".</summary>
+    public string Access { get; set; } = "edit";
+    public string? Description { get; set; }
+
+    [JsonIgnore] public string AccessLabel => Access switch { "admin" => "Admin", "read" => "Read only", _ => "Can edit" };
 }

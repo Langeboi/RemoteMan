@@ -208,3 +208,21 @@ td.r{text-align:right}
   th,td{padding:8px 10px}
   .hide-sm{display:none}
 }
+
+/* hosted workspaces */
+.nav li.grp{font-size:10.5px;text-transform:uppercase;letter-spacing:.07em;color:var(--faint);padding:12px 10px 4px}
+.av{display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:50%;font-size:10px;font-weight:700;color:#0F1113;flex:none;vertical-align:middle}
+.avs{display:inline-flex;align-items:center}
+.avs .av{margin-left:-6px;box-shadow:0 0 0 2px var(--panel)}
+.avs .av:first-child{margin-left:0}
+.note.ok{border-color:#2b5a43;background:#0f1a14;color:#bfe7cf}
+a.chip{text-decoration:none;font-family:var(--ui)}
+a.chip:hover{border-color:var(--accent)}
+.picklist{border:1px solid var(--border);border-radius:5px;max-height:280px;overflow:auto;background:var(--panel2)}
+.pickrow{display:flex;align-items:center;gap:10px;padding:7px 10px;border-bottom:1px solid var(--bsoft);cursor:pointer}
+.pickrow:last-child{border-bottom:0}
+.pickrow:hover{background:var(--hover)}
+.pickrow.dis{opacity:.6;cursor:default}
+.pickrow .r{margin-left:auto}
+.pickrow select{padding:3px 6px;font-size:12px}
+.field .lbl{display:block;font-size:12px;color:var(--muted);margin-bottom:5px}

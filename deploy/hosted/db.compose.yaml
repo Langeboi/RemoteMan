@@ -1,0 +1,28 @@
+# RemoteMan hosted workspaces: the database server. Run it on its own small box (a VPS or a spare mini PC), not on
+# the relay: a busy class then can't slow the gateway down, and the relay keeps the backups, so losing one box
+# doesn't lose both the data and its backups.
+#
+#   1. DNS: an A record for db.remoteman.mydomain.dk -> this box. Firewall: TCP 5432 open (RemoteMan connects
+#      straight here; the relay only manages it).
+#   2. Change DB_NAME, RELAY_IP and POSTGRES_PASSWORD below, then:  docker compose -f db.compose.yaml up -d
+#   3. Copy the certificate to the relay box:  docker exec remoteman-hosted-db cat /var/lib/postgresql/data/server.crt > hosted-ca.pem
+#      and set HOSTED_DB, HOSTED_DB_CA and HOSTED_DB_PUBLIC on the relay (see README.md next to this file).
+services:
+  db:
+    image: postgres:17
+    container_name: remoteman-hosted-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_PASSWORD: change-me-to-a-long-random-password   # the relay's superuser; never given to anyone else
+      DB_NAME: db.remoteman.mydomain.dk                        # the name in the TLS certificate (RemoteMan checks it)
+      RELAY_IP: 203.0.113.10                                   # only this address may sign in as postgres
+      TZ: Europe/Copenhagen
+    ports:
+      - "5432:5432"
+    volumes:
+      - hosted-db:/var/lib/postgresql/data
+      - ./init:/docker-entrypoint-initdb.d:ro                 # TLS, pg_hba and auth_delay, on the first start only
+    shm_size: 256mb
+
+volumes:
+  hosted-db:

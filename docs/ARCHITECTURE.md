@@ -211,6 +211,33 @@ network, both connecting out only. Setup in [deploy/gateway](../deploy/gateway/R
   device when they're used; `GatewayEnrollment` lets RemoteMan redeem one directly. Activity is appended to
   `activity.jsonl`.
 
+## Hosted workspaces (optional)
+
+The relay can also run shared databases for a group (`Gateway.Server/Hosted`, on when `HOSTED_DB` is set). Setup
+in [deploy/hosted](../deploy/hosted/README.md).
+
+- **Where things live**: accounts, workspaces, app tokens and the backup list in `hosted.json` (`HostedStore`);
+  the data on a PostgreSQL server of its own, one database per workspace (`rmw_<id>`) with the same schema as a
+  self-hosted one (`Data/PostgresSchema.cs`, shared by the app and the relay). The relay connects to it as a
+  superuser to manage it (`HostedDb`), never to proxy it: apps connect straight to the database.
+- **Access in the database**: each workspace has roles `rmw_<id>_owner` (owns the tables), `_adm` and `_ro`. An
+  account is one login role; editors and admins are members of `_owner` and get `SET role` on that database, readers
+  get `_ro` (SELECT, plus their own presence). A trigger lets only admins change shared settings.
+  `remoteman_admin.me()` tells the app what the login may do. `HostedService` reconciles the store with the server
+  at start and after every change.
+- **Sign-in** (`/v1/account/signin`, `/me`, `/password`, `/signout`): a bearer token per PC. `/me` returns the
+  account's workspaces with a connection string each. In the app, `Services/HostedAccount` keeps the token and the
+  database password under DPAPI in `account.json`, adds a `DataSourceConfig` with `Hosted` set per workspace
+  (connection string without the password in `settings.json`; `RuntimePassword` is filled in at start), and checks
+  `/me` every minute. A workspace that leaves the list is removed with its vault passphrase and offline copy.
+  Vault passphrase and offline copy are filed under the server and workspace id (`Secrets.LocalKey`), so renames
+  keep them.
+- **Backups** (`HostedService.RunNightlyAsync`): a REPEATABLE READ snapshot written as SQL with COPY blocks,
+  gzipped, on the relay. Restore reads only the COPY blocks of known tables and columns. Every Sunday the newest
+  backup of each workspace is restored into a scratch database and its row counts compared.
+- **Console**: Workspaces, Accounts and Backups pages for console admins; members who sign in get a *My account*
+  page only (their workspaces, PCs signed in, password, 2FA).
+
 ## Known gaps / next steps
 
 - Build and run on Windows to shake out XAML issues (this cut was compile-checked on Linux only).

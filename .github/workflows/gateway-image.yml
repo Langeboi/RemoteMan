@@ -15,6 +15,7 @@ on:
       - deploy/gateway/**
       - src/RemoteMan.Gateway/**
       - src/RemoteMan.Gateway.Server/**
+      - src/RemoteMan.Data/PostgresSchema.cs
       - .github/workflows/gateway-image.yml
   workflow_dispatch:
 

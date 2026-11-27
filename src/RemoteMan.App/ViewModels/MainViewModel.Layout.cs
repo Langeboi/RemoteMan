@@ -47,7 +47,9 @@ public sealed partial class MainViewModel
     };
 
     /// <summary>Name of the open data source, shown above the tree.</summary>
-    public string DataSourceName => $"{_settings.Active.Name} ({_settings.Active.Kind})";
+    public string DataSourceName => $"{_settings.Active.Name} ({(_settings.Active.Hosted is null ? _settings.Active.Kind.ToString() : "RemoteMan")})";
+    /// <summary>The open source was renamed (a hosted workspace renamed on the server).</summary>
+    public void RefreshDataSourceName() => OnPropertyChanged(nameof(DataSourceName));
 
     public string AppVersion { get; } = "v" + (Assembly.GetEntryAssembly()?.GetName().Version?.ToString(3) ?? "0.0.0");
 

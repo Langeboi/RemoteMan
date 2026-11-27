@@ -21,6 +21,8 @@ public sealed class AdminOptions
     public string? ActivityPath { get; init; }
     public string Version { get; init; } = "dev";
     public Action<string> Log { get; init; } = Console.WriteLine;
+    /// <summary>Hosted workspaces (HOSTED_DB set): accounts, workspaces and backups in the console, and the app's sign-in.</summary>
+    public Hosted.HostedService? Hosted { get; set; }
 }
 
 /// <summary>
@@ -30,7 +32,7 @@ public sealed class AdminOptions
 /// custom header (so another site can't post a form at it), and failed sign-ins are slowed down per address and per name.
 /// The first admin is made with a one-time setup link the relay prints in its log.
 /// </summary>
-public sealed class AdminConsole
+public sealed partial class AdminConsole
 {
     private const string Cookie = "rmgw_admin";
     private const string CsrfHeader = "X-RemoteMan-Admin";
@@ -47,6 +49,8 @@ public sealed class AdminConsole
         public string? Ip { get; init; }
         public string? Agent { get; init; }
         public string? PendingTotp { get; set; }
+        /// <summary>A workspace member, not a console admin: sees only their own account.</summary>
+        public bool Member { get; init; }
     }
 
     /// <summary>How long a one-line install link works (until its connector comes online, at most this long).</summary>
@@ -62,11 +66,13 @@ public sealed class AdminConsole
         _relay = relay;
         _o = options;
         Activity = new ActivityLog(options.ActivityPath);
+        if (options.Hosted is { } hosted) hosted.Activity = Activity;
         relay.Activity += e => { if (e.Kind != "tunnel.open") Activity.Add(e); };
     }
 
     public ActivityLog Activity { get; }
     private RelayStore Store => _relay.Store;
+    private Hosted.HostedService? HostedSvc => _o.Hosted;
 
     /// <summary>
     /// Where the console lives. Not /admin: a generic path is the first thing scanners try. Everything else on the
@@ -82,6 +88,7 @@ public sealed class AdminConsole
         app.MapPost(GatewayProtocol.EnrollPath, Task<IResult> (HttpContext c) => RedeemInviteAsync(c));
         app.MapGet("/v1/install/{code}", (HttpContext c, string code) => TakeInstall(c, code));
         app.MapGet(ConsolePath + "/assets/{file}", (HttpContext c, string file) => Page(c, file));
+        MapAppAccount(app);   // the app's sign-in works with the console off too
 
         if (!_o.Enabled)
         {
@@ -95,9 +102,9 @@ public sealed class AdminConsole
         api.MapGet("/state", State);
         api.MapPost("/setup", Task<IResult> (HttpContext c) => SetupAsync(c));
         api.MapPost("/login", Task<IResult> (HttpContext c) => LoginAsync(c));
-        api.MapPost("/logout", Task<IResult> (HttpContext c) => Authed(c, s => { _sessions.TryRemove(s.Id, out _); ClearCookie(c); return Ok(); }));
+        api.MapPost("/logout", Task<IResult> (HttpContext c) => AuthedAny(c, s => { _sessions.TryRemove(s.Id, out _); ClearCookie(c); return Ok(); }));
 
-        api.MapGet("/snapshot", Task<IResult> (HttpContext c) => Authed(c, s => Results.Json(Snapshot(c, s), GatewayProtocol.Json)));
+        api.MapGet("/snapshot", Task<IResult> (HttpContext c) => AuthedAny(c, s => Results.Json(s.Member ? MemberSnapshot(c, s) : Snapshot(c, s), GatewayProtocol.Json)));
         api.MapGet("/activity", Task<IResult> (HttpContext c) => Authed(c, _ =>
         {
             var q = c.Request.Query;
@@ -236,8 +243,9 @@ public sealed class AdminConsole
             Audit(s, "admin.remove", null, name, $"Admin {name} removed");
             return Ok();
         }));
-        api.MapPost("/me/password", Task<IResult> (HttpContext c) => AuthedBody(c, async (s, b) =>
+        api.MapPost("/me/password", Task<IResult> (HttpContext c) => AuthedAnyBody(c, async (s, b) =>
         {
+            if (s.Member) return MemberPassword(c, s, b);
             if (Store.Admin(s.User) is not { } a || !Passwords.Verify(Str(b, "current") ?? "", a.PasswordHash)) return Err(400, "The current password isn't right.");
             Store.SetPassword(s.User, Str(b, "next") ?? "");
             Resign(c, s);
@@ -245,37 +253,45 @@ public sealed class AdminConsole
             await Task.CompletedTask;
             return Ok();
         }));
-        api.MapPost("/me/totp/start", Task<IResult> (HttpContext c) => Authed(c, s =>
+        api.MapPost("/me/totp/start", Task<IResult> (HttpContext c) => AuthedAny(c, s =>
         {
             s.PendingTotp = Totp.NewSecret();
             var issuer = "RemoteMan " + (Uri.TryCreate(PublicUrl(c), UriKind.Absolute, out var u) ? u.Host : "gateway");
             return Results.Json(new { secret = s.PendingTotp, uri = Totp.Uri(s.PendingTotp, s.User, issuer) }, GatewayProtocol.Json);
         }));
-        api.MapPost("/me/totp/confirm", Task<IResult> (HttpContext c) => AuthedBody(c, async (s, b) =>
+        api.MapPost("/me/totp/confirm", Task<IResult> (HttpContext c) => AuthedAnyBody(c, async (s, b) =>
         {
             if (s.PendingTotp is not { } secret) return Err(400, "Start again.");
             if (!Totp.Verify(secret, Str(b, "code"))) return Err(400, "That code doesn't match. Check the time on your phone and try the next code.");
-            Store.SetTotp(s.User, secret);
+            if (s.Member) HostedSvc!.Store.UpdateAccount(s.User, a => { a.TotpSecret = secret; a.Stamp++; });
+            else Store.SetTotp(s.User, secret);
             s.PendingTotp = null;
             Resign(c, s);
             Audit(s, "admin.totp", null, s.User, $"{s.User} turned on two-step sign-in");
             await Task.CompletedTask;
             return Ok();
         }));
-        api.MapPost("/me/totp/off", Task<IResult> (HttpContext c) => AuthedBody(c, async (s, b) =>
+        api.MapPost("/me/totp/off", Task<IResult> (HttpContext c) => AuthedAnyBody(c, async (s, b) =>
         {
-            if (Store.Admin(s.User) is not { } a || !Passwords.Verify(Str(b, "password") ?? "", a.PasswordHash)) return Err(400, "The password isn't right.");
-            Store.SetTotp(s.User, null);
+            if (s.Member)
+            {
+                if (HostedSvc!.Store.Account(s.User) is not { } m || !Passwords.Verify(Str(b, "password") ?? "", m.PasswordHash)) return Err(400, "The password isn't right.");
+                HostedSvc.Store.UpdateAccount(s.User, x => { x.TotpSecret = null; x.Stamp++; });
+            }
+            else if (Store.Admin(s.User) is not { } a || !Passwords.Verify(Str(b, "password") ?? "", a.PasswordHash)) return Err(400, "The password isn't right.");
+            else Store.SetTotp(s.User, null);
             Resign(c, s);
             Audit(s, "admin.totp", null, s.User, $"{s.User} turned off two-step sign-in");
             await Task.CompletedTask;
             return Ok();
         }));
-        api.MapPost("/me/signout-others", Task<IResult> (HttpContext c) => Authed(c, s =>
+        api.MapPost("/me/signout-others", Task<IResult> (HttpContext c) => AuthedAny(c, s =>
         {
             foreach (var x in _sessions.Values.Where(x => x.User == s.User && x.Id != s.Id)) _sessions.TryRemove(x.Id, out _);
             return Ok();
         }));
+
+        MapHosted(api);
     }
 
     // ---- sign-in ----
@@ -288,6 +304,8 @@ public sealed class AdminConsole
         {
             setup = Store.Admins.Count == 0,
             user = s?.User,
+            member = s?.Member == true,
+            hosted = HostedSvc is not null,
             relay = PublicUrl(c),
             version = _o.Version,
         }, GatewayProtocol.Json);
@@ -325,6 +343,8 @@ public sealed class AdminConsole
             return Err(429, $"Too many failed sign-ins. Wait {Relay.Duration(wait)} and try again.");
 
         var admin = Store.Admin(user);
+        if (admin is null && HostedSvc is { } hs && hs.Store.Account(user) is { ConsoleAdmin: false })
+            return await MemberLoginAsync(c, hs, user, Str(b, "password") ?? "", Str(b, "code"), ip);
         var ok = Passwords.Verify(Str(b, "password") ?? "", admin?.PasswordHash ?? Passwords.Dummy) && admin is not null;
         if (ok && admin!.TotpSecret is { } secret)
         {
@@ -346,13 +366,15 @@ public sealed class AdminConsole
         return Ok();
     }
 
-    private void StartSession(HttpContext c, AdminRecord admin)
+    private void StartSession(HttpContext c, AdminRecord admin) => StartSession(c, admin.Name, admin.Stamp, false);
+
+    private void StartSession(HttpContext c, string user, int stamp, bool member)
     {
         var token = RelayStore.NewToken();
         var id = RelayStore.Hash(token);
         _sessions[id] = new Session
         {
-            Id = id, User = admin.Name, Stamp = admin.Stamp, Ip = ClientIp(c),
+            Id = id, User = user, Stamp = stamp, Member = member, Ip = ClientIp(c),
             Agent = c.Request.Headers.UserAgent.ToString() is { Length: > 0 } ua ? Trim(ua, 160) : null,
         };
         c.Response.Cookies.Append(Cookie, token, new CookieOptions
@@ -367,7 +389,8 @@ public sealed class AdminConsole
     private void Resign(HttpContext c, Session s)
     {
         foreach (var x in _sessions.Values.Where(x => x.User == s.User)) _sessions.TryRemove(x.Id, out _);
-        if (Store.Admin(s.User) is { } a) StartSession(c, a);
+        if (s.Member) { if (HostedSvc?.Store.Account(s.User) is { } m) StartSession(c, m.Name, m.Stamp, true); }
+        else if (Store.Admin(s.User) is { } a) StartSession(c, a);
     }
 
     private void ClearCookie(HttpContext c) => c.Response.Cookies.Delete(Cookie, new CookieOptions { Path = c.Request.PathBase + ConsolePath });
@@ -376,7 +399,10 @@ public sealed class AdminConsole
     {
         if (c.Request.Cookies[Cookie] is not { Length: > 20 } token) return null;
         if (!_sessions.TryGetValue(RelayStore.Hash(token), out var s)) return null;
-        if (!Fresh(s) || Store.Admin(s.User) is not { } a || a.Stamp != s.Stamp)
+        var valid = s.Member
+            ? HostedSvc?.Store.Account(s.User) is { ConsoleAdmin: false, Disabled: false } m && m.Stamp == s.Stamp
+            : Store.Admin(s.User) is { } a && a.Stamp == s.Stamp;
+        if (!Fresh(s) || !valid)
         {
             _sessions.TryRemove(s.Id, out _);
             return null;
@@ -387,7 +413,16 @@ public sealed class AdminConsole
 
     private static bool Fresh(Session s) => DateTimeOffset.UtcNow - s.LastSeen < IdleTimeout && DateTimeOffset.UtcNow - s.Created < MaxAge;
 
-    private async Task<IResult> Authed(HttpContext c, Func<Session, Task<IResult>> handler)
+    /// <summary>Admins only. Members (workspace accounts) get a 403 here; their own pages use <see cref="AuthedAny(HttpContext, Func{Session, Task{IResult}})"/>.</summary>
+    private Task<IResult> Authed(HttpContext c, Func<Session, Task<IResult>> handler) =>
+        AuthedAny(c, s => s.Member ? Task.FromResult(Err(403, "Only console admins can do that.")) : handler(s));
+
+    private Task<IResult> AuthedAny(HttpContext c, Func<Session, IResult> handler) => AuthedAny(c, s => Task.FromResult(handler(s)));
+
+    private Task<IResult> AuthedAnyBody(HttpContext c, Func<Session, JsonElement, Task<IResult>> handler) =>
+        AuthedAny(c, async s => await handler(s, await Body(c)));
+
+    private async Task<IResult> AuthedAny(HttpContext c, Func<Session, Task<IResult>> handler)
     {
         if (!ConsoleAllowed(c)) return Err(403, "The console isn't open to this address (ADMIN_ALLOW).");
         if (Current(c) is not { } s) return Err(401, "Sign in again.");
@@ -515,6 +550,7 @@ public sealed class AdminConsole
             sessions = _sessions.Values.Where(x => x.User == me.User && Fresh(x)).Select(x => new { current = x.Id == me.Id, created = x.Created, lastSeen = x.LastSeen, ip = x.Ip, agent = x.Agent }),
             live = live.Live.Select(t => new { device = t.Device, site = t.Site, connector = t.Connector, from = t.From, started = t.Started, bytes = t.Bytes }),
             activity = Activity.Latest(12),
+            hosted = HostedSnapshot(),
         };
     }
 

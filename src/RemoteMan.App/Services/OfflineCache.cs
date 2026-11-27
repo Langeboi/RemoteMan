@@ -42,6 +42,12 @@ public sealed class OfflineCache(string dataSourceName) : IEntryCache
         catch (Exception) { return null; } // unreadable cache = no cache
     }
 
+    /// <summary>Deletes this PC's copy (a hosted workspace you were taken out of, or signed out of).</summary>
+    public void Delete()
+    {
+        try { File.Delete(_path); } catch (IOException) { }
+    }
+
     public void Save(IReadOnlyList<Entry> entries)
     {
         var rows = entries.Select(e => new Row(e.Id, e.ParentId, e.Kind, e.Name, EntryJson.ToPayload(e), e.Revision,

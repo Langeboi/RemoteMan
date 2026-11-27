@@ -144,7 +144,7 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
             var user = Environment.UserDomainName is { Length: > 0 } dom && dom != Environment.MachineName
                 ? $"{dom}\\{Environment.UserName}" : Environment.UserName;
             IsSharedSource = cfg.Kind != DataSourceKind.Sqlite;
-            var cache = IsSharedSource ? new OfflineCache(cfg.Name) : null;
+            var cache = IsSharedSource ? new OfflineCache(Secrets.LocalKey(cfg)) : null;
             var store = _store = new EntryStore(source, user, Environment.MachineName, cache);
             // Every handler checks the store is still the open one: after a switch the old one may still finish a call.
             bool Current() => ReferenceEquals(_store, store);

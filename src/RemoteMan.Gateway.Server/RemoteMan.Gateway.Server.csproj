@@ -15,6 +15,12 @@
     <EmbeddedResource Include="Admin/web/*" LogicalName="web/%(Filename)%(Extension)" />
   </ItemGroup>
   <ItemGroup>
+    <!-- Hosted workspaces: the relay creates and backs up databases on a PostgreSQL server of its own. The table
+         definitions are the app's own (one file, linked, so the relay doesn't pull in the app's data layer). -->
+    <PackageReference Include="Npgsql" Version="10.0.4" />
+    <Compile Include="..\RemoteMan.Data\PostgresSchema.cs" Link="Hosted\PostgresSchema.cs" />
+  </ItemGroup>
+  <ItemGroup>
     <ProjectReference Include="..\RemoteMan.Gateway\RemoteMan.Gateway.csproj" />
   </ItemGroup>
 </Project>
